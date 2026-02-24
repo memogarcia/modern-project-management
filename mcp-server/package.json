@@ -1,0 +1,22 @@
+{
+  "name": "archdiagram-mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "zod": "^3.25.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^22.15.0",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.0"
+  }
+}
