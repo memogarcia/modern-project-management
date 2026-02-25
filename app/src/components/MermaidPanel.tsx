@@ -3,11 +3,11 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import { useReactFlow } from "@xyflow/react";
-import { Play } from "lucide-react";
+import { PanelRightClose, Play } from "lucide-react";
 import { useDiagramStore } from "@/store/diagramStore";
 import { useTheme } from "@/components/ThemeProvider";
 
-export default function MermaidPanel() {
+export default function MermaidPanel(props: { onCollapse?: () => void }) {
   const mermaidCode = useDiagramStore((s) => s.mermaidCode);
   const updateMermaidCode = useDiagramStore((s) => s.updateMermaidCode);
   const syncMermaidToFlow = useDiagramStore((s) => s.syncMermaidToFlow);
@@ -75,7 +75,8 @@ export default function MermaidPanel() {
     >
       <div
         style={{
-          padding: "8px 12px",
+          height: 60,
+          padding: "0 12px",
           borderBottom: "1px solid var(--border)",
           display: "flex",
           alignItems: "center",
@@ -94,23 +95,55 @@ export default function MermaidPanel() {
         >
           Mermaid
         </span>
-        <button
-          onClick={() => void handleApply()}
-          style={{
-            fontSize: "11px",
-            padding: "3px 8px",
-            background: "var(--accent)",
-            color: "var(--accent-foreground)",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-          }}
-        >
-          <Play size={12} /> Apply
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            onClick={() => void handleApply()}
+            style={{
+              fontSize: "11px",
+              padding: "3px 8px",
+              background: "var(--accent)",
+              color: "var(--accent-foreground)",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            <Play size={12} /> Apply
+          </button>
+          {props.onCollapse && (
+            <button
+              onClick={props.onCollapse}
+              aria-label="Collapse Mermaid panel"
+              title="Collapse Mermaid panel"
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 6,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                color: "var(--text-muted)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--surface)";
+                e.currentTarget.style.color = "var(--foreground)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--text-muted)";
+              }}
+            >
+              <PanelRightClose size={18} />
+            </button>
+          )}
+        </div>
       </div>
       <div style={{ flex: 1, overflow: "hidden" }}>
         <Editor

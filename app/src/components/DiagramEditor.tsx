@@ -14,7 +14,7 @@ import {
   useReactFlow,
   type InternalNode,
 } from "@xyflow/react";
-import { ArrowLeft } from "lucide-react";
+import { PanelRightOpen } from "lucide-react";
 import { useDiagramStore } from "@/store/diagramStore";
 import { useTheme } from "@/components/ThemeProvider";
 import { nodeTypes } from "@/components/nodes";
@@ -60,13 +60,53 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const [editingEdge, setEditingEdge] = useState<ArchEdge | null>(null);
 
   // ─── Resizable Mermaid panel ──────────────────────────────────────
+  const widthStorageKey = "archdiagram.mermaid.width";
+  const collapsedStorageKey = "archdiagram.mermaid.collapsed";
+
   const [panelWidth, setPanelWidth] = useState(380);
+  const panelWidthRef = useRef(380);
+  const lastExpandedWidthRef = useRef(380);
+  const [isMermaidCollapsed, setIsMermaidCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(380);
 
+  useEffect(() => {
+    panelWidthRef.current = panelWidth;
+    if (!isMermaidCollapsed) lastExpandedWidthRef.current = panelWidth;
+  }, [panelWidth, isMermaidCollapsed]);
+
+  useEffect(() => {
+    try {
+      const storedWidth = localStorage.getItem(widthStorageKey);
+      const parsed = storedWidth ? Number(storedWidth) : NaN;
+      if (Number.isFinite(parsed) && parsed >= 200 && parsed <= window.innerWidth * 0.8) {
+        setPanelWidth(parsed);
+        startWidthRef.current = parsed;
+        lastExpandedWidthRef.current = parsed;
+      }
+      const storedCollapsed = localStorage.getItem(collapsedStorageKey);
+      if (storedCollapsed === "1") setIsMermaidCollapsed(true);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setMermaidCollapsed = useCallback((collapsed: boolean) => {
+    setIsMermaidCollapsed(collapsed);
+    try {
+      localStorage.setItem(collapsedStorageKey, collapsed ? "1" : "0");
+    } catch {
+      // ignore
+    }
+    if (!collapsed) {
+      setPanelWidth(lastExpandedWidthRef.current || 380);
+    }
+  }, []);
+
   const onResizeStart = useCallback((e: React.MouseEvent) => {
+    if (isMermaidCollapsed) return;
     e.preventDefault();
     setIsDragging(true);
     startXRef.current = e.clientX;
@@ -83,13 +123,18 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
 
     const onMouseUp = () => {
       setIsDragging(false);
+      try {
+        localStorage.setItem(widthStorageKey, String(panelWidthRef.current));
+      } catch {
+        // ignore
+      }
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [panelWidth]);
+  }, [isMermaidCollapsed, panelWidth, widthStorageKey]);
 
   useEffect(() => {
     loadDiagramFn(diagramId);
@@ -264,7 +309,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
       {/* Header */}
       <div
         style={{
-          height: 48,
+          height: 60,
           padding: "0 20px",
           background: "var(--panel-bg)",
           borderBottom: "1px solid var(--border)",
@@ -348,25 +393,71 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         </div>
 
         {/* Resizable Mermaid editor panel */}
-        <div
-          ref={resizeHandleRef}
-          onMouseDown={onResizeStart}
-          style={{
-            width: "5px",
-            height: "100%",
-            cursor: "col-resize",
-            background: isDragging ? "var(--accent)" : "var(--border)",
-            transition: isDragging ? "none" : "background 0.15s",
-            flexShrink: 0,
-            zIndex: 50,
-            opacity: isDragging ? 1 : 0.5,
-          }}
-          onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.opacity = "1"; }}
-          onMouseLeave={(e) => { if (!isDragging) e.currentTarget.style.opacity = "0.5"; }}
-        />
-        <div style={{ width: panelWidth, minWidth: 200, maxWidth: "60vw", flexShrink: 0, background: "var(--panel-bg)", borderLeft: "1px solid var(--border)" }}>
-          <MermaidPanel />
-        </div>
+        {isMermaidCollapsed ? (
+          <div
+            style={{
+              width: 36,
+              flexShrink: 0,
+              background: "var(--panel-bg)",
+              borderLeft: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              userSelect: "none",
+            }}
+          >
+            <button
+              aria-label="Expand Mermaid panel"
+              title="Expand Mermaid panel"
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 8,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                color: "var(--text-muted)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--surface)";
+                e.currentTarget.style.color = "var(--foreground)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--text-muted)";
+              }}
+              onClick={() => setMermaidCollapsed(false)}
+            >
+              <PanelRightOpen size={18} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div
+              ref={resizeHandleRef}
+              onMouseDown={onResizeStart}
+              style={{
+                width: "5px",
+                height: "100%",
+                cursor: "col-resize",
+                background: isDragging ? "var(--accent)" : "var(--border)",
+                transition: isDragging ? "none" : "background 0.15s",
+                flexShrink: 0,
+                zIndex: 50,
+                opacity: isDragging ? 1 : 0.5,
+              }}
+              onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.opacity = "1"; }}
+              onMouseLeave={(e) => { if (!isDragging) e.currentTarget.style.opacity = "0.5"; }}
+            />
+            <div style={{ width: panelWidth, minWidth: 200, maxWidth: "60vw", flexShrink: 0, background: "var(--panel-bg)", borderLeft: "1px solid var(--border)" }}>
+              <MermaidPanel onCollapse={() => setMermaidCollapsed(true)} />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Edit modals */}

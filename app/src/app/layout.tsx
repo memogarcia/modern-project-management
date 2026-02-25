@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Sidebar } from "@/components/Sidebar";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 
 export const metadata: Metadata = {
   title: "ArchDiagram — Architecture Diagramming Tool",
@@ -19,17 +18,12 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider>
-          <SidebarProvider>
+          <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
             <Sidebar />
-            <SidebarInset>
-              <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-                <SidebarTrigger className="-ml-1" />
-              </header>
-              <main className="flex flex-1 flex-col overflow-auto bg-background">
-                {children}
-              </main>
-            </SidebarInset>
-          </SidebarProvider>
+            <main style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", background: "var(--background)" }}>
+              {children}
+            </main>
+          </div>
         </ThemeProvider>
       </body>
     </html>
