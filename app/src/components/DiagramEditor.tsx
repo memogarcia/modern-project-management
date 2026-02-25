@@ -48,6 +48,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const groupSelectedNodes = useDiagramStore((s) => s.groupSelectedNodes);
   const ungroupSelectedNodes = useDiagramStore((s) => s.ungroupSelectedNodes);
   const reparentNode = useDiagramStore((s) => s.reparentNode);
+  const resolveOverlapsForNode = useDiagramStore((s) => s.resolveOverlapsForNode);
   const sendToFront = useDiagramStore((s) => s.sendToFront);
   const sendToBack = useDiagramStore((s) => s.sendToBack);
   const sendForward = useDiagramStore((s) => s.sendForward);
@@ -251,8 +252,11 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         // Dragged out of all groups → remove from parent
         reparentNode(draggedNode.id, null);
       }
+
+      // Prevent node-on-node overlaps (groups are excluded).
+      resolveOverlapsForNode(draggedNode.id);
     },
-    [getNodes, getInternalNode, reparentNode],
+    [getNodes, getInternalNode, reparentNode, resolveOverlapsForNode],
   );
 
   return (
@@ -284,7 +288,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
               fontWeight: 500,
             }}
           >
-            <ArrowLeft size={16} /> Diagrams
+            Diagrams
           </a>
           <span style={{ color: "var(--border)", fontSize: "16px", fontWeight: 300 }}>/</span>
           <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--foreground)" }}>{diagramName}</span>

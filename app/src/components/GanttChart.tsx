@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import type { GanttTask, ViewMode } from "@/lib/ganttTypes";
 import { STATUS_CONFIG, PRIORITY_CONFIG, LINK_TYPE_CONFIG, getTaskColor, getTaskDurationDays } from "@/lib/ganttTypes";
 import { useGanttStore } from "@/store/ganttStore";
+import { User, Link as LinkIcon, ChevronRight, ChevronDown } from "lucide-react";
 
 // ─── Constants ──────────────────────────────────────────────────────
 const ROW_HEIGHT = 44;
@@ -172,8 +173,8 @@ function TaskTooltip({ task, x, y }: { task: GanttTask; x: number; y: number }) 
         </span>
       </div>
       {task.assignee && (
-        <div style={{ color: "var(--text-muted)", marginBottom: 4 }}>
-          👤 {task.assignee}
+        <div style={{ color: "var(--text-muted)", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
+          <User size={12} /> {task.assignee}
         </div>
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
@@ -210,11 +211,21 @@ export default function GanttChartView() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
 
   // Sync horizontal scroll between header + body
-  const handleScroll = useCallback(() => {
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     if (scrollRef.current && timelineRef.current) {
       timelineRef.current.scrollLeft = scrollRef.current.scrollLeft;
+    }
+    if (scrollRef.current && leftPanelRef.current && e.target === scrollRef.current) {
+      leftPanelRef.current.scrollTop = scrollRef.current.scrollTop;
+    }
+  }, []);
+
+  const handleLeftPanelScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (scrollRef.current && leftPanelRef.current && e.target === leftPanelRef.current) {
+      scrollRef.current.scrollTop = leftPanelRef.current.scrollTop;
     }
   }, []);
 
@@ -370,7 +381,7 @@ export default function GanttChartView() {
                   borderRadius: 6,
                   border: "none",
                   background: viewMode === m ? "var(--accent)" : "transparent",
-                  color: viewMode === m ? "#fff" : "var(--text-muted)",
+                  color: viewMode === m ? "var(--accent-foreground)" : "var(--text-muted)",
                   fontSize: 13,
                   fontWeight: 500,
                   cursor: "pointer",
@@ -416,7 +427,7 @@ export default function GanttChartView() {
             width: LEFT_PANEL_WIDTH,
             flexShrink: 0,
             borderRight: "1px solid var(--border)",
-            overflow: "auto",
+            overflow: "hidden",
             background: "var(--panel-bg)",
             display: "flex",
             flexDirection: "column",
@@ -426,6 +437,7 @@ export default function GanttChartView() {
           <div
             style={{
               height: HEADER_HEIGHT + (viewMode === "day" ? 24 : 0),
+              flexShrink: 0,
               borderBottom: "1px solid var(--border)",
               display: "flex",
               alignItems: "center",
@@ -444,161 +456,175 @@ export default function GanttChartView() {
           </div>
 
           {/* Task rows */}
-          <div style={{ flex: 1 }}>
-            {displayRows.map((row) => {
-              if (row.type === "group") {
+          <div
+            ref={leftPanelRef}
+            onScroll={handleLeftPanelScroll}
+            style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}
+          >
+            <div style={{ height: displayRows.length * ROW_HEIGHT, position: "relative" }}>
+              {displayRows.map((row, rowIdx) => {
+                if (row.type === "group") {
+                  return (
+                    <div
+                      key={`group-${row.name}`}
+                      onClick={() => toggleGroup(row.name)}
+                      style={{
+                        position: "absolute",
+                        top: rowIdx * ROW_HEIGHT,
+                        left: 0,
+                        width: "100%",
+                        height: ROW_HEIGHT,
+                        display: "flex",
+                        alignItems: "center",
+                        padding: "0 20px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--foreground)",
+                        cursor: "pointer",
+                        borderBottom: "1px solid var(--border)",
+                        background: "var(--surface)",
+                        userSelect: "none",
+                        transition: "background 0.15s ease",
+                        letterSpacing: "-0.01em",
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-hover)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = "var(--surface)"}
+                    >
+                      <span style={{ marginRight: 10, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {collapsedGroups.has(row.name) ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      </span>
+                      {row.name}
+                      <span style={{ marginLeft: 10, fontSize: 12, color: "var(--text-subtle)", fontWeight: 500, background: "var(--border)", padding: "2px 8px", borderRadius: 12 }}>
+                        {groups.find((g) => g.name === row.name)?.tasks.length ?? 0}
+                      </span>
+                    </div>
+                  );
+                }
+
+                const task = row.task;
+                const status = STATUS_CONFIG[task.status];
+                const isSelected = selectedTaskId === task.id;
+
                 return (
                   <div
-                    key={`group-${row.name}`}
-                    onClick={() => toggleGroup(row.name)}
+                    key={task.id}
+                    onClick={() => selectTask(task.id)}
                     style={{
+                      position: "absolute",
+                      top: rowIdx * ROW_HEIGHT,
+                      left: 0,
+                      width: "100%",
                       height: ROW_HEIGHT,
                       display: "flex",
                       alignItems: "center",
                       padding: "0 20px",
                       fontSize: 13,
-                      fontWeight: 600,
-                      color: "var(--foreground)",
-                      cursor: "pointer",
                       borderBottom: "1px solid var(--border)",
-                      background: "var(--surface)",
-                      userSelect: "none",
-                      transition: "background 0.15s ease",
-                      letterSpacing: "-0.01em",
+                      cursor: "pointer",
+                      background: isSelected ? "var(--accent-soft)" : "transparent",
+                      borderLeft: isSelected ? `3px solid var(--accent)` : "3px solid transparent",
+                      transition: "all 0.15s ease",
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-hover)"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "var(--surface)"}
-                  >
-                    <span style={{ marginRight: 10, fontSize: 11, color: "var(--text-muted)", width: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {collapsedGroups.has(row.name) ? "▶" : "▼"}
-                    </span>
-                    {row.name}
-                    <span style={{ marginLeft: 10, fontSize: 12, color: "var(--text-subtle)", fontWeight: 500, background: "var(--border)", padding: "2px 8px", borderRadius: 12 }}>
-                      {groups.find((g) => g.name === row.name)?.tasks.length ?? 0}
-                    </span>
-                  </div>
-                );
-              }
-
-              const task = row.task;
-              const status = STATUS_CONFIG[task.status];
-              const isSelected = selectedTaskId === task.id;
-
-              return (
-                <div
-                  key={task.id}
-                  onClick={() => selectTask(task.id)}
-                  style={{
-                    height: ROW_HEIGHT,
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "0 20px",
-                    fontSize: 13,
-                    borderBottom: "1px solid var(--border)",
-                    cursor: "pointer",
-                    background: isSelected ? "var(--accent-soft)" : "transparent",
-                    borderLeft: isSelected ? `3px solid var(--accent)` : "3px solid transparent",
-                    transition: "all 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.background = "var(--surface-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.background = "transparent";
-                  }}
-                >
-                  {/* Priority indicator */}
-                  <div
-                    style={{
-                      width: 18,
-                      display: "flex",
-                      justifyContent: "center",
-                      marginRight: 10,
+                    onMouseEnter={(e) => {
+                      if (!isSelected) e.currentTarget.style.background = "var(--surface-hover)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) e.currentTarget.style.background = "transparent";
                     }}
                   >
+                    {/* Priority indicator */}
                     <div
                       style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: PRIORITY_CONFIG[task.priority].color,
-                        boxShadow: `0 0 8px ${PRIORITY_CONFIG[task.priority].color}40`,
+                        width: 18,
+                        display: "flex",
+                        justifyContent: "center",
+                        marginRight: 10,
                       }}
-                    />
-                  </div>
-                  {/* Task name */}
-                  <span
-                    style={{
-                      flex: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      fontWeight: 500,
-                      textDecoration: task.status === "cancelled" ? "line-through" : "none",
-                      opacity: task.status === "cancelled" ? 0.5 : 1,
-                      color: isSelected ? "var(--accent)" : "var(--foreground)",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    {task.name}
-                  </span>
-                  {/* Links indicator */}
-                  {task.links.length > 0 && (
-                    <span style={{ fontSize: 11, marginRight: 10, opacity: 0.6, display: "flex", alignItems: "center", gap: 4, color: "var(--text-subtle)" }}>
-                      <span style={{ fontSize: 13 }}>🔗</span>{task.links.length}
-                    </span>
-                  )}
-                  {/* Status badge */}
-                  <div
-                    style={{
-                      width: 80,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <span style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: status.color,
-                      background: status.color + "18",
-                      padding: "3px 10px",
-                      borderRadius: 6,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                      minWidth: 75,
-                      justifyContent: "center",
-                      letterSpacing: "-0.01em",
-                    }}>
-                      {status.icon} <span>{status.label}</span>
-                    </span>
-                  </div>
-                  {/* Progress */}
-                  <div style={{ width: 60, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    <svg width="16" height="16" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="var(--border)"
-                        strokeWidth="3.5"
+                    >
+                      <div
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: PRIORITY_CONFIG[task.priority].color,
+                          boxShadow: `0 0 8px ${PRIORITY_CONFIG[task.priority].color}40`,
+                        }}
                       />
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke={status.color}
-                        strokeWidth="3.5"
-                        strokeDasharray={`${task.progress}, 100`}
-                      />
-                    </svg>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "right", minWidth: 28, fontWeight: 500 }}>
-                      {task.progress}%
+                    </div>
+                    {/* Task name */}
+                    <span
+                      style={{
+                        flex: 1,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        fontWeight: 500,
+                        textDecoration: task.status === "cancelled" ? "line-through" : "none",
+                        opacity: task.status === "cancelled" ? 0.5 : 1,
+                        color: isSelected ? "var(--accent)" : "var(--foreground)",
+                        letterSpacing: "-0.01em",
+                      }}
+                    >
+                      {task.name}
                     </span>
+                    {/* Links indicator */}
+                    {task.links.length > 0 && (
+                      <span style={{ fontSize: 11, marginRight: 10, opacity: 0.6, display: "flex", alignItems: "center", gap: 4, color: "var(--text-subtle)" }}>
+                        <LinkIcon size={12} />{task.links.length}
+                      </span>
+                    )}
+                    {/* Status badge */}
+                    <div
+                      style={{
+                        width: 80,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: status.color,
+                        background: status.color + "18",
+                        padding: "3px 10px",
+                        borderRadius: 6,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        minWidth: 75,
+                        justifyContent: "center",
+                        letterSpacing: "-0.01em",
+                      }}>
+                        {status.icon} <span>{status.label}</span>
+                      </span>
+                    </div>
+                    {/* Progress */}
+                    <div style={{ width: 60, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
+                        <path
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke="var(--border)"
+                          strokeWidth="3.5"
+                        />
+                        <path
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke={status.color}
+                          strokeWidth="3.5"
+                          strokeDasharray={`${task.progress}, 100`}
+                        />
+                      </svg>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "right", minWidth: 28, fontWeight: 500 }}>
+                        {task.progress}%
+                      </span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -616,7 +642,7 @@ export default function GanttChartView() {
           >
             {/* Month row (day view only) — Modern styling */}
             {viewMode === "day" && monthHeaders.length > 0 && (
-              <div style={{ display: "flex", height: 24, borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+              <div style={{ display: "flex", height: 24, borderBottom: "1px solid var(--border)", background: "var(--surface)", width: totalWidth }}>
                 {monthHeaders.map((mh) => (
                   <div
                     key={mh.label}
@@ -640,7 +666,7 @@ export default function GanttChartView() {
               </div>
             )}
             {/* Column headers — Modern styling */}
-            <div style={{ display: "flex", height: HEADER_HEIGHT }}>
+            <div style={{ display: "flex", height: HEADER_HEIGHT, width: totalWidth }}>
               {columns.map((col, i) => (
                 <div
                   key={i}
@@ -680,7 +706,7 @@ export default function GanttChartView() {
               position: "relative",
             }}
           >
-            <div style={{ width: totalWidth, position: "relative" }}>
+            <div style={{ width: totalWidth, height: displayRows.length * ROW_HEIGHT, position: "relative" }}>
               {/* Grid lines */}
               <svg
                 style={{ position: "absolute", top: 0, left: 0, width: totalWidth, height: displayRows.length * ROW_HEIGHT, pointerEvents: "none" }}

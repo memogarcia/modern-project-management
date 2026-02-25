@@ -33,7 +33,7 @@ export default function CalendarListPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--background)", color: "var(--foreground)" }}>
+    <div style={{ flex: 1, background: "var(--background)", color: "var(--foreground)" }}>
       {/* Modern Header */}
       <header
         style={{
@@ -48,35 +48,6 @@ export default function CalendarListPage() {
       >
         <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-            <button
-              onClick={() => router.push("/")}
-              style={{
-                padding: "8px 16px",
-                background: "var(--surface)",
-                color: "var(--text-muted)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                transition: "all 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--surface-hover)";
-                e.currentTarget.style.borderColor = "var(--panel-border)";
-                e.currentTarget.style.color = "var(--foreground)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "var(--surface)";
-                e.currentTarget.style.borderColor = "var(--border)";
-                e.currentTarget.style.color = "var(--text-muted)";
-              }}
-            >
-              <ArrowLeft size={14} /> Home
-            </button>
             <div>
               <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", gap: 10, letterSpacing: "-0.02em" }}>
                 <Calendar size={24} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
@@ -92,7 +63,7 @@ export default function CalendarListPage() {
             style={{
               padding: "10px 20px",
               background: "var(--accent)",
-              color: "#fff",
+              color: "var(--accent-foreground)",
               border: "none",
               borderRadius: 8,
               fontSize: 14,
@@ -101,19 +72,19 @@ export default function CalendarListPage() {
               display: "flex",
               alignItems: "center",
               gap: 8,
-              boxShadow: "0 2px 8px rgba(94, 106, 210, 0.25)",
+              boxShadow: "0 2px 8px var(--accent-soft)",
               transition: "all 0.15s ease",
               letterSpacing: "-0.01em",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = "var(--accent-hover)";
               e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow = "0 4px 12px rgba(94, 106, 210, 0.35)";
+              e.currentTarget.style.boxShadow = "0 4px 12px var(--accent-soft)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "var(--accent)";
               e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = "0 2px 8px rgba(94, 106, 210, 0.25)";
+              e.currentTarget.style.boxShadow = "0 2px 8px var(--accent-soft)";
             }}
           >
             <Plus size={18} strokeWidth={2.5} />
@@ -213,7 +184,7 @@ export default function CalendarListPage() {
               style={{
                 padding: "10px 20px",
                 background: "var(--accent)",
-                color: "#fff",
+                color: "var(--accent-foreground)",
                 border: "none",
                 borderRadius: 8,
                 fontSize: 14,

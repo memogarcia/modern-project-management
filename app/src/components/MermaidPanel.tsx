@@ -100,7 +100,7 @@ export default function MermaidPanel() {
             fontSize: "11px",
             padding: "3px 8px",
             background: "var(--accent)",
-            color: "#fff",
+            color: "var(--accent-foreground)",
             border: "none",
             borderRadius: "4px",
             cursor: "pointer",

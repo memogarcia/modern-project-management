@@ -8,6 +8,7 @@ import GanttChartView from "@/components/GanttChart";
 import GanttTaskModal from "@/components/GanttTaskModal";
 import type { GanttTask } from "@/lib/ganttTypes";
 import { STATUS_CONFIG } from "@/lib/ganttTypes";
+import { Calendar, LayoutDashboard, CalendarDays, AlertCircle } from "lucide-react";
 
 // CalendarView uses FullCalendar which is browser-only — disable SSR
 const CalendarView = dynamic(() => import("@/components/CalendarView"), {
@@ -64,7 +65,7 @@ export default function GanttDetailPage() {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--background)", color: "var(--text-muted)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, background: "var(--background)", color: "var(--text-muted)" }}>
         Loading chart...
       </div>
     );
@@ -72,12 +73,12 @@ export default function GanttDetailPage() {
 
   if (!chart) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--background)", color: "var(--text-muted)", gap: 16 }}>
-        <div style={{ fontSize: 48 }}>😵</div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, background: "var(--background)", color: "var(--text-muted)", gap: 16 }}>
+        <AlertCircle size={48} style={{ color: "var(--text-muted)", opacity: 0.5 }} />
         <div>Gantt chart not found</div>
         <button
           onClick={() => router.push(pageView === "calendar" ? "/calendar" : "/gantt")}
-          style={{ padding: "8px 16px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
+          style={{ padding: "8px 16px", background: "var(--accent)", color: "var(--accent-foreground)", border: "none", borderRadius: 6, cursor: "pointer" }}
         >
           ← Back to Charts
         </button>
@@ -86,7 +87,7 @@ export default function GanttDetailPage() {
   }
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--background)", color: "var(--foreground)" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "var(--background)", color: "var(--foreground)", overflow: "hidden" }}>
       {/* Top bar */}
       <div
         style={{
@@ -103,16 +104,20 @@ export default function GanttDetailPage() {
           onClick={() => router.push(pageView === "calendar" ? "/calendar" : "/gantt")}
           style={{
             padding: "6px 10px",
-            background: "var(--surface)",
+            background: "transparent",
             color: "var(--text-muted)",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            fontSize: 12,
+            border: "none",
+            fontSize: 13,
+            fontWeight: 500,
             cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
-          ←
+          {pageView === "calendar" ? "Calendar" : "Gantt Charts"}
         </button>
+        <span style={{ color: "var(--border)", fontSize: "16px", fontWeight: 300 }}>/</span>
 
         {editingMeta ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
@@ -161,7 +166,7 @@ export default function GanttDetailPage() {
             />
             <button
               onClick={() => { updateMeta(metaName, metaDesc); setEditingMeta(false); }}
-              style={{ padding: "4px 12px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }}
+              style={{ padding: "4px 12px", background: "var(--accent)", color: "var(--accent-foreground)", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }}
             >
               Save
             </button>
@@ -172,7 +177,7 @@ export default function GanttDetailPage() {
             onClick={() => { setMetaName(chart.name); setMetaDesc(chart.description); setEditingMeta(true); }}
           >
             <div style={{ fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-              <span>📊</span> {chart.name}
+              <Calendar size={18} style={{ color: "var(--accent)" }} /> {chart.name}
             </div>
             {chart.description && (
               <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{chart.description}</div>
@@ -206,7 +211,7 @@ export default function GanttDetailPage() {
               style={{
                 padding: "6px 14px",
                 background: pageView === v ? "var(--accent)" : "var(--surface)",
-                color: pageView === v ? "#fff" : "var(--text-muted)",
+                color: pageView === v ? "var(--accent-foreground)" : "var(--text-muted)",
                 border: "none",
                 fontSize: 12,
                 fontWeight: 600,
@@ -217,7 +222,7 @@ export default function GanttDetailPage() {
                 gap: 5,
               }}
             >
-              {v === "gantt" ? "📊 Gantt" : "📅 Calendar"}
+              {v === "gantt" ? <><LayoutDashboard size={14} /> Gantt</> : <><CalendarDays size={14} /> Calendar</>}
             </button>
           ))}
         </div>
@@ -227,7 +232,7 @@ export default function GanttDetailPage() {
           style={{
             padding: "8px 16px",
             background: "var(--accent)",
-            color: "#fff",
+            color: "var(--accent-foreground)",
             border: "none",
             borderRadius: 6,
             fontSize: 13,

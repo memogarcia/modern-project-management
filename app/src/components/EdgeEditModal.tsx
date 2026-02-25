@@ -106,7 +106,7 @@ export default function EdgeEditModal({ edge, onSave, onClose }: EdgeEditModalPr
                     padding: "6px 10px",
                     fontSize: 12,
                     background: edgeType === t.value ? "var(--accent)" : "var(--surface)",
-                    color: edgeType === t.value ? "#fff" : "var(--foreground)",
+                    color: edgeType === t.value ? "var(--accent-foreground)" : "var(--foreground)",
                     border: `1px solid ${edgeType === t.value ? "var(--accent)" : "var(--border)"}`,
                   }}
                 >
@@ -158,7 +158,7 @@ export default function EdgeEditModal({ edge, onSave, onClose }: EdgeEditModalPr
                     justifyContent: "center",
                     padding: 0,
                     background: strokeWidth === w ? "var(--accent)" : "var(--surface)",
-                    color: strokeWidth === w ? "#fff" : "var(--foreground)",
+                    color: strokeWidth === w ? "var(--accent-foreground)" : "var(--foreground)",
                     border: `1px solid ${strokeWidth === w ? "var(--accent)" : "var(--border)"}`,
                     fontSize: 13,
                     fontWeight: 600,

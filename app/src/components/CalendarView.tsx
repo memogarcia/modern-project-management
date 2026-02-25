@@ -179,11 +179,13 @@ export default function CalendarView() {
   return (
     <div
       className="calendar-view-wrapper"
-      style={{ height: "100%", overflow: "auto", padding: "16px 20px" }}
+      style={{ height: "100%", display: "flex", flexDirection: "column" }}
     >
       {/* Theme integration styles */}
       <style>{`
         .calendar-view-wrapper .fc {
+          flex: 1;
+          height: 100%;
           font-family: inherit;
           --fc-border-color: var(--border);
           --fc-button-bg-color: var(--surface);
@@ -193,7 +195,7 @@ export default function CalendarView() {
           --fc-button-hover-border-color: var(--border);
           --fc-button-active-bg-color: var(--accent);
           --fc-button-active-border-color: var(--accent);
-          --fc-button-active-text-color: #fff;
+          --fc-button-active-text-color: var(--accent-foreground);
           --fc-event-border-color: transparent;
           --fc-today-bg-color: var(--accent-soft);
           --fc-neutral-bg-color: var(--panel-bg);
@@ -318,7 +320,7 @@ export default function CalendarView() {
         dayMaxEvents={4}
         weekends={true}
         fixedWeekCount={false}
-        height="auto"
+        height="100%"
         eventDisplay="block"
         nowIndicator={true}
       />

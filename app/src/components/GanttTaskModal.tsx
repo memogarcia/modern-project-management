@@ -119,10 +119,10 @@ export default function GanttTaskModal({ task, onSave, onDelete, onClose }: Prop
             Details
           </button>
           <button style={tabStyle(activeTab === "links")} onClick={() => setActiveTab("links")}>
-            Links {links.length > 0 && <span style={{ marginLeft: 4, fontSize: 10, background: "var(--accent)", color: "#fff", borderRadius: 8, padding: "1px 6px" }}>{links.length}</span>}
+            Links {links.length > 0 && <span style={{ marginLeft: 4, fontSize: 10, background: "var(--accent)", color: "var(--accent-foreground)", borderRadius: 8, padding: "1px 6px" }}>{links.length}</span>}
           </button>
           <button style={tabStyle(activeTab === "metadata")} onClick={() => setActiveTab("metadata")}>
-            Metadata {Object.keys(metadata).length > 0 && <span style={{ marginLeft: 4, fontSize: 10, background: "var(--accent)", color: "#fff", borderRadius: 8, padding: "1px 6px" }}>{Object.keys(metadata).length}</span>}
+            Metadata {Object.keys(metadata).length > 0 && <span style={{ marginLeft: 4, fontSize: 10, background: "var(--accent)", color: "var(--accent-foreground)", borderRadius: 8, padding: "1px 6px" }}>{Object.keys(metadata).length}</span>}
           </button>
         </div>
 

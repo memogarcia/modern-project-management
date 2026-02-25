@@ -17,6 +17,8 @@ import { saveDiagram, loadDiagram } from "@/lib/storage";
 let persistQueue: Promise<void> = Promise.resolve();
 let latestPersistRequest = 0;
 
+type OverlapRect = { x: number; y: number; w: number; h: number };
+
 function stripGroupingFromNode(node: DiagramNode): DiagramNode {
   const { parentId, extent, expandParent, ...rest } = node as DiagramNode & {
     parentId?: string;
@@ -61,6 +63,100 @@ function buildAbsolutePositionMap(nodes: DiagramNode[]): Map<string, { x: number
   }
 
   return cache;
+}
+
+function estimateNodeSizeForOverlap(node: DiagramNode): { w: number; h: number } {
+  const measuredW = typeof node.measured?.width === "number" ? node.measured.width : undefined;
+  const measuredH = typeof node.measured?.height === "number" ? node.measured.height : undefined;
+  const explicitW = typeof node.width === "number" ? node.width : undefined;
+  const explicitH = typeof node.height === "number" ? node.height : undefined;
+
+  const width = explicitW ?? measuredW;
+  const height = explicitH ?? measuredH;
+  if (typeof width === "number" && typeof height === "number") {
+    return { w: width, h: height };
+  }
+
+  if (node.type === "databaseSchemaNode") {
+    const schema = (node.data as DatabaseSchemaNodeData).schema ?? [];
+    return { w: 240, h: Math.max(80, 40 + schema.length * 24) };
+  }
+
+  if (node.type === "groupNode") {
+    const style = (node.style ?? {}) as { width?: unknown; height?: unknown };
+    const w = typeof style.width === "number" && Number.isFinite(style.width) ? style.width : 400;
+    const h = typeof style.height === "number" && Number.isFinite(style.height) ? style.height : 300;
+    return { w, h };
+  }
+
+  const shapeDef = getShapeDef((node as ArchNode).data.shapeType);
+  return { w: shapeDef.defaultWidth, h: shapeDef.defaultHeight };
+}
+
+function rectsOverlap(a: OverlapRect, b: OverlapRect, padding = 0): boolean {
+  const ax1 = a.x - padding;
+  const ay1 = a.y - padding;
+  const ax2 = a.x + a.w + padding;
+  const ay2 = a.y + a.h + padding;
+
+  const bx1 = b.x - padding;
+  const by1 = b.y - padding;
+  const bx2 = b.x + b.w + padding;
+  const by2 = b.y + b.h + padding;
+
+  return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+}
+
+function snapToGrid(value: number, grid: number): number {
+  if (grid <= 0) return value;
+  return Math.round(value / grid) * grid;
+}
+
+function findNonOverlappingAbsPosition(
+  desiredAbs: { x: number; y: number },
+  size: { w: number; h: number },
+  obstacles: OverlapRect[],
+  options?: { grid?: number; padding?: number; maxRadiusSteps?: number }
+): { x: number; y: number } {
+  const grid = options?.grid ?? 20;
+  const padding = options?.padding ?? 12;
+  const maxRadiusSteps = options?.maxRadiusSteps ?? 30;
+
+  const isFreeAt = (x: number, y: number) => {
+    const candidate: OverlapRect = { x, y, w: size.w, h: size.h };
+    return !obstacles.some((o) => rectsOverlap(candidate, o, padding));
+  };
+
+  // Preserve exact placement if it doesn't collide.
+  if (isFreeAt(desiredAbs.x, desiredAbs.y)) return desiredAbs;
+
+  const startX = snapToGrid(desiredAbs.x, grid);
+  const startY = snapToGrid(desiredAbs.y, grid);
+  if (isFreeAt(startX, startY)) return { x: startX, y: startY };
+
+  for (let r = 1; r <= maxRadiusSteps; r++) {
+    // Top/bottom edges of the ring
+    for (let dx = -r; dx <= r; dx++) {
+      const x = startX + dx * grid;
+      const yTop = startY - r * grid;
+      if (isFreeAt(x, yTop)) return { x, y: yTop };
+
+      const yBottom = startY + r * grid;
+      if (isFreeAt(x, yBottom)) return { x, y: yBottom };
+    }
+
+    // Left/right edges of the ring (excluding corners already checked)
+    for (let dy = -r + 1; dy <= r - 1; dy++) {
+      const y = startY + dy * grid;
+      const xLeft = startX - r * grid;
+      if (isFreeAt(xLeft, y)) return { x: xLeft, y };
+
+      const xRight = startX + r * grid;
+      if (isFreeAt(xRight, y)) return { x: xRight, y };
+    }
+  }
+
+  return desiredAbs;
 }
 
 type GroupTemplate = {
@@ -348,6 +444,7 @@ interface DiagramStore {
 
   runAutoLayout: () => Promise<void>;
   setNodesAndEdges: (nodes: DiagramNode[], edges: ArchEdge[]) => void;
+  resolveOverlapsForNode: (nodeId: string) => void;
 }
 
 export const useDiagramStore = create<DiagramStore>((set, get) => ({
@@ -483,32 +580,64 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   addNode: (shapeType, position) => {
     const shapeDef = getShapeDef(shapeType);
     const id = `${shapeType}_${uuidv4().slice(0, 8)}`;
-    const newNode: ArchNode = {
+    const desiredPos = position ?? { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 };
+    const baseNode: ArchNode = {
       id,
       type: "archNode",
-      position: position ?? { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
+      position: desiredPos,
       data: {
         label: shapeDef.label,
         shapeType,
         description: "",
       },
     };
-    set((s) => ({ nodes: [...s.nodes, newNode] }));
+    set((s) => {
+      const absPosMap = buildAbsolutePositionMap(s.nodes);
+      const obstacles = s.nodes
+        .filter((n) => n.type !== "groupNode" && !n.parentId)
+        .map((n) => {
+          const abs = absPosMap.get(n.id);
+          if (!abs) return null;
+          const { w, h } = estimateNodeSizeForOverlap(n);
+          return { x: abs.x, y: abs.y, w, h } satisfies OverlapRect;
+        })
+        .filter((x): x is OverlapRect => Boolean(x));
+
+      const { w, h } = estimateNodeSizeForOverlap(baseNode);
+      const freeAbs = findNonOverlappingAbsPosition(baseNode.position, { w, h }, obstacles);
+      return { nodes: [...s.nodes, { ...baseNode, position: freeAbs }] };
+    });
     get().syncFlowToMermaid();
   },
 
   addDatabaseSchemaNode: (tableName, columns, position) => {
     const id = `table_${tableName.toLowerCase().replace(/\s+/g, "_")}_${uuidv4().slice(0, 8)}`;
-    const newNode: DiagramNode = {
+    const desiredPos = position ?? { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 };
+    const baseNode: DiagramNode = {
       id,
       type: "databaseSchemaNode",
-      position: position ?? { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
+      position: desiredPos,
       data: {
         label: tableName,
         schema: columns,
       },
     };
-    set((s) => ({ nodes: [...s.nodes, newNode] }));
+    set((s) => {
+      const absPosMap = buildAbsolutePositionMap(s.nodes);
+      const obstacles = s.nodes
+        .filter((n) => n.type !== "groupNode" && !n.parentId)
+        .map((n) => {
+          const abs = absPosMap.get(n.id);
+          if (!abs) return null;
+          const { w, h } = estimateNodeSizeForOverlap(n);
+          return { x: abs.x, y: abs.y, w, h } satisfies OverlapRect;
+        })
+        .filter((x): x is OverlapRect => Boolean(x));
+
+      const { w, h } = estimateNodeSizeForOverlap(baseNode);
+      const freeAbs = findNonOverlappingAbsPosition(baseNode.position, { w, h }, obstacles);
+      return { nodes: [...s.nodes, { ...baseNode, position: freeAbs }] };
+    });
     get().syncFlowToMermaid();
   },
 
@@ -865,5 +994,44 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   setNodesAndEdges: (nodes, edges) => {
     set({ nodes, edges });
     get().syncFlowToMermaid();
+  },
+
+  resolveOverlapsForNode: (nodeId) => {
+    set((s) => {
+      const node = s.nodes.find((n) => n.id === nodeId);
+      if (!node || node.type === "groupNode") return s;
+
+      const absPosMap = buildAbsolutePositionMap(s.nodes);
+      const desiredAbs = absPosMap.get(nodeId);
+      if (!desiredAbs) return s;
+
+      const obstacles = s.nodes
+        .filter(
+          (n) =>
+            n.id !== nodeId &&
+            n.type !== "groupNode" &&
+            (n.parentId ?? null) === (node.parentId ?? null),
+        )
+        .map((n) => {
+          const abs = absPosMap.get(n.id);
+          if (!abs) return null;
+          const { w, h } = estimateNodeSizeForOverlap(n);
+          return { x: abs.x, y: abs.y, w, h } satisfies OverlapRect;
+        })
+        .filter((x): x is OverlapRect => Boolean(x));
+
+      const { w, h } = estimateNodeSizeForOverlap(node);
+      const freeAbs = findNonOverlappingAbsPosition(desiredAbs, { w, h }, obstacles);
+      if (freeAbs.x === desiredAbs.x && freeAbs.y === desiredAbs.y) return s;
+
+      const parentAbs = node.parentId ? absPosMap.get(node.parentId) : undefined;
+      const nextPosition = parentAbs
+        ? { x: freeAbs.x - parentAbs.x, y: freeAbs.y - parentAbs.y }
+        : freeAbs;
+
+      return {
+        nodes: s.nodes.map((n) => (n.id === nodeId ? { ...n, position: nextPosition } : n)),
+      };
+    });
   },
 }));

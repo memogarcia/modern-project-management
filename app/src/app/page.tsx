@@ -5,7 +5,7 @@ import { Calendar, BarChart, Share2 } from "lucide-react";
 
 export default function Home() {
   return (
-    <div style={{ minHeight: "100vh", background: "var(--background)", color: "var(--foreground)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
+    <div style={{ flex: 1, background: "var(--background)", color: "var(--foreground)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
       <div style={{ textAlign: "center", marginBottom: 60 }}>
         <h1 style={{ fontSize: 48, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 16, background: "linear-gradient(135deg, var(--foreground) 0%, var(--text-muted) 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
           Workspace
@@ -41,7 +41,7 @@ export default function Home() {
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = "var(--card-shadow)";
             }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--accent)", color: "var(--accent-foreground)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
               <Share2 size={24} strokeWidth={2} />
             </div>
             <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12, color: "var(--foreground)", letterSpacing: "-0.02em" }}>Diagrams</h2>
@@ -76,7 +76,7 @@ export default function Home() {
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = "var(--card-shadow)";
             }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--accent)", color: "var(--accent-foreground)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
               <BarChart size={24} strokeWidth={2} />
             </div>
             <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12, color: "var(--foreground)", letterSpacing: "-0.02em" }}>Gantt Charts</h2>
@@ -111,7 +111,7 @@ export default function Home() {
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = "var(--card-shadow)";
             }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--accent)", color: "var(--accent-foreground)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
               <Calendar size={24} strokeWidth={2} />
             </div>
             <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12, color: "var(--foreground)", letterSpacing: "-0.02em" }}>Calendar</h2>
