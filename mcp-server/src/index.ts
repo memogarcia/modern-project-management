@@ -4,10 +4,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import { DiagramStorage } from "./storage.js";
-import type { Diagram } from "./types.js";
+import { DiagramStorage, GanttStorage } from "./storage.js";
+import type { Diagram, GanttChart, GanttTask } from "./types.js";
 
 const storage = new DiagramStorage(process.env.DIAGRAMS_DIR);
+const ganttStorage = new GanttStorage(storage.baseDir);
 
 const server = new McpServer({
   name: "archdiagram",
@@ -563,6 +564,316 @@ server.tool(
   }
 );
 
+// ═══════════════════════════════════════════════════════════════════════
+// GANTT CHART TOOLS
+// ═══════════════════════════════════════════════════════════════════════
+
+// ─── Tool: list_gantt_charts ─────────────────────────────────────────
+server.tool("list_gantt_charts", "List all saved Gantt charts", {}, async () => {
+  const charts = ganttStorage.list();
+  const summary = charts.map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    taskCount: c.tasks.length,
+    updatedAt: c.updatedAt,
+  }));
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
+  };
+});
+
+// ─── Tool: get_gantt_chart ───────────────────────────────────────────
+server.tool(
+  "get_gantt_chart",
+  "Get a Gantt chart by ID, returns tasks and metadata",
+  { id: z.string().describe("The Gantt chart ID") },
+  async ({ id }) => {
+    const chart = ganttStorage.get(id);
+    if (!chart) {
+      return {
+        content: [{ type: "text" as const, text: `Gantt chart not found: ${id}` }],
+        isError: true,
+      };
+    }
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(chart, null, 2) }],
+    };
+  }
+);
+
+// ─── Tool: create_gantt_chart ────────────────────────────────────────
+server.tool(
+  "create_gantt_chart",
+  "Create a new Gantt chart with tasks for project planning. Each task has a name, start date, end date, status, priority, progress, and optional links to JIRA/GitHub.",
+  {
+    name: z.string().describe("Name of the Gantt chart"),
+    description: z.string().optional().describe("Description of the chart"),
+    tasks: z
+      .array(
+        z.object({
+          name: z.string().describe("Task name"),
+          startDate: z.string().describe("Start date (YYYY-MM-DD)"),
+          endDate: z.string().describe("End date (YYYY-MM-DD)"),
+          status: z
+            .enum(["not-started", "in-progress", "completed", "blocked", "cancelled"])
+            .optional()
+            .default("not-started"),
+          priority: z
+            .enum(["low", "medium", "high", "critical"])
+            .optional()
+            .default("medium"),
+          progress: z.number().min(0).max(100).optional().default(0),
+          assignee: z.string().optional().describe("Person or team assigned"),
+          group: z.string().optional().describe("Group/section name"),
+          description: z.string().optional(),
+          links: z
+            .array(
+              z.object({
+                label: z.string(),
+                url: z.string(),
+                type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]),
+              })
+            )
+            .optional()
+            .default([]),
+          metadata: z.record(z.string()).optional().default({}),
+        })
+      )
+      .optional()
+      .default([]),
+  },
+  async ({ name, description, tasks }) => {
+    const now = new Date().toISOString();
+    const chart: GanttChart = {
+      id: uuidv4(),
+      name,
+      description: description ?? "",
+      createdAt: now,
+      updatedAt: now,
+      tasks: tasks.map((t) => ({
+        id: uuidv4(),
+        name: t.name,
+        startDate: t.startDate,
+        endDate: t.endDate,
+        status: t.status,
+        priority: t.priority,
+        progress: t.progress,
+        assignee: t.assignee,
+        group: t.group,
+        description: t.description,
+        links: t.links,
+        dependencies: [],
+        metadata: t.metadata,
+      })),
+    };
+    ganttStorage.save(chart);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            { id: chart.id, name: chart.name, taskCount: chart.tasks.length, message: "Gantt chart created" },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: add_gantt_task ────────────────────────────────────────────
+server.tool(
+  "add_gantt_task",
+  "Add a task to an existing Gantt chart",
+  {
+    chartId: z.string().describe("The Gantt chart ID"),
+    name: z.string().describe("Task name"),
+    startDate: z.string().describe("Start date (YYYY-MM-DD)"),
+    endDate: z.string().describe("End date (YYYY-MM-DD)"),
+    status: z
+      .enum(["not-started", "in-progress", "completed", "blocked", "cancelled"])
+      .optional()
+      .default("not-started"),
+    priority: z
+      .enum(["low", "medium", "high", "critical"])
+      .optional()
+      .default("medium"),
+    progress: z.number().min(0).max(100).optional().default(0),
+    assignee: z.string().optional(),
+    group: z.string().optional(),
+    description: z.string().optional(),
+    links: z
+      .array(
+        z.object({
+          label: z.string(),
+          url: z.string(),
+          type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]),
+        })
+      )
+      .optional()
+      .default([]),
+    metadata: z.record(z.string()).optional().default({}),
+  },
+  async ({ chartId, name, startDate, endDate, status, priority, progress, assignee, group, description, links, metadata }) => {
+    const chart = ganttStorage.get(chartId);
+    if (!chart) {
+      return {
+        content: [{ type: "text" as const, text: `Gantt chart not found: ${chartId}` }],
+        isError: true,
+      };
+    }
+
+    const task: GanttTask = {
+      id: uuidv4(),
+      name,
+      startDate,
+      endDate,
+      status,
+      priority,
+      progress,
+      assignee,
+      group,
+      description,
+      links,
+      dependencies: [],
+      metadata,
+    };
+
+    chart.tasks.push(task);
+    chart.updatedAt = new Date().toISOString();
+    ganttStorage.save(chart);
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            { message: `Task '${name}' added`, taskId: task.id, chartId },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: update_gantt_task ─────────────────────────────────────────
+server.tool(
+  "update_gantt_task",
+  "Update an existing task in a Gantt chart",
+  {
+    chartId: z.string().describe("The Gantt chart ID"),
+    taskId: z.string().describe("The task ID to update"),
+    name: z.string().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    status: z.enum(["not-started", "in-progress", "completed", "blocked", "cancelled"]).optional(),
+    priority: z.enum(["low", "medium", "high", "critical"]).optional(),
+    progress: z.number().min(0).max(100).optional(),
+    assignee: z.string().optional(),
+    group: z.string().optional(),
+    description: z.string().optional(),
+  },
+  async ({ chartId, taskId, ...updates }) => {
+    const chart = ganttStorage.get(chartId);
+    if (!chart) {
+      return {
+        content: [{ type: "text" as const, text: `Gantt chart not found: ${chartId}` }],
+        isError: true,
+      };
+    }
+
+    const taskIdx = chart.tasks.findIndex((t) => t.id === taskId);
+    if (taskIdx === -1) {
+      return {
+        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
+        isError: true,
+      };
+    }
+
+    const task = chart.tasks[taskIdx];
+    Object.assign(task, Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined)));
+    chart.updatedAt = new Date().toISOString();
+    ganttStorage.save(chart);
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Task '${task.name}' updated`, task }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: add_link_to_gantt_task ────────────────────────────────────
+server.tool(
+  "add_link_to_gantt_task",
+  "Add a link (JIRA, GitHub PR, etc.) to a task in a Gantt chart",
+  {
+    chartId: z.string().describe("The Gantt chart ID"),
+    taskId: z.string().describe("The task ID"),
+    label: z.string().describe("Link label (e.g. 'PROJ-123')"),
+    url: z.string().describe("Link URL"),
+    type: z
+      .enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"])
+      .describe("Type of link"),
+  },
+  async ({ chartId, taskId, label, url, type }) => {
+    const chart = ganttStorage.get(chartId);
+    if (!chart) {
+      return {
+        content: [{ type: "text" as const, text: `Gantt chart not found: ${chartId}` }],
+        isError: true,
+      };
+    }
+
+    const task = chart.tasks.find((t) => t.id === taskId);
+    if (!task) {
+      return {
+        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
+        isError: true,
+      };
+    }
+
+    task.links.push({ label, url, type });
+    chart.updatedAt = new Date().toISOString();
+    ganttStorage.save(chart);
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Link '${label}' added to task '${task.name}'` }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: delete_gantt_chart ────────────────────────────────────────
+server.tool(
+  "delete_gantt_chart",
+  "Delete a Gantt chart by ID",
+  { id: z.string().describe("The Gantt chart ID") },
+  async ({ id }) => {
+    const deleted = ganttStorage.delete(id);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: deleted ? `Gantt chart ${id} deleted` : `Gantt chart not found: ${id}`,
+        },
+      ],
+      isError: !deleted,
+    };
+  }
+);
+
 // ─── Resources: diagram listing ──────────────────────────────────────
 server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
   const diagrams = storage.list();
@@ -576,6 +887,29 @@ server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
             id: d.id,
             name: d.name,
             description: d.description,
+          })),
+          null,
+          2
+        ),
+      },
+    ],
+  };
+});
+
+// ─── Resources: Gantt chart listing ──────────────────────────────────
+server.resource("gantt-charts", "archdiagram://gantt-charts", async (uri) => {
+  const charts = ganttStorage.list();
+  return {
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(
+          charts.map((c) => ({
+            id: c.id,
+            name: c.name,
+            description: c.description,
+            taskCount: c.tasks.length,
           })),
           null,
           2

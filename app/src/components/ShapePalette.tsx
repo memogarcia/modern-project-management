@@ -15,26 +15,30 @@ export default function ShapePalette() {
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: "4px",
-        padding: "8px",
-        background: "var(--panel-bg)",
-        borderRight: "1px solid var(--border)",
+        gap: "8px",
+        padding: "12px 6px",
+        background: "var(--glass-bg)",
+        backdropFilter: "blur(12px)",
+        border: "1px solid var(--glass-border)",
+        borderRadius: "12px",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.12)",
         overflowY: "auto",
-        width: "64px",
-        minWidth: "64px",
+        width: "48px",
+        maxHeight: "80vh",
+        alignItems: "center",
       }}
     >
       <div
         style={{
-          fontSize: "9px",
+          fontSize: "10px",
           color: "var(--text-muted)",
           textAlign: "center",
           marginBottom: "4px",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
+          fontWeight: 600,
+          opacity: 0.7,
         }}
       >
-        Shapes
+        ADD
       </div>
       {shapeTypes.map((type) => {
         const def = getShapeDef(type);
@@ -48,180 +52,78 @@ export default function ShapePalette() {
               flexDirection: "column",
               alignItems: "center",
               gap: "2px",
-              padding: "6px 4px",
               background: "transparent",
-              border: "1px solid transparent",
-              borderRadius: "6px",
+              border: "none",
               cursor: "pointer",
+              padding: "6px",
+              borderRadius: "8px",
+              transition: "all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+              width: "100%",
               color: "var(--foreground)",
-              transition: "all 0.15s",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = "var(--surface)";
-              e.currentTarget.style.borderColor = "var(--border)";
+              e.currentTarget.style.transform = "scale(1.1)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.borderColor = "transparent";
+              e.currentTarget.style.transform = "scale(1)";
             }}
           >
-            <ShapeIcon
-              name={def.lucideIcon}
-              fallback={def.icon}
-              size={18}
-              color={def.borderColor}
-              strokeWidth={1.5}
-            />
-            <span
+            <div
               style={{
-                fontSize: "8px",
-                color: "var(--text-muted)",
-                lineHeight: 1.1,
-                textAlign: "center",
+                color: "var(--foreground)",
+                filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))"
               }}
             >
-              {def.label}
-            </span>
+              <ShapeIcon type={type} size={24} />
+            </div>
           </button>
         );
       })}
 
-      {/* Separator */}
-      <div
-        style={{
-          height: "1px",
-          background: "var(--border)",
-          margin: "4px 0",
-        }}
-      />
-
-      <div
-        style={{
-          fontSize: "9px",
-          color: "var(--text-muted)",
-          textAlign: "center",
-          marginBottom: "4px",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-        }}
-      >
-        Schema
-      </div>
-
-      <button
-        onClick={() =>
-          addDatabaseSchemaNode("new_table", [
-            { name: "id", type: "int", constraint: "primary" },
-            { name: "created_at", type: "timestamp" },
-          ])
-        }
-        title="Database Schema: Add a table with columns"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "2px",
-          padding: "6px 4px",
-          background: "transparent",
-          border: "1px solid transparent",
-          borderRadius: "6px",
-          cursor: "pointer",
-          color: "var(--foreground)",
-          transition: "all 0.15s",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--surface)";
-          e.currentTarget.style.borderColor = "var(--border)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.borderColor = "transparent";
-        }}
-      >
-        <ShapeIcon
-          name="Table"
-          fallback="📊"
-          size={18}
-          color="#4f46e5"
-          strokeWidth={1.5}
-        />
-        <span
-          style={{
-            fontSize: "8px",
-            color: "var(--text-muted)",
-            lineHeight: 1.1,
-            textAlign: "center",
-          }}
-        >
-          DB Table
-        </span>
-      </button>
-
-      {/* Separator */}
-      <div
-        style={{
-          height: "1px",
-          background: "var(--border)",
-          margin: "4px 0",
-        }}
-      />
-
-      <div
-        style={{
-          fontSize: "9px",
-          color: "var(--text-muted)",
-          textAlign: "center",
-          marginBottom: "4px",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-        }}
-      >
-        Layout
-      </div>
+      <div style={{ width: 24, height: 1, background: "var(--border)", margin: "4px 0" }} />
 
       <button
         onClick={() => addGroupNode()}
-        title="Group: Add a group to organize nodes"
+        title="Group Container"
         style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "2px",
-          padding: "6px 4px",
           background: "transparent",
-          border: "1px solid transparent",
-          borderRadius: "6px",
+          border: "none",
           cursor: "pointer",
-          color: "var(--foreground)",
-          transition: "all 0.15s",
+          padding: "6px",
+          borderRadius: "8px",
+          width: "100%",
+          display: "flex",
+          justifyContent: "center",
+          transition: "background 0.2s",
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--surface)";
-          e.currentTarget.style.borderColor = "var(--border)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.borderColor = "transparent";
-        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface)"}
+        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
       >
-        <ShapeIcon
-          name="Group"
-          fallback="📦"
-          size={18}
-          color="#6366f1"
-          strokeWidth={1.5}
-        />
-        <span
-          style={{
-            fontSize: "8px",
-            color: "var(--text-muted)",
-            lineHeight: 1.1,
-            textAlign: "center",
-          }}
-        >
-          Group
-        </span>
+        <div style={{ width: 24, height: 24, border: "2px dashed var(--text-muted)", borderRadius: 4, opacity: 0.7 }} />
       </button>
+
+      <button
+        onClick={() => addDatabaseSchemaNode("New Table", [])}
+        title="Database Schema"
+        style={{
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          padding: "6px",
+          borderRadius: "8px",
+          width: "100%",
+          display: "flex",
+          justifyContent: "center",
+          transition: "background 0.2s",
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface)"}
+        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+      >
+        <ShapeIcon type="database" size={24} />
+      </button>
+
     </div>
   );
 }

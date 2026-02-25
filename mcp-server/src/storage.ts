@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Diagram } from "./types.js";
+import type { Diagram, GanttChart } from "./types.js";
+
+const SAFE_DIAGRAM_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+function isSafeDiagramId(id: string): boolean {
+  return SAFE_DIAGRAM_ID_RE.test(id);
+}
 
 function resolveDiagramsDir(explicitDir?: string): string {
   const fromEnv = explicitDir ?? process.env.DIAGRAMS_DIR;
@@ -51,7 +57,12 @@ export class DiagramStorage {
     }
   }
 
-  private filePath(id: string): string {
+  get baseDir(): string {
+    return this.dir;
+  }
+
+  private filePath(id: string): string | null {
+    if (!isSafeDiagramId(id)) return null;
     return path.join(this.dir, `${id}.json`);
   }
 
@@ -65,6 +76,7 @@ export class DiagramStorage {
 
   get(id: string): Diagram | null {
     const fp = this.filePath(id);
+    if (!fp) return null;
     if (!fs.existsSync(fp)) return null;
     const raw = fs.readFileSync(fp, "utf-8");
     return JSON.parse(raw) as Diagram;
@@ -72,11 +84,64 @@ export class DiagramStorage {
 
   save(diagram: Diagram): void {
     const fp = this.filePath(diagram.id);
+    if (!fp) {
+      throw new Error(`Invalid diagram id: ${diagram.id}`);
+    }
     fs.writeFileSync(fp, JSON.stringify(diagram, null, 2), "utf-8");
   }
 
   delete(id: string): boolean {
     const fp = this.filePath(id);
+    if (!fp) return false;
+    if (!fs.existsSync(fp)) return false;
+    fs.unlinkSync(fp);
+    return true;
+  }
+}
+
+export class GanttStorage {
+  private dir: string;
+
+  constructor(baseDir: string) {
+    this.dir = path.join(baseDir, "gantt");
+    if (!fs.existsSync(this.dir)) {
+      fs.mkdirSync(this.dir, { recursive: true });
+    }
+  }
+
+  private filePath(id: string): string | null {
+    if (!isSafeDiagramId(id)) return null;
+    return path.join(this.dir, `${id}.json`);
+  }
+
+  list(): GanttChart[] {
+    if (!fs.existsSync(this.dir)) return [];
+    const files = fs.readdirSync(this.dir).filter((f) => f.endsWith(".json"));
+    return files.map((f) => {
+      const raw = fs.readFileSync(path.join(this.dir, f), "utf-8");
+      return JSON.parse(raw) as GanttChart;
+    });
+  }
+
+  get(id: string): GanttChart | null {
+    const fp = this.filePath(id);
+    if (!fp) return null;
+    if (!fs.existsSync(fp)) return null;
+    const raw = fs.readFileSync(fp, "utf-8");
+    return JSON.parse(raw) as GanttChart;
+  }
+
+  save(chart: GanttChart): void {
+    const fp = this.filePath(chart.id);
+    if (!fp) {
+      throw new Error(`Invalid chart id: ${chart.id}`);
+    }
+    fs.writeFileSync(fp, JSON.stringify(chart, null, 2), "utf-8");
+  }
+
+  delete(id: string): boolean {
+    const fp = this.filePath(id);
+    if (!fp) return false;
     if (!fs.existsSync(fp)) return false;
     fs.unlinkSync(fp);
     return true;

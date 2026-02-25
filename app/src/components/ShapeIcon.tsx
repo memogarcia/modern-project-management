@@ -13,10 +13,14 @@ import {
   Container,
   Wrench,
   type LucideProps,
+  type LucideIcon,
 } from "lucide-react";
 import type { FC } from "react";
+import type { ShapeType } from "@/lib/types";
+import { getShapeDef } from "@/lib/types";
 
-const iconMap: Record<string, FC<LucideProps>> = {
+// Map of Lucide icon names to components
+const iconMap: Record<string, LucideIcon> = {
   Cog,
   Database,
   Network,
@@ -30,16 +34,30 @@ const iconMap: Record<string, FC<LucideProps>> = {
   Wrench,
 };
 
-interface ShapeIconProps extends LucideProps {
-  name: string;
-  fallback?: string;
+interface ShapeIconProps extends Omit<LucideProps, 'ref'> {
+  type: ShapeType;
 }
 
-export default function ShapeIcon({ name, fallback, ...props }: ShapeIconProps) {
-  const Icon = iconMap[name];
+export default function ShapeIcon({ type, size = 16, ...props }: ShapeIconProps) {
+  const shapeDef = getShapeDef(type);
+  const Icon = iconMap[shapeDef.lucideIcon];
+
   if (Icon) {
-    return <Icon {...props} />;
+    return <Icon size={size} {...props} />;
   }
-  // Fallback to emoji text
-  return <span style={{ fontSize: props.size ?? 16 }}>{fallback ?? "?"}</span>;
+
+  // Fallback to emoji
+  return (
+    <span
+      style={{
+        fontSize: typeof size === 'number' ? size : 16,
+        lineHeight: 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+    >
+      {shapeDef.icon}
+    </span>
+  );
 }

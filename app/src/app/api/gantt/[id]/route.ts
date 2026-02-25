@@ -1,22 +1,26 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import type { Diagram } from "@/lib/types";
+import type { GanttChart } from "@/lib/ganttTypes";
 import { ensureDiagramsDir } from "@/lib/diagramsDir.server";
 
-const SAFE_DIAGRAM_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
-function isSafeDiagramId(id: string): boolean {
-  return SAFE_DIAGRAM_ID_RE.test(id);
+function isSafeId(id: string): boolean {
+  return SAFE_ID_RE.test(id);
 }
 
-function filePath(id: string) {
-  if (!isSafeDiagramId(id)) return null;
-  const dir = ensureDiagramsDir();
+function filePath(id: string): string | null {
+  if (!isSafeId(id)) return null;
+  const base = ensureDiagramsDir();
+  const dir = path.join(base, "gantt");
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
   return path.join(dir, `${id}.json`);
 }
 
-/** GET /api/diagrams/:id — get a single diagram */
+/** GET /api/gantt/:id */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -24,16 +28,16 @@ export async function GET(
   const { id } = await params;
   const fp = filePath(id);
   if (!fp) {
-    return NextResponse.json({ error: "Invalid diagram id" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
   if (!fs.existsSync(fp)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  const diagram = JSON.parse(fs.readFileSync(fp, "utf-8")) as Diagram;
-  return NextResponse.json(diagram);
+  const chart = JSON.parse(fs.readFileSync(fp, "utf-8")) as GanttChart;
+  return NextResponse.json(chart);
 }
 
-/** DELETE /api/diagrams/:id — delete a diagram */
+/** DELETE /api/gantt/:id */
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -41,7 +45,7 @@ export async function DELETE(
   const { id } = await params;
   const fp = filePath(id);
   if (!fp) {
-    return NextResponse.json({ error: "Invalid diagram id" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
   if (fs.existsSync(fp)) {
     fs.unlinkSync(fp);

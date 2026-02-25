@@ -9,6 +9,10 @@ import { useTheme } from "@/components/ThemeProvider";
 
 type ArchNodeType = Node<ArchNodeData, "archNode">;
 
+function formatDisplayText(value: string): string {
+  return value.replace(/\\n/g, "\n");
+}
+
 function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
   const shape = getShapeDef(data.shapeType);
   const { theme } = useTheme();
@@ -24,6 +28,8 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
   const isAnimated = data.animated ?? false;
   const textColor = getContrastTextColor(nodeBg);
   const textMutedColor = textColor === "#ffffff" ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.45)";
+  const displayLabel = formatDisplayText(data.label);
+  const displayDescription = data.description ? formatDisplayText(data.description) : "";
 
   useEffect(() => {
     if (editing) {
@@ -70,8 +76,8 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
     justifyContent: "center",
     gap: "4px",
     boxShadow: selected
-      ? `0 0 0 2px var(--accent, #3b82f6), 0 4px 20px rgba(0,0,0,0.25)`
-      : `0 2px 8px rgba(0,0,0,0.15)`,
+      ? `var(--node-shadow-selected)`
+      : `var(--node-shadow)`,
     transition: "box-shadow 0.15s, border-color 0.15s",
     cursor: editing ? "text" : "grab",
     transform: shape.mermaidShape === "diamond" ? "rotate(0deg)" : undefined,
@@ -93,8 +99,7 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
         }}
       >
         <ShapeIcon
-          name={shape.lucideIcon}
-          fallback={data.icon ?? shape.icon}
+          type={data.shapeType}
           size={20}
           color={textColor}
           strokeWidth={1.5}
@@ -129,12 +134,12 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
             textAlign: "center",
             lineHeight: 1.2,
             maxWidth: shape.defaultWidth - 32,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            whiteSpace: "pre-line",
+            overflowWrap: "anywhere",
+            wordBreak: "break-word",
           }}
         >
-          {data.label}
+          {displayLabel}
         </div>
       )}
       {data.description && (
@@ -144,12 +149,13 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
             color: textMutedColor,
             textAlign: "center",
             maxWidth: shape.defaultWidth - 32,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            whiteSpace: "pre-line",
+            overflowWrap: "anywhere",
+            wordBreak: "break-word",
+            lineHeight: 1.25,
           }}
         >
-          {data.description}
+          {displayDescription}
         </div>
       )}
       <Handle type="source" id="bottom" position={Position.Bottom} style={handleStyle} />

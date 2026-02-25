@@ -52,7 +52,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const sendToBack = useDiagramStore((s) => s.sendToBack);
   const sendForward = useDiagramStore((s) => s.sendForward);
   const sendBackward = useDiagramStore((s) => s.sendBackward);
-  const { getInternalNode, getNodes } = useReactFlow();
+  const { getInternalNode, getNodes, screenToFlowPosition, fitView } = useReactFlow();
 
   // Modal state for editing nodes and edges
   const [editingNode, setEditingNode] = useState<ArchNode | null>(null);
@@ -98,15 +98,19 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   // (e.g. diagrams created by the MCP server that only have mermaid code)
   useEffect(() => {
     if (nodes.length === 0 && mermaidCode && mermaidCode.trim() !== "graph TD\n" && mermaidCode.trim() !== "graph TD") {
-      syncMermaidToFlow();
+      void syncMermaidToFlow().then(() => {
+        requestAnimationFrame(() => {
+          void fitView({ padding: 0.18, duration: 250 });
+        });
+      });
     }
-  }, [nodes.length, mermaidCode, syncMermaidToFlow]);
+  }, [nodes.length, mermaidCode, syncMermaidToFlow, fitView]);
 
   // Auto-save on changes (debounced)
   useEffect(() => {
     const timer = setTimeout(() => persist(), 1000);
     return () => clearTimeout(timer);
-  }, [nodes, edges, persist]);
+  }, [nodes, edges, mermaidCode, persist]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -163,14 +167,13 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
       e.preventDefault();
       const type = e.dataTransfer.getData("application/archdiagram-shape") as ShapeType;
       if (!type) return;
-      const bounds = (e.target as HTMLElement)?.closest(".react-flow")?.getBoundingClientRect();
-      if (!bounds) return;
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       addNode(type, {
-        x: e.clientX - bounds.left,
-        y: e.clientY - bounds.top,
+        x: position.x,
+        y: position.y,
       });
     },
-    [addNode]
+    [addNode, screenToFlowPosition]
   );
 
   // Double-click on a node → open edit modal
@@ -253,52 +256,50 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--background)" }}>
       {/* Header */}
       <div
         style={{
-          padding: "8px 16px",
+          height: 48,
+          padding: "0 20px",
           background: "var(--panel-bg)",
           borderBottom: "1px solid var(--border)",
           display: "flex",
           alignItems: "center",
-          gap: "12px",
+          justifyContent: "space-between",
+          flexShrink: 0,
+          zIndex: 10,
         }}
       >
-        <a
-          href="/diagrams"
-          style={{
-            color: "var(--text-muted)",
-            textDecoration: "none",
-            fontSize: "13px",
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-          }}
-        >
-          <ArrowLeft size={14} /> Diagrams
-        </a>
-        <span
-          style={{
-            color: "var(--border)",
-            fontSize: "13px",
-          }}
-        >
-          /
-        </span>
-        <span style={{ fontWeight: 600, fontSize: "14px" }}>{diagramName}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <a
+            href="/diagrams"
+            style={{
+              color: "var(--text-muted)",
+              textDecoration: "none",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontWeight: 500,
+            }}
+          >
+            <ArrowLeft size={16} /> Diagrams
+          </a>
+          <span style={{ color: "var(--border)", fontSize: "16px", fontWeight: 300 }}>/</span>
+          <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--foreground)" }}>{diagramName}</span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Additional header actions could go here */}
+        </div>
       </div>
 
-      {/* Toolbar */}
-      <Toolbar />
-
       {/* Main content */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* Shape palette */}
-        <ShapePalette />
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
 
-        {/* Diagram canvas */}
-        <div style={{ flex: 1, position: "relative" }}>
+        {/* Diagram canvas area */}
+        <div style={{ flex: 1, position: "relative", background: "var(--background)" }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -315,22 +316,31 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             defaultEdgeOptions={{
               type: "smoothstep",
               animated: false,
+              style: { stroke: "var(--edge-color)", strokeWidth: 1.5 },
             }}
             fitView
             snapToGrid
             snapGrid={[20, 20]}
             deleteKeyCode="Delete"
             multiSelectionKeyCode="Shift"
-            style={{ background: "var(--background)" }}
+            style={{ background: "transparent" }}
+            proOptions={{ hideAttribution: true }}
           >
             <Background
               variant={BackgroundVariant.Dots}
-              gap={20}
-              size={1}
-              color={theme === "dark" ? "#222" : "#ccc"}
+              gap={24}
+              size={1.5}
+              color="var(--dot-color)"
             />
-            <Controls />
+            <Controls position="bottom-right" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 4, background: 'var(--panel-bg)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--node-shadow)' }} />
           </ReactFlow>
+
+          {/* Floating Toolbar (Left) */}
+          <div style={{ position: "absolute", top: 20, left: 20, zIndex: 100, display: "flex", flexDirection: "column", gap: 12 }}>
+            <ShapePalette />
+            <Toolbar />
+          </div>
+
         </div>
 
         {/* Resizable Mermaid editor panel */}
@@ -339,15 +349,18 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
           onMouseDown={onResizeStart}
           style={{
             width: "5px",
+            height: "100%",
             cursor: "col-resize",
             background: isDragging ? "var(--accent)" : "var(--border)",
             transition: isDragging ? "none" : "background 0.15s",
             flexShrink: 0,
+            zIndex: 50,
+            opacity: isDragging ? 1 : 0.5,
           }}
-          onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.background = "var(--accent)"; }}
-          onMouseLeave={(e) => { if (!isDragging) e.currentTarget.style.background = "var(--border)"; }}
+          onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.opacity = "1"; }}
+          onMouseLeave={(e) => { if (!isDragging) e.currentTarget.style.opacity = "0.5"; }}
         />
-        <div style={{ width: panelWidth, minWidth: 200, maxWidth: "60vw", flexShrink: 0 }}>
+        <div style={{ width: panelWidth, minWidth: 200, maxWidth: "60vw", flexShrink: 0, background: "var(--panel-bg)", borderLeft: "1px solid var(--border)" }}>
           <MermaidPanel />
         </div>
       </div>

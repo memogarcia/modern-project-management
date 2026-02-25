@@ -2,44 +2,38 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DiagramMeta } from "@/lib/types";
-import { loadDiagrams, deleteDiagram } from "@/lib/storage";
-import { useDiagramStore } from "@/store/diagramStore";
-import { Plus, Trash2, ArrowLeft, FileText } from "lucide-react";
+import type { GanttChartMeta } from "@/lib/ganttTypes";
+import { loadGanttCharts, deleteGanttChart } from "@/lib/ganttStorage";
+import { useGanttStore } from "@/store/ganttStore";
+import { Plus, Trash2, ArrowLeft, Calendar } from "lucide-react";
 
-export default function DiagramsListPage() {
+export default function GanttListPage() {
   const router = useRouter();
-  const [diagrams, setDiagrams] = useState<DiagramMeta[]>([]);
+  const [charts, setCharts] = useState<GanttChartMeta[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
-  const initNewDiagram = useDiagramStore((s) => s.initNewDiagram);
+  const initNewChart = useGanttStore((s) => s.initNewChart);
 
   useEffect(() => {
-    loadDiagrams().then(setDiagrams);
+    loadGanttCharts().then(setCharts);
   }, []);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    const id = await initNewDiagram(newName.trim(), newDesc.trim());
-    router.push(`/diagrams/${id}`);
+    const id = await initNewChart(newName.trim(), newDesc.trim());
+    router.push(`/gantt/${id}`);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this diagram?")) return;
-    await deleteDiagram(id);
-    const updated = await loadDiagrams();
-    setDiagrams(updated);
+    if (!confirm("Delete this Gantt chart?")) return;
+    await deleteGanttChart(id);
+    const updated = await loadGanttCharts();
+    setCharts(updated);
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--background)",
-        color: "var(--foreground)",
-      }}
-    >
+    <div style={{ minHeight: "100vh", background: "var(--background)", color: "var(--foreground)" }}>
       {/* Modern Header */}
       <header
         style={{
@@ -84,19 +78,12 @@ export default function DiagramsListPage() {
               <ArrowLeft size={14} /> Home
             </button>
             <div>
-              <h1 style={{ margin: 0, fontSize: "20px", fontWeight: 700, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
-                <FileText size={24} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
-                Diagrams
+              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", gap: 10, letterSpacing: "-0.02em" }}>
+                <Calendar size={24} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
+                Gantt Charts
               </h1>
-              <p
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "14px",
-                  color: "var(--text-muted)",
-                  fontWeight: 400,
-                }}
-              >
-                Architecture diagrams with React Flow & Mermaid
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: "var(--text-muted)", fontWeight: 400 }}>
+                Project planning with tasks, timelines & integrations
               </p>
             </div>
           </div>
@@ -107,8 +94,8 @@ export default function DiagramsListPage() {
               background: "var(--accent)",
               color: "#fff",
               border: "none",
-              borderRadius: "8px",
-              fontSize: "14px",
+              borderRadius: 8,
+              fontSize: 14,
               fontWeight: 600,
               cursor: "pointer",
               display: "flex",
@@ -130,7 +117,7 @@ export default function DiagramsListPage() {
             }}
           >
             <Plus size={18} strokeWidth={2.5} />
-            New Diagram
+            New Gantt Chart
           </button>
         </div>
       </header>
@@ -147,9 +134,7 @@ export default function DiagramsListPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="edit-modal-header">
-              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600, letterSpacing: "-0.01em" }}>
-                Create New Diagram
-              </h2>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em" }}>Create New Gantt Chart</h2>
               <button
                 className="edit-modal-close"
                 onClick={() => setShowCreate(false)}
@@ -165,7 +150,7 @@ export default function DiagramsListPage() {
                   className="edit-modal-input"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Microservices Architecture"
+                  placeholder="e.g. Q1 Sprint Plan"
                   autoFocus
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 />
@@ -176,7 +161,7 @@ export default function DiagramsListPage() {
                   className="edit-modal-input"
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="Brief description of your diagram..."
+                  placeholder="Brief description of your project..."
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 />
               </div>
@@ -193,23 +178,17 @@ export default function DiagramsListPage() {
                 onClick={handleCreate}
                 disabled={!newName.trim()}
               >
-                Create Diagram
+                Create Chart
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modern Diagram Grid */}
+      {/* Modern Chart Grid */}
       <main style={{ padding: "32px 40px", maxWidth: 1400, margin: "0 auto" }}>
-        {diagrams.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "120px 20px",
-              color: "var(--text-muted)",
-            }}
-          >
+        {charts.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "120px 20px", color: "var(--text-muted)" }}>
             <div
               style={{
                 width: 64,
@@ -223,13 +202,11 @@ export default function DiagramsListPage() {
                 fontSize: 32,
               }}
             >
-              <FileText size={32} strokeWidth={1.5} style={{ color: "var(--text-subtle)" }} />
+              <Calendar size={32} strokeWidth={1.5} style={{ color: "var(--text-subtle)" }} />
             </div>
-            <h3 style={{ fontSize: "18px", marginBottom: "8px", fontWeight: 600, color: "var(--foreground)" }}>
-              No diagrams yet
-            </h3>
-            <p style={{ fontSize: "14px", color: "var(--text-muted)", marginBottom: 24 }}>
-              Create your first architecture diagram to get started
+            <h3 style={{ fontSize: 18, marginBottom: 8, fontWeight: 600, color: "var(--foreground)" }}>No Gantt charts yet</h3>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 24 }}>
+              Create your first project timeline to get started
             </p>
             <button
               onClick={() => setShowCreate(true)}
@@ -238,8 +215,8 @@ export default function DiagramsListPage() {
                 background: "var(--accent)",
                 color: "#fff",
                 border: "none",
-                borderRadius: "8px",
-                fontSize: "14px",
+                borderRadius: 8,
+                fontSize: 14,
                 fontWeight: 600,
                 cursor: "pointer",
                 display: "inline-flex",
@@ -248,7 +225,7 @@ export default function DiagramsListPage() {
               }}
             >
               <Plus size={18} strokeWidth={2.5} />
-              Create Diagram
+              Create Gantt Chart
             </button>
           </div>
         ) : (
@@ -256,23 +233,23 @@ export default function DiagramsListPage() {
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-              gap: "20px",
+              gap: 20,
             }}
           >
-            {diagrams.map((d) => (
+            {charts.map((c) => (
               <div
-                key={d.id}
+                key={c.id}
                 style={{
                   background: "var(--panel-bg)",
                   border: "1px solid var(--border)",
-                  borderRadius: "12px",
-                  padding: "24px",
+                  borderRadius: 12,
+                  padding: 24,
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                   boxShadow: "var(--card-shadow)",
                   position: "relative",
                 }}
-                onClick={() => router.push(`/diagrams/${d.id}`)}
+                onClick={() => router.push(`/gantt/${c.id}`)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = "var(--accent)";
                   e.currentTarget.style.boxShadow = "var(--card-shadow-hover)";
@@ -284,38 +261,23 @@ export default function DiagramsListPage() {
                   e.currentTarget.style.transform = "translateY(0)";
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    marginBottom: "12px",
-                  }}
-                >
-                  <h3
-                    style={{
-                      margin: 0,
-                      fontSize: "16px",
-                      fontWeight: 600,
-                      letterSpacing: "-0.01em",
-                      color: "var(--foreground)",
-                      flex: 1,
-                    }}
-                  >
-                    {d.name}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, letterSpacing: "-0.01em", flex: 1 }}>
+                    <Calendar size={18} style={{ color: "var(--accent)" }} />
+                    {c.name}
                   </h3>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete(d.id);
+                      handleDelete(c.id);
                     }}
                     style={{
                       background: "transparent",
                       border: "none",
                       color: "var(--text-subtle)",
                       cursor: "pointer",
-                      padding: "6px",
-                      borderRadius: "6px",
+                      padding: 6,
+                      borderRadius: 6,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -330,38 +292,19 @@ export default function DiagramsListPage() {
                       e.currentTarget.style.background = "transparent";
                       e.currentTarget.style.color = "var(--text-subtle)";
                     }}
-                    title="Delete diagram"
+                    title="Delete chart"
                   >
                     <Trash2 size={16} />
                   </button>
                 </div>
-                {d.description && (
-                  <p
-                    style={{
-                      margin: "0 0 16px",
-                      fontSize: "13px",
-                      color: "var(--text-muted)",
-                      lineHeight: 1.5,
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {d.description}
+                {c.description && (
+                  <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {c.description}
                   </p>
                 )}
-                <div
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--text-subtle)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
+                <div style={{ fontSize: 12, color: "var(--text-subtle)", display: "flex", alignItems: "center", gap: 4 }}>
                   Updated{" "}
-                  {new Date(d.updatedAt).toLocaleDateString("en-US", {
+                  {new Date(c.updatedAt).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                     year: "numeric",

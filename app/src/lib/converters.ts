@@ -1,5 +1,63 @@
 import type { ArchNode, ArchEdge, ShapeType, DiagramNode, DatabaseSchemaNodeData, SchemaColumn } from "@/lib/types";
 
+type MermaidArchGroup = "clients" | "edge" | "app" | "async" | "data" | "other";
+
+const ARCH_GROUP_LABELS: Record<MermaidArchGroup, string> = {
+  clients: "Clients",
+  edge: "Edge & Entry",
+  app: "Application",
+  async: "Messaging & Async",
+  data: "Data Stores",
+  other: "Components",
+};
+
+const SHAPE_TO_ARCH_GROUP: Record<ShapeType, MermaidArchGroup> = {
+  client: "clients",
+  gateway: "edge",
+  cloud: "edge",
+  service: "app",
+  container: "app",
+  function: "app",
+  queue: "async",
+  cache: "async",
+  database: "data",
+  storage: "data",
+  custom: "other",
+};
+
+const SHAPE_TO_MERMAID_CLASS: Record<ShapeType, string> = {
+  client: "clientNode",
+  gateway: "edgeNode",
+  cloud: "edgeNode",
+  service: "serviceNode",
+  container: "serviceNode",
+  function: "serviceNode",
+  queue: "asyncNode",
+  cache: "asyncNode",
+  database: "dataNode",
+  storage: "dataNode",
+  custom: "otherNode",
+};
+
+const MERMAID_CLASS_DEFS: Array<[string, string]> = [
+  ["clientNode", "fill:#e0f7fa,stroke:#0891b2,stroke-width:2px,color:#0f172a"],
+  ["edgeNode", "fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a"],
+  ["serviceNode", "fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#0f172a"],
+  ["asyncNode", "fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#0f172a"],
+  ["dataNode", "fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a"],
+  ["otherNode", "fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#111827"],
+];
+
+export interface MermaidSubgraph {
+  key: string;
+  id: string;
+  label: string;
+  parentKey: string | null;
+  depth: number;
+  order: number;
+  nodeIds: string[];
+}
+
 // ─── Flow → Mermaid ─────────────────────────────────────────────────
 // Mermaid is kept simple: just structure (nodes + edges).
 // Visual metadata (colors, shapes, icons) lives on the diagram side only.
@@ -14,26 +72,56 @@ export function flowToMermaid(nodes: DiagramNode[], edges: ArchEdge[]): string {
   const lines: string[] = [];
 
   // ─── Architecture graph section ──────────────────────────────────
-  if (archNodes.length > 0 || (schemaNodes.length === 0 && edges.length === 0)) {
-    lines.push("graph TD");
-    for (const node of archNodes) {
-      const label = node.data.label ?? node.id;
-      lines.push(`    ${node.id}["${label}"]`);
+  if (archNodes.length > 0) {
+    lines.push(
+      "%%{init: {\"theme\":\"base\", \"flowchart\": {\"curve\":\"stepBefore\", \"nodeSpacing\": 42, \"rankSpacing\": 70, \"useMaxWidth\": false}}}%%"
+    );
+    lines.push("flowchart LR");
+
+    const groupedNodes = groupArchNodes(archNodes);
+    for (const [group, nodesInGroup] of groupedNodes) {
+      if (nodesInGroup.length === 0) continue;
+      lines.push(`    subgraph ${group}["${ARCH_GROUP_LABELS[group]}"]`);
+      for (const node of nodesInGroup) {
+        lines.push(`        ${formatArchNodeForMermaid(node)}`);
+      }
+      lines.push("    end");
     }
 
-    if (edges.length > 0 && archNodes.length > 0) {
-      lines.push("");
-      const archIds = new Set(archNodes.map((n) => n.id));
-      for (const edge of edges) {
-        if (!archIds.has(edge.source) && !archIds.has(edge.target)) continue;
-        const label = edge.data?.label ?? edge.label;
-        if (label) {
-          lines.push(`    ${edge.source} -->|${label}| ${edge.target}`);
-        } else {
-          lines.push(`    ${edge.source} --> ${edge.target}`);
-        }
+    lines.push("");
+    const archIds = new Set(archNodes.map((n) => n.id));
+    for (const edge of edges) {
+      if (!archIds.has(edge.source) && !archIds.has(edge.target)) continue;
+      const rawLabel = edge.data?.label ?? edge.label;
+      if (rawLabel) {
+        const label = typeof rawLabel === "string" ? rawLabel : String(rawLabel);
+        lines.push(`    ${edge.source} -->|${escapeMermaidText(label)}| ${edge.target}`);
+      } else {
+        lines.push(`    ${edge.source} --> ${edge.target}`);
       }
     }
+
+    lines.push("");
+    for (const [className, style] of MERMAID_CLASS_DEFS) {
+      lines.push(`    classDef ${className} ${style};`);
+    }
+
+    const classAssignments = new Map<string, string[]>();
+    for (const node of archNodes) {
+      const className = SHAPE_TO_MERMAID_CLASS[node.data.shapeType ?? "service"];
+      if (!classAssignments.has(className)) classAssignments.set(className, []);
+      classAssignments.get(className)!.push(node.id);
+    }
+    for (const [className, nodeIds] of classAssignments) {
+      if (nodeIds.length > 0) {
+        lines.push(`    class ${nodeIds.join(",")} ${className};`);
+      }
+    }
+    lines.push("    linkStyle default stroke:#64748b,stroke-width:1.8px;");
+  } else if (schemaNodes.length === 0 && edges.length === 0) {
+    // Preserve the existing empty-diagram default to avoid sync loops and
+    // keep the new diagram experience unchanged.
+    lines.push("graph TD");
   }
 
   // ─── ER Diagram section ──────────────────────────────────────────
@@ -68,8 +156,9 @@ export function flowToMermaid(nodes: DiagramNode[], edges: ArchEdge[]): string {
           (schemaNodes.find((n) => n.id === edge.target) as { data: DatabaseSchemaNodeData })
             ?.data.label ?? edge.target
         );
-        const label = edge.data?.label ?? edge.label ?? "relates";
-        lines.push(`    ${src} ||--o{ ${tgt} : "${label}"`);
+        const rawLabel = edge.data?.label ?? edge.label ?? "relates";
+        const label = typeof rawLabel === "string" ? rawLabel : String(rawLabel);
+        lines.push(`    ${src} ||--o{ ${tgt} : "${escapeMermaidText(label)}"`);
       }
     }
   }
@@ -79,6 +168,74 @@ export function flowToMermaid(nodes: DiagramNode[], edges: ArchEdge[]): string {
 
 function sanitizeErName(name: string): string {
   return name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+}
+
+function escapeMermaidText(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\r?\n/g, "\\n")
+    .replace(/"/g, '\\"');
+}
+
+function makeMermaidEdgeId(
+  source: string,
+  target: string,
+  label: string | undefined,
+  counts: Map<string, number>
+): string {
+  const normalizedLabel = (label ?? "").trim();
+  const key = `${source}|${target}|${normalizedLabel}`;
+  const occurrence = (counts.get(key) ?? 0) + 1;
+  counts.set(key, occurrence);
+
+  const labelToken = normalizedLabel ? hashLabelToken(normalizedLabel) : "nolabel";
+  return `e-${source}-${target}-${labelToken}-${occurrence}`;
+}
+
+function hashLabelToken(value: string): string {
+  // Compact stable token so edge ids don't collide when parallel edges share endpoints.
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function groupArchNodes(nodes: ArchNode[]): Array<[MermaidArchGroup, ArchNode[]]> {
+  const order: MermaidArchGroup[] = ["clients", "edge", "app", "async", "data", "other"];
+  const buckets = new Map<MermaidArchGroup, ArchNode[]>(
+    order.map((group) => [group, []])
+  );
+
+  for (const node of nodes) {
+    const group = SHAPE_TO_ARCH_GROUP[node.data.shapeType ?? "service"] ?? "other";
+    buckets.get(group)!.push(node);
+  }
+
+  return order.map((group) => [group, buckets.get(group)!]);
+}
+
+function formatArchNodeForMermaid(node: ArchNode): string {
+  const label = escapeMermaidText(node.data.label ?? node.id);
+  const shapeType = node.data.shapeType ?? "service";
+
+  switch (shapeType) {
+    case "database":
+    case "storage":
+      return `${node.id}[("${label}")]`;
+    case "gateway":
+    case "client":
+      return `${node.id}(["${label}"])`;
+    case "queue":
+      return `${node.id}{{"${label}"}}`;
+    case "cache":
+      return `${node.id}{"${label}"}`;
+    case "function":
+      return `${node.id}[/"${label}"\\]`;
+    default:
+      return `${node.id}["${label}"]`;
+  }
 }
 
 // ─── Mermaid → Flow ─────────────────────────────────────────────────
@@ -91,10 +248,16 @@ export function mermaidToFlow(
 ): {
   nodes: DiagramNode[];
   edges: ArchEdge[];
+  subgraphs: MermaidSubgraph[];
 } {
   const nodes: DiagramNode[] = [];
   const edges: ArchEdge[] = [];
   const nodeSet = new Set<string>();
+  const edgeIdCounts = new Map<string, number>();
+  const subgraphs: Array<Omit<MermaidSubgraph, "nodeIds"> & { nodeIds: Set<string> }> = [];
+  const subgraphStack: string[] = [];
+  let subgraphOrder = 0;
+  const nodeSubgraphKeyByNodeId = new Map<string, string>();
 
   // Build a lookup of existing node data by id
   const existingMap = new Map<string, DiagramNode>();
@@ -143,6 +306,19 @@ export function mermaidToFlow(
     }
   }
 
+  function currentSubgraphKey(): string | null {
+    return subgraphStack.length > 0 ? subgraphStack[subgraphStack.length - 1] : null;
+  }
+
+  function trackNodeInCurrentSubgraph(nodeId: string) {
+    const currentKey = currentSubgraphKey();
+    if (!currentKey) return;
+    if (nodeSubgraphKeyByNodeId.has(nodeId)) return;
+    nodeSubgraphKeyByNodeId.set(nodeId, currentKey);
+    const sg = subgraphs.find((s) => s.key === currentKey);
+    if (sg) sg.nodeIds.add(nodeId);
+  }
+
   for (const line of lines) {
     // Section headers
     if (line.startsWith("graph") || line.startsWith("flowchart")) {
@@ -154,7 +330,30 @@ export function mermaidToFlow(
       mode = "erDiagram";
       continue;
     }
-    if (line.startsWith("%%") || line.startsWith("style")) continue;
+    if (mode === "graph" && line.startsWith("subgraph")) {
+      const parsedSubgraph = parseSubgraphDefinition(line, subgraphOrder++);
+      if (parsedSubgraph) {
+        subgraphs.push({
+          ...parsedSubgraph,
+          parentKey: currentSubgraphKey(),
+          depth: subgraphStack.length,
+          nodeIds: new Set<string>(),
+        });
+        subgraphStack.push(parsedSubgraph.key);
+      }
+      continue;
+    }
+    if (mode === "graph" && line === "end") {
+      if (subgraphStack.length > 0) subgraphStack.pop();
+      continue;
+    }
+    if (
+      line.startsWith("%%") ||
+      line.startsWith("style") ||
+      line.startsWith("classDef") ||
+      line.startsWith("class ") ||
+      line.startsWith("linkStyle")
+    ) continue;
 
     if (mode === "graph") {
       // Edges: A -->|label| B  or  A --> B
@@ -174,7 +373,7 @@ export function mermaidToFlow(
         }
 
         edges.push({
-          id: `e-${source}-${target}`,
+          id: makeMermaidEdgeId(source, target, label, edgeIdCounts),
           source,
           target,
           label: label || undefined,
@@ -188,6 +387,9 @@ export function mermaidToFlow(
           if (!nodeSet.has(nid)) {
             nodeSet.add(nid);
             nodes.push(makeNode(nid, nid, existingMap.get(nid) as ArchNode | undefined));
+            trackNodeInCurrentSubgraph(nid);
+          } else {
+            trackNodeInCurrentSubgraph(nid);
           }
         }
         continue;
@@ -197,7 +399,15 @@ export function mermaidToFlow(
       const nodeParsed = parseNodeDefinition(line);
       if (nodeParsed && !nodeSet.has(nodeParsed.id)) {
         nodeSet.add(nodeParsed.id);
-        nodes.push(makeNode(nodeParsed.id, nodeParsed.label, existingMap.get(nodeParsed.id) as ArchNode | undefined));
+        nodes.push(
+          makeNode(
+            nodeParsed.id,
+            nodeParsed.label,
+            existingMap.get(nodeParsed.id) as ArchNode | undefined,
+            nodeParsed.inferredShapeType
+          )
+        );
+        trackNodeInCurrentSubgraph(nodeParsed.id);
       }
     } else if (mode === "erDiagram") {
       // ER table open: TABLE_NAME {
@@ -270,7 +480,7 @@ export function mermaidToFlow(
         const tgtId = findTableNodeIdFromNodes(tgtName, nodes) ?? tgtName;
 
         edges.push({
-          id: `e-${srcId}-${tgtId}`,
+          id: makeMermaidEdgeId(srcId, tgtId, label, edgeIdCounts),
           source: srcId,
           target: tgtId,
           label: label || undefined,
@@ -286,7 +496,14 @@ export function mermaidToFlow(
   // Flush any remaining open table
   flushErTable();
 
-  return { nodes, edges };
+  return {
+    nodes,
+    edges,
+    subgraphs: subgraphs.map((sg) => ({
+      ...sg,
+      nodeIds: [...sg.nodeIds],
+    })),
+  };
 }
 
 /**
@@ -316,49 +533,189 @@ function findTableNodeIdFromNodes(tableName: string, nodes: DiagramNode[]): stri
   return null;
 }
 
+type ParsedNodeDefinition = {
+  id: string;
+  label: string;
+  inferredShapeType: ShapeType;
+};
+
+type ParsedSubgraphDefinition = {
+  key: string;
+  id: string;
+  label: string;
+  order: number;
+};
+
 function parseNodeDefinition(
   line: string
-): { id: string; label: string } | null {
+): ParsedNodeDefinition | null {
   // cylinder: id[("label")]
   let m = line.match(/^(\w+)\[\("([^"]+)"\)\]/);
-  if (m) return { id: m[1], label: m[2] };
+  if (m) return buildParsedNode(m[1], m[2], "cylinder");
 
   // stadium: id(["label"])
   m = line.match(/^(\w+)\(\["([^"]+)"\]\)/);
-  if (m) return { id: m[1], label: m[2] };
+  if (m) return buildParsedNode(m[1], m[2], "stadium");
 
   // hexagon: id{{"label"}}
   m = line.match(/^(\w+)\{\{"([^"]+)"\}\}/);
-  if (m) return { id: m[1], label: m[2] };
+  if (m) return buildParsedNode(m[1], m[2], "hexagon");
 
   // circle: id(("label"))
   m = line.match(/^(\w+)\(\("([^"]+)"\)\)/);
-  if (m) return { id: m[1], label: m[2] };
+  if (m) return buildParsedNode(m[1], m[2], "circle");
 
   // diamond: id{"label"}
   m = line.match(/^(\w+)\{"([^"]+)"\}/);
-  if (m) return { id: m[1], label: m[2] };
+  if (m) return buildParsedNode(m[1], m[2], "diamond");
 
   // trapezoid: id[/"label"\]
   m = line.match(/^(\w+)\[\/"([^"]+)"\\]/);
-  if (m) return { id: m[1], label: m[2] };
+  if (m) return buildParsedNode(m[1], m[2], "trapezoid");
 
   // rect: id["label"]
   m = line.match(/^(\w+)\["([^"]+)"\]/);
-  if (m) return { id: m[1], label: m[2] };
+  if (m) return buildParsedNode(m[1], m[2], "rect");
 
   // simple: id(label)
   m = line.match(/^(\w+)\(([^)]+)\)/);
-  if (m) return { id: m[1], label: m[2] };
+  if (m) return buildParsedNode(m[1], m[2], "simple");
 
   return null;
+}
+
+function parseSubgraphDefinition(
+  line: string,
+  order: number
+): ParsedSubgraphDefinition | null {
+  // Common forms:
+  // subgraph id["Label"]
+  // subgraph id[Label]
+  // subgraph id Label
+  // subgraph "Label"
+  // subgraph Label
+  let m = line.match(/^subgraph\s+([A-Za-z0-9_]+)\s*\["([^"]+)"\]\s*$/);
+  if (m) {
+    return buildParsedSubgraph(m[1], m[1], decodeMermaidText(m[2]), order);
+  }
+
+  m = line.match(/^subgraph\s+([A-Za-z0-9_]+)\s*\[([^\]]+)\]\s*$/);
+  if (m) {
+    return buildParsedSubgraph(m[1], m[1], decodeMermaidText(m[2]), order);
+  }
+
+  m = line.match(/^subgraph\s+([A-Za-z0-9_]+)\s+(.+)\s*$/);
+  if (m) {
+    return buildParsedSubgraph(m[1], m[1], decodeMermaidText(stripWrappingQuotes(m[2])), order);
+  }
+
+  m = line.match(/^subgraph\s+"([^"]+)"\s*$/);
+  if (m) {
+    const label = decodeMermaidText(m[1]);
+    const id = sanitizeSubgraphId(label) || `subgraph_${order + 1}`;
+    return buildParsedSubgraph(id, id, label, order);
+  }
+
+  m = line.match(/^subgraph\s+(.+)\s*$/);
+  if (m) {
+    const label = decodeMermaidText(stripWrappingQuotes(m[1]));
+    const id = sanitizeSubgraphId(label) || `subgraph_${order + 1}`;
+    return buildParsedSubgraph(id, id, label, order);
+  }
+
+  return null;
+}
+
+function buildParsedSubgraph(id: string, keySeed: string, label: string, order: number): ParsedSubgraphDefinition {
+  return {
+    id,
+    key: `${sanitizeSubgraphId(keySeed) || "subgraph"}_${order + 1}`,
+    label,
+    order,
+  };
+}
+
+function sanitizeSubgraphId(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function stripWrappingQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+type MermaidNodeSyntax =
+  | "cylinder"
+  | "stadium"
+  | "hexagon"
+  | "circle"
+  | "diamond"
+  | "trapezoid"
+  | "rect"
+  | "simple";
+
+function buildParsedNode(id: string, rawLabel: string, syntax: MermaidNodeSyntax): ParsedNodeDefinition {
+  const label = decodeMermaidText(rawLabel);
+  return {
+    id,
+    label,
+    inferredShapeType: inferShapeTypeFromMermaidSyntax(syntax, label),
+  };
+}
+
+function decodeMermaidText(value: string): string {
+  return value
+    .replace(/\\n/g, "\n")
+    .replace(/\\"/g, "\"")
+    .replace(/\\\\/g, "\\");
+}
+
+function inferShapeTypeFromMermaidSyntax(syntax: MermaidNodeSyntax, label: string): ShapeType {
+  const normalized = label.toLowerCase().replace(/\s+/g, " ").trim();
+
+  switch (syntax) {
+    case "cylinder":
+      return /(s3|blob|bucket|object storage|filestore|storage)/.test(normalized)
+        ? "storage"
+        : "database";
+    case "stadium":
+      if (/(client|browser|mobile|ios|android|spa|frontend)/.test(normalized)) return "client";
+      return "gateway";
+    case "hexagon":
+      return "queue";
+    case "diamond":
+      return "cache";
+    case "trapezoid":
+      return "function";
+    case "circle":
+      return "custom";
+    case "rect":
+    case "simple":
+      if (/(cdn|waf|cloud|region|vpc|edge)/.test(normalized)) return "cloud";
+      if (/(container|pod)/.test(normalized)) return "container";
+      if (/(client|browser|mobile)/.test(normalized)) return "client";
+      return "service";
+    default:
+      return "service";
+  }
 }
 
 /**
  * Create a node, preserving visual metadata from an existing node if available.
  * New nodes default to shapeType "service".
  */
-function makeNode(id: string, label: string, existing?: ArchNode): ArchNode {
+function makeNode(
+  id: string,
+  label: string,
+  existing?: ArchNode,
+  inferredShapeType: ShapeType = "service"
+): ArchNode {
   if (existing) {
     return {
       ...existing,
@@ -374,7 +731,7 @@ function makeNode(id: string, label: string, existing?: ArchNode): ArchNode {
     position: { x: 0, y: 0 },
     data: {
       label,
-      shapeType: "service",
+      shapeType: inferredShapeType,
     },
   };
 }

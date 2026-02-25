@@ -4,6 +4,12 @@ import path from "node:path";
 import type { Diagram } from "@/lib/types";
 import { ensureDiagramsDir } from "@/lib/diagramsDir.server";
 
+const SAFE_DIAGRAM_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+function isSafeDiagramId(id: unknown): id is string {
+  return typeof id === "string" && SAFE_DIAGRAM_ID_RE.test(id);
+}
+
 /**
  * Shared diagrams-data directory — same location the MCP server uses.
  * Both the Next.js app and the MCP server read/write JSON files here,
@@ -41,6 +47,9 @@ export async function POST(req: Request) {
 
   if (!diagram.id) {
     return NextResponse.json({ error: "Missing diagram id" }, { status: 400 });
+  }
+  if (!isSafeDiagramId(diagram.id)) {
+    return NextResponse.json({ error: "Invalid diagram id" }, { status: 400 });
   }
 
   const filePath = path.join(DIAGRAMS_DIR, `${diagram.id}.json`);

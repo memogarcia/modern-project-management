@@ -1,44 +1,74 @@
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
-/* ─── Dark theme (default) ──────────────────────────────────────── */
+/* ─── Dark theme (default) — Inspired by shadcn/ui ──────────── */
 :root,
 [data-theme="dark"] {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --panel-bg: #141414;
-  --border: #2a2a2a;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --surface: #1e1e1e;
-  --text-muted: #888;
-  --dot-color: #222;
-  --edge-color: #555;
-  --scrollbar-thumb: #333;
-  --scrollbar-thumb-hover: #555;
-  --modal-overlay: rgba(0, 0, 0, 0.6);
-  --node-shadow: rgba(0, 0, 0, 0.3);
-  --node-shadow-selected: rgba(0, 0, 0, 0.5);
+  --background: #09090b;
+  --foreground: #fafafa;
+  --panel-bg: #09090b;
+  --panel-border: #27272a;
+  --border: #27272a;
+  --accent: #fafafa;
+  --accent-foreground: #09090b;
+  --accent-hover: #e4e4e7;
+  --accent-soft: rgba(250, 250, 250, 0.1);
+  --surface: #18181b;
+  --surface-hover: #27272a;
+  --text-muted: #a1a1aa;
+  --text-subtle: #71717a;
+  --dot-color: #27272a;
+  --edge-color: #52525b;
+  --scrollbar-thumb: #3f3f46;
+  --scrollbar-thumb-hover: #52525b;
+  --modal-overlay: rgba(0, 0, 0, 0.8);
+  --node-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --node-shadow-selected: 0 0 0 2px var(--accent);
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --card-shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --glass-bg: rgba(9, 9, 11, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --input-bg: #09090b;
+  --input-border: #27272a;
+  --input-focus: var(--accent);
+  --success: #22c55e;
+  --warning: #eab308;
+  --danger: #ef4444;
   color-scheme: dark;
 }
 
-/* ─── Light theme ───────────────────────────────────────────────── */
+/* ─── Light theme — Inspired by shadcn/ui ───────────────────── */
 [data-theme="light"] {
   --background: #ffffff;
-  --foreground: #1a1a1a;
-  --panel-bg: #f8f9fa;
-  --border: #e2e8f0;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
+  --foreground: #09090b;
+  --panel-bg: #ffffff;
+  --panel-border: #e4e4e7;
+  --border: #e4e4e7;
+  --accent: #18181b;
+  --accent-foreground: #fafafa;
+  --accent-hover: #27272a;
+  --accent-soft: rgba(24, 24, 27, 0.1);
   --surface: #ffffff;
-  --text-muted: #64748b;
-  --dot-color: #e2e8f0;
-  --edge-color: #475569;
-  --scrollbar-thumb: #cbd5e1;
-  --scrollbar-thumb-hover: #94a3b8;
+  --surface-hover: #f4f4f5;
+  --text-muted: #71717a;
+  --text-subtle: #a1a1aa;
+  --dot-color: #e4e4e7;
+  --edge-color: #a1a1aa;
+  --scrollbar-thumb: #d4d4d8;
+  --scrollbar-thumb-hover: #a1a1aa;
   --modal-overlay: rgba(0, 0, 0, 0.4);
-  --node-shadow: rgba(0, 0, 0, 0.08);
-  --node-shadow-selected: rgba(0, 0, 0, 0.15);
+  --node-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --node-shadow-selected: 0 0 0 2px var(--accent);
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --card-shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --input-bg: #ffffff;
+  --input-border: #e4e4e7;
+  --input-focus: var(--accent);
+  --success: #16a34a;
+  --warning: #ca8a04;
+  --danger: #dc2626;
   color-scheme: light;
 }
 
@@ -53,44 +83,86 @@ body {
   height: 100%;
   background: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  transition: background 0.2s, color 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-/* React Flow overrides */
+/* Modern button reset */
+button {
+  font-family: inherit;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Modern input styling */
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* React Flow overrides — Modern styling */
 .react-flow__node {
   border-radius: 8px;
   font-size: 12px;
+  transition: box-shadow 0.2s ease;
 }
 
 .react-flow__edge-path {
   stroke: var(--edge-color);
   stroke-width: 2;
+  transition: stroke 0.15s ease, stroke-width 0.15s ease;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--accent);
-  stroke-width: 3;
+  stroke-width: 2.5;
 }
 
 .react-flow__handle {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--accent);
   border: 2px solid var(--background);
+  transition: all 0.2s ease;
+}
+
+.react-flow__handle:hover {
+  width: 14px;
+  height: 14px;
+  background: var(--accent-hover);
 }
 
 .react-flow__minimap {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
+  box-shadow: var(--card-shadow);
 }
 
 .react-flow__controls {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
   overflow: hidden;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--node-shadow);
 }
 
 .react-flow__controls-button {
@@ -103,10 +175,10 @@ body {
   background: var(--panel-bg) !important;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — Modern thin scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -115,14 +187,44 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 3px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
 
-/* ─── Edit Modal ─────────────────────────────────────────────────── */
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* ─── Modern Animations ─────────────────────────────────────────── */
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-slide-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ─── Edit Modal — Modern styling ───────────────────────────────── */
 .edit-modal-overlay {
   position: fixed;
   inset: 0;
@@ -131,82 +233,86 @@ body {
   align-items: center;
   justify-content: center;
   background: var(--modal-overlay);
-  backdrop-filter: blur(4px);
-  animation: modal-fade-in 0.15s ease-out;
+  backdrop-filter: blur(8px);
+  animation: modal-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .edit-modal {
   background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
   width: 90vw;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  animation: modal-slide-in 0.2s ease-out;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.32), 0 8px 16px rgba(0, 0, 0, 0.16);
+  animation: modal-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .edit-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 20px 24px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
-  font-size: 15px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
 }
 
 .edit-modal-close {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 18px;
+  font-size: 20px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .edit-modal-close:hover {
-  background: var(--surface);
+  background: var(--surface-hover);
   color: var(--foreground);
 }
 
 .edit-modal-body {
-  padding: 20px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .edit-modal-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .edit-modal-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
 }
 
 .edit-modal-input {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 10px 14px;
   color: var(--foreground);
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   font-family: inherit;
 }
 
 .edit-modal-input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .edit-modal-input option {
@@ -274,30 +380,39 @@ body {
 .edit-modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 16px 20px;
+  gap: 10px;
+  padding: 20px 24px;
   border-top: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 0 0 16px 16px;
 }
 
 .edit-modal-btn {
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 14px;
   font-weight: 500;
-  padding: 8px 16px;
+  padding: 10px 20px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: all 0.15s ease;
   border: 1px solid transparent;
   font-family: inherit;
+  letter-spacing: -0.01em;
+}
+
+.edit-modal-btn:active {
+  transform: scale(0.98);
 }
 
 .edit-modal-btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-foreground);
   border-color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .edit-modal-btn-primary:hover {
   background: var(--accent-hover);
+  box-shadow: 0 2px 6px rgba(94, 106, 210, 0.3);
 }
 
 .edit-modal-btn-secondary {
@@ -307,7 +422,8 @@ body {
 }
 
 .edit-modal-btn-secondary:hover {
-  background: var(--border);
+  background: var(--surface-hover);
+  border-color: var(--panel-border);
 }
 
 /* ─── Node Pulse Animation ───────────────────────────────────────── */

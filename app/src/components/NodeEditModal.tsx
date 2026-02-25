@@ -76,7 +76,7 @@ export default function NodeEditModal({ node, onSave, onClose }: NodeEditModalPr
         {/* Header */}
         <div className="edit-modal-header">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <ShapeIcon name={currentShapeDef.lucideIcon} fallback={currentShapeDef.icon} size={18} color={borderColor} strokeWidth={1.5} />
+            <ShapeIcon type={shapeType} size={18} color={borderColor} strokeWidth={1.5} />
             <span>Edit Node</span>
           </div>
           <button className="edit-modal-close" onClick={onClose}>✕</button>
@@ -214,7 +214,7 @@ export default function NodeEditModal({ node, onSave, onClose }: NodeEditModalPr
                   boxShadow: `0 2px 8px rgba(0,0,0,0.15)`,
                 }}
               >
-                <ShapeIcon name={currentShapeDef.lucideIcon} fallback={currentShapeDef.icon} size={20} color={getContrastTextColor(bgColor)} strokeWidth={1.5} />
+                <ShapeIcon type={shapeType} size={20} color={getContrastTextColor(bgColor)} strokeWidth={1.5} />
                 <div style={{ fontWeight: 600, fontSize: 13, color: getContrastTextColor(bgColor), textAlign: "center" }}>
                   {label || "Untitled"}
                 </div>

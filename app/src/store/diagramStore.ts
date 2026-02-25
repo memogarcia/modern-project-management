@@ -8,11 +8,299 @@ import {
   type OnConnect,
 } from "@xyflow/react";
 import { v4 as uuidv4 } from "uuid";
-import type { ArchNode, ArchEdge, ShapeType, Diagram, DiagramNode, SchemaColumn, GroupNodeData } from "@/lib/types";
+import type { ArchNode, ArchEdge, ShapeType, Diagram, DiagramNode, SchemaColumn, GroupNodeData, DatabaseSchemaNodeData } from "@/lib/types";
 import { getShapeDef } from "@/lib/types";
-import { flowToMermaid, mermaidToFlow } from "@/lib/converters";
+import { flowToMermaid, mermaidToFlow, type MermaidSubgraph } from "@/lib/converters";
 import { autoLayout } from "@/lib/layout";
 import { saveDiagram, loadDiagram } from "@/lib/storage";
+
+let persistQueue: Promise<void> = Promise.resolve();
+let latestPersistRequest = 0;
+
+function stripGroupingFromNode(node: DiagramNode): DiagramNode {
+  const { parentId, extent, expandParent, ...rest } = node as DiagramNode & {
+    parentId?: string;
+    extent?: unknown;
+    expandParent?: unknown;
+  };
+  return rest as DiagramNode;
+}
+
+function buildAbsolutePositionMap(nodes: DiagramNode[]): Map<string, { x: number; y: number }> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const cache = new Map<string, { x: number; y: number }>();
+  const visiting = new Set<string>();
+
+  function getAbs(nodeId: string): { x: number; y: number } {
+    const cached = cache.get(nodeId);
+    if (cached) return cached;
+
+    const node = byId.get(nodeId);
+    if (!node) return { x: 0, y: 0 };
+
+    if (!node.parentId || visiting.has(nodeId)) {
+      const abs = { x: node.position.x, y: node.position.y };
+      cache.set(nodeId, abs);
+      return abs;
+    }
+
+    visiting.add(nodeId);
+    const parentAbs = getAbs(node.parentId);
+    visiting.delete(nodeId);
+
+    const abs = {
+      x: parentAbs.x + node.position.x,
+      y: parentAbs.y + node.position.y,
+    };
+    cache.set(nodeId, abs);
+    return abs;
+  }
+
+  for (const node of nodes) {
+    getAbs(node.id);
+  }
+
+  return cache;
+}
+
+type GroupTemplate = {
+  data?: GroupNodeData;
+  style?: DiagramNode["style"];
+};
+
+function extractExistingGroupSubgraphs(nodes: DiagramNode[]): {
+  subgraphs: MermaidSubgraph[];
+  templates: Map<string, GroupTemplate>;
+} {
+  const groups = nodes.filter((n) => n.type === "groupNode");
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  const indexById = new Map(nodes.map((n, idx) => [n.id, idx]));
+  const templates = new Map<string, GroupTemplate>();
+
+  for (const group of groups) {
+    templates.set(group.id, {
+      data: { ...(group.data as GroupNodeData) },
+      style: group.style,
+    });
+  }
+
+  const directLeafChildren = new Map<string, string[]>();
+  for (const group of groups) {
+    directLeafChildren.set(group.id, []);
+  }
+
+  for (const node of nodes) {
+    if (!node.parentId) continue;
+    if (!byId.has(node.parentId)) continue;
+    if (node.type === "groupNode") continue;
+    directLeafChildren.get(node.parentId)?.push(node.id);
+  }
+
+  const depthCache = new Map<string, number>();
+  const visiting = new Set<string>();
+  const getDepth = (groupId: string): number => {
+    const cached = depthCache.get(groupId);
+    if (cached != null) return cached;
+    const group = byId.get(groupId);
+    if (!group) return 0;
+    const parentId = group.parentId && byId.has(group.parentId) ? group.parentId : null;
+    if (!parentId || visiting.has(groupId)) {
+      depthCache.set(groupId, 0);
+      return 0;
+    }
+    visiting.add(groupId);
+    const depth = getDepth(parentId) + 1;
+    visiting.delete(groupId);
+    depthCache.set(groupId, depth);
+    return depth;
+  };
+
+  const subgraphs: MermaidSubgraph[] = groups
+    .map((group) => {
+      const parentKey = group.parentId && byId.has(group.parentId) ? group.parentId : null;
+      return {
+        key: group.id,
+        id: group.id,
+        label: String((group.data as GroupNodeData).label ?? "Group"),
+        parentKey,
+        depth: getDepth(group.id),
+        order: indexById.get(group.id) ?? 0,
+        nodeIds: directLeafChildren.get(group.id) ?? [],
+      } satisfies MermaidSubgraph;
+    })
+    .sort((a, b) => a.order - b.order);
+
+  return { subgraphs, templates };
+}
+
+function applyMermaidSubgraphGroups(
+  nodes: DiagramNode[],
+  subgraphs: MermaidSubgraph[],
+  options?: {
+    preserveGroupIds?: boolean;
+    groupTemplates?: Map<string, GroupTemplate>;
+  }
+): DiagramNode[] {
+  if (subgraphs.length === 0) return nodes.map(stripGroupingFromNode);
+
+  const baseNodes = nodes.map(stripGroupingFromNode).filter((n) => n.type !== "groupNode");
+  const nodeMap = new Map(baseNodes.map((n) => [n.id, { ...n } as DiagramNode]));
+  const subByKey = new Map(subgraphs.map((sg) => [sg.key, sg]));
+  const childSubgraphsByParent = new Map<string | null, MermaidSubgraph[]>();
+
+  for (const sg of subgraphs) {
+    const arr = childSubgraphsByParent.get(sg.parentKey) ?? [];
+    arr.push(sg);
+    childSubgraphsByParent.set(sg.parentKey, arr);
+  }
+  for (const arr of childSubgraphsByParent.values()) {
+    arr.sort((a, b) => a.order - b.order);
+  }
+
+  const GROUP_PADDING = 36;
+  const GROUP_LABEL_HEIGHT = 28;
+  const DEFAULT_GROUP_W = 360;
+  const DEFAULT_GROUP_H = 240;
+
+  type Rect = { x: number; y: number; w: number; h: number };
+  const groupNodeByKey = new Map<string, DiagramNode>();
+
+  function numericSize(value: unknown, fallback: number): number {
+    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  }
+
+  function estimateNodeSize(node: DiagramNode): { w: number; h: number } {
+    const measuredW = typeof node.measured?.width === "number" ? node.measured.width : undefined;
+    const measuredH = typeof node.measured?.height === "number" ? node.measured.height : undefined;
+    const width = typeof node.width === "number" ? node.width : measuredW;
+    const height = typeof node.height === "number" ? node.height : measuredH;
+    if (typeof width === "number" && typeof height === "number") {
+      return { w: width, h: height };
+    }
+
+    if (node.type === "databaseSchemaNode") {
+      const schema = (node.data as DatabaseSchemaNodeData).schema ?? [];
+      return { w: 240, h: Math.max(80, 40 + schema.length * 24) };
+    }
+    if (node.type === "groupNode") {
+      const style = (node.style ?? {}) as { width?: unknown; height?: unknown };
+      return {
+        w: numericSize(style?.width, DEFAULT_GROUP_W),
+        h: numericSize(style?.height, DEFAULT_GROUP_H),
+      };
+    }
+
+    const shapeDef = getShapeDef((node as ArchNode).data.shapeType);
+    return { w: shapeDef.defaultWidth, h: shapeDef.defaultHeight };
+  }
+
+  function nodeRect(node: DiagramNode): Rect {
+    const { w, h } = estimateNodeSize(node);
+    return { x: node.position.x, y: node.position.y, w, h };
+  }
+
+  function groupIdForSubgraph(sg: MermaidSubgraph): string {
+    if (options?.preserveGroupIds) return sg.id;
+    return `group_mermaid_${sg.key}`;
+  }
+
+  function buildGroupNode(sg: MermaidSubgraph): DiagramNode {
+    const existingBuilt = groupNodeByKey.get(sg.key);
+    if (existingBuilt) return existingBuilt;
+
+    const childRects: Rect[] = [];
+    for (const childKey of (childSubgraphsByParent.get(sg.key) ?? []).map((x) => x.key)) {
+      const childGroup = buildGroupNode(subByKey.get(childKey)!);
+      childRects.push(nodeRect(childGroup));
+    }
+    for (const nodeId of sg.nodeIds) {
+      const node = nodeMap.get(nodeId);
+      if (node) childRects.push(nodeRect(node));
+    }
+
+    let x = 0;
+    let y = 0;
+    let w = DEFAULT_GROUP_W;
+    let h = DEFAULT_GROUP_H;
+    if (childRects.length > 0) {
+      const minX = Math.min(...childRects.map((r) => r.x));
+      const minY = Math.min(...childRects.map((r) => r.y));
+      const maxX = Math.max(...childRects.map((r) => r.x + r.w));
+      const maxY = Math.max(...childRects.map((r) => r.y + r.h));
+      x = minX - GROUP_PADDING;
+      y = minY - GROUP_PADDING - GROUP_LABEL_HEIGHT;
+      w = Math.max(DEFAULT_GROUP_W, maxX - minX + GROUP_PADDING * 2);
+      h = Math.max(DEFAULT_GROUP_H, maxY - minY + GROUP_PADDING * 2 + GROUP_LABEL_HEIGHT);
+    }
+
+    const groupNode: DiagramNode = {
+      id: groupIdForSubgraph(sg),
+      type: "groupNode",
+      position: { x, y },
+      data: {
+        ...(options?.groupTemplates?.get(groupIdForSubgraph(sg))?.data ?? {}),
+        label: sg.label,
+      } as GroupNodeData,
+      style: {
+        ...(options?.groupTemplates?.get(groupIdForSubgraph(sg))?.style as object ?? {}),
+        width: w,
+        height: h,
+      },
+    };
+    groupNodeByKey.set(sg.key, groupNode);
+    return groupNode;
+  }
+
+  for (const root of childSubgraphsByParent.get(null) ?? []) {
+    buildGroupNode(root);
+  }
+
+  function reparentNodeToGroup(child: DiagramNode, parent: DiagramNode): DiagramNode {
+    const relX = child.position.x - parent.position.x;
+    const relY = child.position.y - parent.position.y;
+    return {
+      ...child,
+      parentId: parent.id,
+      extent: "parent" as const,
+      expandParent: true,
+      position: { x: relX, y: relY },
+    } as DiagramNode;
+  }
+
+  const sortedByDepthDesc = [...subgraphs].sort((a, b) => b.depth - a.depth || a.order - b.order);
+
+  for (const sg of sortedByDepthDesc) {
+    const groupNode = groupNodeByKey.get(sg.key);
+    if (!groupNode) continue;
+
+    for (const nodeId of sg.nodeIds) {
+      const node = nodeMap.get(nodeId);
+      if (!node) continue;
+      nodeMap.set(nodeId, reparentNodeToGroup(node, groupNode));
+    }
+
+    if (sg.parentKey) {
+      const parentGroup = groupNodeByKey.get(sg.parentKey);
+      if (parentGroup) {
+        groupNodeByKey.set(sg.key, reparentNodeToGroup(groupNode, parentGroup));
+      }
+    }
+  }
+
+  const groupOrder = new Map<string, { depth: number; order: number }>();
+  for (const sg of subgraphs) {
+    groupOrder.set(groupIdForSubgraph(sg), { depth: sg.depth, order: sg.order });
+  }
+
+  const groups = [...groupNodeByKey.values()].sort((a, b) => {
+    const ma = groupOrder.get(a.id) ?? { depth: 0, order: 0 };
+    const mb = groupOrder.get(b.id) ?? { depth: 0, order: 0 };
+    return ma.depth - mb.depth || ma.order - mb.order;
+  });
+
+  const nonGroups = baseNodes.map((n) => nodeMap.get(n.id) ?? n);
+  return [...groups, ...nonGroups];
+}
 
 interface DiagramStore {
   // Current diagram metadata
@@ -56,7 +344,7 @@ interface DiagramStore {
 
   updateMermaidCode: (code: string) => void;
   syncFlowToMermaid: () => void;
-  syncMermaidToFlow: () => void;
+  syncMermaidToFlow: () => Promise<void>;
 
   runAutoLayout: () => Promise<void>;
   setNodesAndEdges: (nodes: DiagramNode[], edges: ArchEdge[]) => void;
@@ -155,21 +443,41 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   persist: () => {
     const s = get();
     if (!s.diagramId) return;
-    // Fire-and-forget the async save — persist is called frequently (on every drag etc.)
-    // so we don't want to await; the API serialises writes per-file anyway.
-    loadDiagram(s.diagramId).then((existing) => {
-      const diagram: Diagram = {
-        id: s.diagramId,
-        name: s.diagramName,
-        description: s.diagramDescription,
-        createdAt: existing?.createdAt ?? new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        nodes: s.nodes as unknown[],
-        edges: s.edges as unknown[],
-        mermaidCode: s.mermaidCode,
-      };
-      saveDiagram(diagram);
-    });
+
+    const requestId = ++latestPersistRequest;
+    const snapshot = {
+      diagramId: s.diagramId,
+      diagramName: s.diagramName,
+      diagramDescription: s.diagramDescription,
+      nodes: s.nodes,
+      edges: s.edges,
+      mermaidCode: s.mermaidCode,
+    };
+
+    // Serialize writes and skip stale snapshots so an older async save
+    // cannot overwrite a newer state.
+    persistQueue = persistQueue
+      .catch(() => undefined)
+      .then(async () => {
+        if (requestId !== latestPersistRequest) return;
+
+        const existing = await loadDiagram(snapshot.diagramId);
+        if (requestId !== latestPersistRequest) return;
+
+        const diagram: Diagram = {
+          id: snapshot.diagramId,
+          name: snapshot.diagramName,
+          description: snapshot.diagramDescription,
+          createdAt: existing?.createdAt ?? new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          nodes: snapshot.nodes,
+          edges: snapshot.edges,
+          mermaidCode: snapshot.mermaidCode,
+        };
+
+        await saveDiagram(diagram);
+      })
+      .catch(() => undefined);
   },
 
   addNode: (shapeType, position) => {
@@ -411,10 +719,21 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   },
 
   deleteSelected: () => {
-    set((s) => ({
-      nodes: s.nodes.filter((n) => !n.selected),
-      edges: s.edges.filter((e) => !e.selected),
-    }));
+    set((s) => {
+      const deletedNodeIds = new Set(
+        s.nodes.filter((n) => n.selected).map((n) => n.id)
+      );
+
+      return {
+        nodes: s.nodes.filter((n) => !n.selected),
+        edges: s.edges.filter(
+          (e) =>
+            !e.selected &&
+            !deletedNodeIds.has(e.source) &&
+            !deletedNodeIds.has(e.target)
+        ),
+      };
+    });
     get().syncFlowToMermaid();
   },
 
@@ -459,26 +778,28 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     if (s._syncingFromFlow) return;
     set({ _syncingFromMermaid: true });
     try {
-      const { nodes: parsedNodes, edges: parsedEdges } = mermaidToFlow(
+      const { nodes: parsedNodes, edges: parsedEdges, subgraphs } = mermaidToFlow(
         s.mermaidCode,
         s.nodes, // pass existing nodes so visual metadata (shapeType, etc.) is preserved
       );
       // Preserve positions for nodes that already exist
-      const posMap = new Map(s.nodes.map((n) => [n.id, n.position]));
+      const absPosMap = buildAbsolutePositionMap(s.nodes);
       const needsLayout: DiagramNode[] = [];
       const merged = parsedNodes.map((n) => {
-        const existing = posMap.get(n.id);
-        if (existing) {
-          return { ...n, position: existing };
+        const existingAbs = absPosMap.get(n.id);
+        const stripped = stripGroupingFromNode(n);
+        if (existingAbs) {
+          return { ...stripped, position: existingAbs };
         }
-        needsLayout.push(n);
-        return n;
+        needsLayout.push(stripped);
+        return stripped;
       });
 
       let finalNodes = merged;
       if (needsLayout.length > 0) {
         finalNodes = await autoLayout(merged, parsedEdges);
       }
+      finalNodes = applyMermaidSubgraphGroups(finalNodes, subgraphs);
 
       // Preserve existing edge objects when source/target/label haven't changed
       // so React Flow doesn't re-route them.
@@ -507,8 +828,38 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
 
   runAutoLayout: async () => {
     const s = get();
-    const laid = await autoLayout(s.nodes, s.edges);
-    set({ nodes: laid });
+    if (s.nodes.length === 0) return;
+
+    const hasGroups = s.nodes.some((n) => n.type === "groupNode");
+    if (!hasGroups) {
+      const laid = await autoLayout(s.nodes, s.edges);
+      set({ nodes: laid });
+      return;
+    }
+
+    const absPosMap = buildAbsolutePositionMap(s.nodes);
+    const { subgraphs, templates } = extractExistingGroupSubgraphs(s.nodes);
+
+    const flatNodes = s.nodes
+      .filter((n) => n.type !== "groupNode")
+      .map((n) => {
+        const abs = absPosMap.get(n.id);
+        const stripped = stripGroupingFromNode(n);
+        if (!abs) return stripped;
+        return { ...stripped, position: abs };
+      });
+
+    const flatNodeIds = new Set(flatNodes.map((n) => n.id));
+    const flatEdges = s.edges.filter(
+      (e) => flatNodeIds.has(e.source) && flatNodeIds.has(e.target)
+    );
+
+    const laidFlatNodes = await autoLayout(flatNodes, flatEdges);
+    const rebuilt = applyMermaidSubgraphGroups(laidFlatNodes, subgraphs, {
+      preserveGroupIds: true,
+      groupTemplates: templates,
+    });
+    set({ nodes: rebuilt });
   },
 
   setNodesAndEdges: (nodes, edges) => {

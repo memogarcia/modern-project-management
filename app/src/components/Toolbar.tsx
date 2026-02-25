@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { toSvg } from "html-to-image";
+import { useReactFlow } from "@xyflow/react";
 import {
   LayoutGrid,
   Trash2,
@@ -27,6 +28,14 @@ export default function Toolbar() {
   const sendToFront = useDiagramStore((s) => s.sendToFront);
   const sendToBack = useDiagramStore((s) => s.sendToBack);
   const { theme, toggleTheme } = useTheme();
+  const { fitView } = useReactFlow();
+
+  const handleAutoLayout = useCallback(async () => {
+    await runAutoLayout();
+    requestAnimationFrame(() => {
+      void fitView({ padding: 0.18, duration: 250 });
+    });
+  }, [runAutoLayout, fitView]);
 
   const handleExportPng = useCallback(async () => {
     const el = document.querySelector(".react-flow__viewport") as HTMLElement | null;
@@ -141,99 +150,192 @@ export default function Toolbar() {
   }, [persist]);
 
   const btnStyle: React.CSSProperties = {
-    fontSize: "11px",
-    padding: "5px 10px",
-    background: "var(--surface)",
+    width: 36,
+    height: 36,
+    padding: "0",
+    justifyContent: "center",
+    background: "transparent",
     color: "var(--foreground)",
-    border: "1px solid var(--border)",
-    borderRadius: "5px",
+    border: "none",
+    borderRadius: "8px",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
-    gap: "4px",
-    transition: "background 0.15s",
+    gap: "6px",
+    fontSize: "13px",
+    fontWeight: 500,
+    transition: "all 0.15s ease",
+  };
+
+  const separatorStyle: React.CSSProperties = {
+    width: 24,
+    height: 1,
+    background: "var(--border)",
+    margin: "6px 0",
   };
 
   return (
     <div
       style={{
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
-        gap: "6px",
-        padding: "6px 12px",
-        background: "var(--panel-bg)",
-        borderBottom: "1px solid var(--border)",
+        padding: "8px 6px",
+        background: "var(--glass-bg)",
+        backdropFilter: "blur(16px)",
+        border: "1px solid var(--glass-border)",
+        borderRadius: "12px",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.12)",
+        gap: 2,
       }}
     >
       <button
-        onClick={runAutoLayout}
+        onClick={() => void handleAutoLayout()}
         style={btnStyle}
-        title="Auto-arrange nodes"
+        title="Auto-arrange nodes (⌘L)"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
       >
-        <LayoutGrid size={14} /> Auto Layout
+        <LayoutGrid size={18} strokeWidth={2} />
       </button>
+
+      <div style={separatorStyle} />
+
       <button
         onClick={deleteSelected}
         style={btnStyle}
-        title="Delete selected nodes/edges"
+        title="Delete selected (Del)"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "rgba(248, 81, 73, 0.12)";
+          e.currentTarget.style.color = "var(--danger)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
       >
-        <Trash2 size={14} /> Delete
+        <Trash2 size={18} strokeWidth={2} />
       </button>
+
+      <div style={separatorStyle} />
+
       <button
         onClick={groupSelectedNodes}
         style={btnStyle}
-        title="Group selected nodes"
+        title="Group selected (⌘G)"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
       >
-        <Group size={14} /> Group
+        <Group size={18} strokeWidth={2} />
       </button>
       <button
         onClick={ungroupSelectedNodes}
         style={btnStyle}
-        title="Ungroup selected group"
+        title="Ungroup (⌘⇧G)"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
       >
-        <Ungroup size={14} /> Ungroup
+        <Ungroup size={18} strokeWidth={2} />
       </button>
 
-      {/* Separator */}
-      <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+      <div style={separatorStyle} />
 
       <button
         onClick={sendToFront}
         style={btnStyle}
-        title="Send to front (⌘])"
+        title="Bring to front (⌘])"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
       >
-        <BringToFront size={14} /> Front
+        <BringToFront size={18} strokeWidth={2} />
       </button>
       <button
         onClick={sendToBack}
         style={btnStyle}
         title="Send to back (⌘[)"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
       >
-        <SendToBack size={14} /> Back
+        <SendToBack size={18} strokeWidth={2} />
       </button>
-      <div style={{ flex: 1 }} />
+
+      <div style={separatorStyle} />
+
       <button
         onClick={toggleTheme}
         style={btnStyle}
         title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
       >
-        {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-        {theme === "dark" ? "Light" : "Dark"}
+        {theme === "dark" ? <Sun size={18} strokeWidth={2} /> : <Moon size={18} strokeWidth={2} />}
       </button>
-      <button onClick={handleSave} style={btnStyle} title="Save diagram">
-        <Save size={14} /> Save
+
+      <div style={separatorStyle} />
+
+      <button onClick={handleSave}
+        style={btnStyle} title="Save diagram (⌘S)"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--success)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
+      >
+        <Save size={18} strokeWidth={2} />
       </button>
       <button
         onClick={handleExportPng}
-        style={{
-          ...btnStyle,
-          background: "var(--accent)",
-          borderColor: "var(--accent)",
-          color: "#fff",
-        }}
+        style={btnStyle}
         title="Export as PNG"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--accent-soft)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
       >
-        <Camera size={14} /> Export PNG
+        <Camera size={18} strokeWidth={2} />
       </button>
     </div>
   );

@@ -9,6 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.20",
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/list": "^6.1.20",
+    "@fullcalendar/react": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
     "@monaco-editor/react": "^4.7.0",
     "@xyflow/react": "^12.10.1",
     "elkjs": "^0.11.0",
@@ -22,13 +28,13 @@
     "zustand": "^5.0.5"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
+    "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@types/uuid": "^10.0.0",
+    "postcss": "^8.5.0",
     "tailwindcss": "^4.1.0",
-    "@tailwindcss/postcss": "^4.1.0",
-    "postcss": "^8.5.0"
+    "typescript": "^5.8.3"
   }
 }

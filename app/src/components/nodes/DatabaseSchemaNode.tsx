@@ -61,8 +61,8 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
     borderRadius: "10px",
     overflow: "hidden",
     boxShadow: selected
-      ? "0 0 0 2px var(--accent, #4262ff), 0 4px 16px var(--node-shadow-selected)"
-      : "0 2px 8px var(--node-shadow), 0 0 0 1px rgba(0,0,0,0.04)",
+      ? "var(--node-shadow-selected)"
+      : "var(--node-shadow)",
     transition: "box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease",
     fontSize: "12px",
     color: "var(--foreground, #1e293b)",
@@ -96,7 +96,7 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
 
       {/* Header */}
       <div style={headerStyle} onDoubleClick={handleDoubleClick}>
-        <ShapeIcon name="Table" fallback="📊" size={16} color="#fff" strokeWidth={1.5} />
+        <ShapeIcon type="database" size={16} color="#fff" strokeWidth={1.5} />
         {editing ? (
           <input
             ref={inputRef}

@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
+import { useReactFlow } from "@xyflow/react";
 import { Play } from "lucide-react";
 import { useDiagramStore } from "@/store/diagramStore";
 import { useTheme } from "@/components/ThemeProvider";
@@ -11,6 +12,7 @@ export default function MermaidPanel() {
   const updateMermaidCode = useDiagramStore((s) => s.updateMermaidCode);
   const syncMermaidToFlow = useDiagramStore((s) => s.syncMermaidToFlow);
   const { theme } = useTheme();
+  const { fitView } = useReactFlow();
 
   const [localCode, setLocalCode] = useState(mermaidCode);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -21,6 +23,19 @@ export default function MermaidPanel() {
     isExternalUpdate.current = true;
     setLocalCode(mermaidCode);
   }, [mermaidCode]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleApply = useCallback(async () => {
+    await syncMermaidToFlow();
+    requestAnimationFrame(() => {
+      void fitView({ padding: 0.18, duration: 250 });
+    });
+  }, [syncMermaidToFlow, fitView]);
 
   const handleChange = (value: string | undefined) => {
     const code = value ?? "";
@@ -80,7 +95,7 @@ export default function MermaidPanel() {
           Mermaid
         </span>
         <button
-          onClick={() => syncMermaidToFlow()}
+          onClick={() => void handleApply()}
           style={{
             fontSize: "11px",
             padding: "3px 8px",
