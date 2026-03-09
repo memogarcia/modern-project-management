@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Share2, BarChart, Calendar, Moon, Sun, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LayoutDashboard, Share2, BarChart, Calendar, Moon, Sun, PanelLeftClose, PanelLeftOpen, Timer, ListTree, KanbanSquare } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
 
 export function Sidebar() {
@@ -38,6 +38,9 @@ export function Sidebar() {
     { name: "Diagrams", href: "/diagrams", icon: Share2 },
     { name: "Gantt Charts", href: "/gantt", icon: BarChart },
     { name: "Calendar", href: "/calendar", icon: Calendar },
+    { name: "Sessions", href: "/sessions", icon: Timer },
+    { name: "Matrix", href: "/matrix", icon: ListTree },
+    { name: "Kanban", href: "/kanban", icon: KanbanSquare },
   ];
 
   const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;

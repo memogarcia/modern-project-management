@@ -4,11 +4,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import { DiagramStorage, GanttStorage } from "./storage.js";
-import type { Diagram, GanttChart, GanttTask } from "./types.js";
+import { DiagramStorage, GanttStorage, SessionStorage, MatrixStorage } from "./storage.js";
+import type { Diagram, GanttChart, GanttTask, Session, MatrixBoard, MatrixTask } from "./types.js";
 
 const storage = new DiagramStorage(process.env.DIAGRAMS_DIR);
 const ganttStorage = new GanttStorage(storage.baseDir);
+const sessionStorage = new SessionStorage(storage.baseDir);
+const matrixStorage = new MatrixStorage(storage.baseDir);
 const MERMAID_NODE_ID_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 const server = new McpServer({
@@ -927,6 +929,514 @@ server.tool(
   }
 );
 
+// ─── Tool: list_sessions ─────────────────────────────────────────────
+server.tool("list_sessions", "List all saved focus sessions", {}, async () => {
+  const sessions = sessionStorage.list();
+  const summary = sessions.map((s) => ({
+    id: s.id,
+    title: s.title,
+    taskCount: s.tasks.length,
+    pomodorosCompleted: s.pomodorosCompleted,
+    updatedAt: s.updatedAt,
+  }));
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
+  };
+});
+
+// ─── Tool: get_session ───────────────────────────────────────────────
+server.tool(
+  "get_session",
+  "Get a session by ID, returns tasks, links, notes, and metadata",
+  { id: z.string().describe("The session ID") },
+  async ({ id }) => {
+    const session = sessionStorage.get(id);
+    if (!session) {
+      return {
+        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        isError: true,
+      };
+    }
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(session, null, 2) }],
+    };
+  }
+);
+
+// ─── Tool: create_session ────────────────────────────────────────────
+server.tool(
+  "create_session",
+  "Create a new focus session with optional tasks and links",
+  {
+    title: z.string().describe("Title of the session"),
+    notes: z.string().optional().default("").describe("Session notes"),
+    tasks: z.array(z.string()).optional().default([]).describe("List of task strings"),
+    links: z
+      .array(
+        z.object({
+          label: z.string(),
+          url: z.string().url(),
+          type: z.enum(["diagram", "gantt", "matrix", "github", "other"]),
+        })
+      )
+      .optional()
+      .default([]),
+  },
+  async ({ title, notes, tasks, links }) => {
+    const now = new Date().toISOString();
+    const session: Session = {
+      id: uuidv4(),
+      title,
+      notes,
+      tasks,
+      links,
+      pomodorosCompleted: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    sessionStorage.save(session);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            { id: session.id, title: session.title, message: "Session created" },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: update_session ────────────────────────────────────────────
+server.tool(
+  "update_session",
+  "Update the title or notes of an existing session",
+  {
+    id: z.string().describe("The session ID"),
+    title: z.string().optional(),
+    notes: z.string().optional(),
+  },
+  async ({ id, title, notes }) => {
+    const session = sessionStorage.get(id);
+    if (!session) {
+      return {
+        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        isError: true,
+      };
+    }
+    if (title !== undefined) session.title = title;
+    if (notes !== undefined) session.notes = notes;
+    session.updatedAt = new Date().toISOString();
+    sessionStorage.save(session);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: "Session updated", id: session.id }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: delete_session ────────────────────────────────────────────
+server.tool(
+  "delete_session",
+  "Delete a session by ID",
+  { id: z.string().describe("The session ID") },
+  async ({ id }) => {
+    const deleted = sessionStorage.delete(id);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: deleted ? `Session ${id} deleted` : `Session not found: ${id}`,
+        },
+      ],
+      isError: !deleted,
+    };
+  }
+);
+
+// ─── Tool: add_session_task ──────────────────────────────────────────
+server.tool(
+  "add_session_task",
+  "Add a task string to an existing session",
+  {
+    id: z.string().describe("The session ID"),
+    task: z.string().describe("Task description"),
+  },
+  async ({ id, task }) => {
+    const session = sessionStorage.get(id);
+    if (!session) {
+      return {
+        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        isError: true,
+      };
+    }
+    session.tasks.push(task);
+    session.updatedAt = new Date().toISOString();
+    sessionStorage.save(session);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Task added`, taskCount: session.tasks.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: remove_session_task ───────────────────────────────────────
+server.tool(
+  "remove_session_task",
+  "Remove a task from a session by its index",
+  {
+    id: z.string().describe("The session ID"),
+    index: z.number().int().min(0).describe("Zero-based task index"),
+  },
+  async ({ id, index }) => {
+    const session = sessionStorage.get(id);
+    if (!session) {
+      return {
+        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        isError: true,
+      };
+    }
+    if (index >= session.tasks.length) {
+      return {
+        content: [{ type: "text" as const, text: `Task index out of range: ${index}` }],
+        isError: true,
+      };
+    }
+    session.tasks.splice(index, 1);
+    session.updatedAt = new Date().toISOString();
+    sessionStorage.save(session);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: "Task removed", taskCount: session.tasks.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: add_session_link ──────────────────────────────────────────
+server.tool(
+  "add_session_link",
+  "Add a link to an existing session",
+  {
+    id: z.string().describe("The session ID"),
+    label: z.string().describe("Link label"),
+    url: z.string().url().describe("Link URL"),
+    type: z.enum(["diagram", "gantt", "matrix", "github", "other"]).describe("Link type"),
+  },
+  async ({ id, label, url, type }) => {
+    const session = sessionStorage.get(id);
+    if (!session) {
+      return {
+        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        isError: true,
+      };
+    }
+    session.links.push({ label, url, type });
+    session.updatedAt = new Date().toISOString();
+    sessionStorage.save(session);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Link '${label}' added`, linkCount: session.links.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: remove_session_link ───────────────────────────────────────
+server.tool(
+  "remove_session_link",
+  "Remove a link from a session by its index",
+  {
+    id: z.string().describe("The session ID"),
+    index: z.number().int().min(0).describe("Zero-based link index"),
+  },
+  async ({ id, index }) => {
+    const session = sessionStorage.get(id);
+    if (!session) {
+      return {
+        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        isError: true,
+      };
+    }
+    if (index >= session.links.length) {
+      return {
+        content: [{ type: "text" as const, text: `Link index out of range: ${index}` }],
+        isError: true,
+      };
+    }
+    session.links.splice(index, 1);
+    session.updatedAt = new Date().toISOString();
+    sessionStorage.save(session);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: "Link removed", linkCount: session.links.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: list_matrix_boards ─────────────────────────────────────────
+server.tool("list_matrix_boards", "List all saved Eisenhower matrix boards", {}, async () => {
+  const boards = matrixStorage.list();
+  const summary = boards.map((b) => ({
+    id: b.id,
+    name: b.name,
+    taskCount: b.tasks.length,
+    updatedAt: b.updatedAt,
+  }));
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
+  };
+});
+
+// ─── Tool: get_matrix_board ───────────────────────────────────────────
+server.tool(
+  "get_matrix_board",
+  "Get an Eisenhower matrix board by ID",
+  { id: z.string().describe("The matrix board ID") },
+  async ({ id }) => {
+    const board = matrixStorage.get(id);
+    if (!board) {
+      return {
+        content: [{ type: "text" as const, text: `Matrix board not found: ${id}` }],
+        isError: true,
+      };
+    }
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(board, null, 2) }],
+    };
+  }
+);
+
+// ─── Tool: create_matrix_board ────────────────────────────────────────
+server.tool(
+  "create_matrix_board",
+  "Create a new Eisenhower matrix board for task prioritization",
+  {
+    name: z.string().describe("Name of the matrix board"),
+    tasks: z
+      .array(
+        z.object({
+          title: z.string(),
+          quadrant: z.enum(["do-first", "schedule", "delegate", "drop"]),
+        })
+      )
+      .optional()
+      .default([]),
+  },
+  async ({ name, tasks }) => {
+    const now = new Date().toISOString();
+    const board: MatrixBoard = {
+      id: uuidv4(),
+      name,
+      createdAt: now,
+      updatedAt: now,
+      tasks: tasks.map((t) => ({
+        id: uuidv4(),
+        title: t.title,
+        quadrant: t.quadrant,
+        createdAt: now,
+        updatedAt: now,
+      })),
+    };
+    matrixStorage.save(board);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            { id: board.id, name: board.name, taskCount: board.tasks.length, message: "Matrix board created" },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: update_matrix_board ────────────────────────────────────────
+server.tool(
+  "update_matrix_board",
+  "Update the name of an existing matrix board",
+  {
+    id: z.string().describe("The matrix board ID"),
+    name: z.string().describe("New name for the board"),
+  },
+  async ({ id, name }) => {
+    const board = matrixStorage.get(id);
+    if (!board) {
+      return {
+        content: [{ type: "text" as const, text: `Matrix board not found: ${id}` }],
+        isError: true,
+      };
+    }
+    board.name = name;
+    board.updatedAt = new Date().toISOString();
+    matrixStorage.save(board);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: "Matrix board updated", id: board.id }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: delete_matrix_board ────────────────────────────────────────
+server.tool(
+  "delete_matrix_board",
+  "Delete a matrix board by ID",
+  { id: z.string().describe("The matrix board ID") },
+  async ({ id }) => {
+    const deleted = matrixStorage.delete(id);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: deleted ? `Matrix board ${id} deleted` : `Matrix board not found: ${id}`,
+        },
+      ],
+      isError: !deleted,
+    };
+  }
+);
+
+// ─── Tool: add_matrix_task ────────────────────────────────────────────
+server.tool(
+  "add_matrix_task",
+  "Add a task to an Eisenhower matrix board",
+  {
+    boardId: z.string().describe("The matrix board ID"),
+    title: z.string().describe("Task title"),
+    quadrant: z
+      .enum(["do-first", "schedule", "delegate", "drop"])
+      .describe("Matrix quadrant: do-first (urgent+important), schedule (not urgent+important), delegate (urgent+not important), drop (not urgent+not important)"),
+  },
+  async ({ boardId, title, quadrant }) => {
+    const board = matrixStorage.get(boardId);
+    if (!board) {
+      return {
+        content: [{ type: "text" as const, text: `Matrix board not found: ${boardId}` }],
+        isError: true,
+      };
+    }
+    const now = new Date().toISOString();
+    const task: MatrixTask = { id: uuidv4(), title, quadrant, createdAt: now, updatedAt: now };
+    board.tasks.push(task);
+    board.updatedAt = now;
+    matrixStorage.save(board);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Task '${title}' added`, taskId: task.id, boardId }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: update_matrix_task ─────────────────────────────────────────
+server.tool(
+  "update_matrix_task",
+  "Update a task in a matrix board (title and/or quadrant)",
+  {
+    boardId: z.string().describe("The matrix board ID"),
+    taskId: z.string().describe("The task ID"),
+    title: z.string().optional(),
+    quadrant: z.enum(["do-first", "schedule", "delegate", "drop"]).optional(),
+  },
+  async ({ boardId, taskId, title, quadrant }) => {
+    const board = matrixStorage.get(boardId);
+    if (!board) {
+      return {
+        content: [{ type: "text" as const, text: `Matrix board not found: ${boardId}` }],
+        isError: true,
+      };
+    }
+    const task = board.tasks.find((t) => t.id === taskId);
+    if (!task) {
+      return {
+        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
+        isError: true,
+      };
+    }
+    if (title !== undefined) task.title = title;
+    if (quadrant !== undefined) task.quadrant = quadrant;
+    task.updatedAt = new Date().toISOString();
+    board.updatedAt = new Date().toISOString();
+    matrixStorage.save(board);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Task '${task.title}' updated`, task }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: remove_matrix_task ─────────────────────────────────────────
+server.tool(
+  "remove_matrix_task",
+  "Remove a task from a matrix board",
+  {
+    boardId: z.string().describe("The matrix board ID"),
+    taskId: z.string().describe("The task ID to remove"),
+  },
+  async ({ boardId, taskId }) => {
+    const board = matrixStorage.get(boardId);
+    if (!board) {
+      return {
+        content: [{ type: "text" as const, text: `Matrix board not found: ${boardId}` }],
+        isError: true,
+      };
+    }
+    const before = board.tasks.length;
+    board.tasks = board.tasks.filter((t) => t.id !== taskId);
+    if (board.tasks.length === before) {
+      return {
+        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
+        isError: true,
+      };
+    }
+    board.updatedAt = new Date().toISOString();
+    matrixStorage.save(board);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: "Task removed", taskCount: board.tasks.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
 // ─── Resources: diagram listing ──────────────────────────────────────
 server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
   const diagrams = storage.list();
@@ -963,6 +1473,51 @@ server.resource("gantt-charts", "archdiagram://gantt-charts", async (uri) => {
             name: c.name,
             description: c.description,
             taskCount: c.tasks.length,
+          })),
+          null,
+          2
+        ),
+      },
+    ],
+  };
+});
+
+// ─── Resources: Sessions listing ─────────────────────────────────────
+server.resource("sessions", "archdiagram://sessions", async (uri) => {
+  const sessions = sessionStorage.list();
+  return {
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(
+          sessions.map((s) => ({
+            id: s.id,
+            title: s.title,
+            taskCount: s.tasks.length,
+            pomodorosCompleted: s.pomodorosCompleted,
+          })),
+          null,
+          2
+        ),
+      },
+    ],
+  };
+});
+
+// ─── Resources: Matrix board listing ─────────────────────────────────
+server.resource("matrix-boards", "archdiagram://matrix-boards", async (uri) => {
+  const boards = matrixStorage.list();
+  return {
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(
+          boards.map((b) => ({
+            id: b.id,
+            name: b.name,
+            taskCount: b.tasks.length,
           })),
           null,
           2

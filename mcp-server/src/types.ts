@@ -55,3 +55,46 @@ export interface GanttChartMeta {
 export interface GanttChart extends GanttChartMeta {
   tasks: GanttTask[];
 }
+
+// ─── Session Types ───────────────────────────────────────────────────
+export interface SessionLink {
+  label: string;
+  url: string;
+  type: "diagram" | "gantt" | "matrix" | "github" | "other";
+}
+
+export interface SessionMeta {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Session extends SessionMeta {
+  notes: string;
+  tasks: string[];
+  links: SessionLink[];
+  pomodorosCompleted: number;
+}
+
+// ─── Matrix Types ────────────────────────────────────────────────────
+export type MatrixQuadrant = "do-first" | "schedule" | "delegate" | "drop";
+
+export interface MatrixTask {
+  id: string;
+  title: string;
+  quadrant: MatrixQuadrant;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MatrixBoardMeta {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MatrixBoard extends MatrixBoardMeta {
+  tasks: MatrixTask[];
+}
