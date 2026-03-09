@@ -52,14 +52,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
 
-  // Prevent flash of wrong theme
-  if (!mounted) {
-    return null;
-  }
-
+  // Ensure we always render children to avoid Next.js hydration blocking
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
+      {/* Optional: Add an inline script here if we want to strictly prevent flash, 
+          but simply rendering children works safely with suppressHydrationWarning. */}
+      <div style={{ visibility: mounted ? "visible" : "hidden", display: "contents" }}>
+        {children}
+      </div>
     </ThemeContext.Provider>
   );
 }

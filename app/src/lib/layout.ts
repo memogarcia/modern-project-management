@@ -1,4 +1,3 @@
-import ELK, { type ElkNode, type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import type {
   ArchEdge,
   DiagramNode,
@@ -8,7 +7,20 @@ import type {
 } from "@/lib/types";
 import { getShapeDef } from "@/lib/types";
 
-const elk = new ELK();
+// Lazy-load ELK to keep the initial bundle small.
+// Uses the standard 'elkjs' entry (elk-api.js ~9KB + web worker) instead
+// of 'elkjs/lib/elk.bundled.js' (~1.6MB) which crashes Turbopack.
+// Requires 'web-worker' package for the worker thread support.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _elkInstance: any = null;
+
+async function getElk() {
+  if (!_elkInstance) {
+    const ELK = (await import("elkjs")).default;
+    _elkInstance = new ELK();
+  }
+  return _elkInstance;
+}
 
 export type LayoutDirection = "DOWN" | "RIGHT";
 
@@ -392,26 +404,27 @@ async function elkLayeredLayout(
   edges: ArchEdge[],
   direction: LayoutDirection
 ): Promise<DiagramNode[]> {
-  const elkNodes: ElkNode[] = nodes.map((node) => {
+  const elkNodes = nodes.map((node) => {
     const { width, height } = estimateNodeSize(node);
     return { id: node.id, width, height };
   });
 
-  const elkEdges: ElkExtendedEdge[] = edges.map((edge) => ({
+  const elkEdges = edges.map((edge) => ({
     id: edge.id,
     sources: [edge.source],
     targets: [edge.target],
   }));
 
-  const graph: ElkNode = {
+  const graph = {
     id: "root",
     layoutOptions: layoutOptions(direction),
     children: elkNodes,
     edges: elkEdges,
   };
 
-  let layouted: ElkNode;
+  let layouted: { children?: Array<{ id: string; x?: number; y?: number }> };
   try {
+    const elk = await getElk();
     layouted = await elk.layout(graph);
   } catch {
     return fallbackGridLayout(nodes, direction);

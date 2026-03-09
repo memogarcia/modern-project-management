@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DiagramMeta } from "@/lib/types";
-import { loadDiagrams, deleteDiagram } from "@/lib/storage";
-import { useDiagramStore } from "@/store/diagramStore";
+import { loadDiagrams, deleteDiagram, saveDiagram } from "@/lib/storage";
+import { v4 as uuidv4 } from "uuid";
 import { Plus, Trash2, ArrowLeft, FileText } from "lucide-react";
 
 export default function DiagramsListPage() {
@@ -14,7 +14,6 @@ export default function DiagramsListPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
-  const initNewDiagram = useDiagramStore((s) => s.initNewDiagram);
 
   useEffect(() => {
     loadDiagrams().then(setDiagrams);
@@ -24,7 +23,18 @@ export default function DiagramsListPage() {
     if (!newName.trim()) return;
     setActionError(null);
     try {
-      const id = await initNewDiagram(newName.trim(), newDesc.trim());
+      const id = uuidv4();
+      const now = new Date().toISOString();
+      await saveDiagram({
+        id,
+        name: newName.trim(),
+        description: newDesc.trim(),
+        createdAt: now,
+        updatedAt: now,
+        nodes: [],
+        edges: [],
+        mermaidCode: "graph TD\n",
+      });
       router.push(`/diagrams/${id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create diagram";

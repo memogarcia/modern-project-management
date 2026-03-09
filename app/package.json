@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev -p 8000 --turbopack",
     "build": "next build",
     "test": "next build",
-    "start": "next start",
+    "start": "next start -p 8000",
     "lint": "next lint"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "uuid": "^11.1.0",
+    "web-worker": "^1.5.0",
     "zustand": "^5.0.5"
   },
   "devDependencies": {
