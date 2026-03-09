@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { GanttChart } from "@/lib/ganttTypes";
 import { ensureDiagramsDir } from "@/lib/diagramsDir.server";
+import { listJsonFilesSafe, writeJsonFileAtomic } from "@/lib/jsonFiles.server";
 
 const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -23,12 +24,7 @@ function ganttDir(): string {
 /** GET /api/gantt — list all Gantt charts */
 export async function GET() {
   const dir = ganttDir();
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
-
-  const charts: GanttChart[] = files.map((f) => {
-    const raw = fs.readFileSync(path.join(dir, f), "utf-8");
-    return JSON.parse(raw) as GanttChart;
-  });
+  const charts = listJsonFilesSafe<GanttChart>(dir);
 
   charts.sort(
     (a, b) =>
@@ -41,7 +37,12 @@ export async function GET() {
 /** POST /api/gantt — create or update a Gantt chart */
 export async function POST(req: Request) {
   const dir = ganttDir();
-  const chart = (await req.json()) as GanttChart;
+  let chart: GanttChart;
+  try {
+    chart = (await req.json()) as GanttChart;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   if (!chart.id) {
     return NextResponse.json({ error: "Missing chart id" }, { status: 400 });
@@ -51,6 +52,6 @@ export async function POST(req: Request) {
   }
 
   const filePath = path.join(dir, `${chart.id}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(chart, null, 2), "utf-8");
+  writeJsonFileAtomic(filePath, chart);
   return NextResponse.json({ ok: true, id: chart.id });
 }

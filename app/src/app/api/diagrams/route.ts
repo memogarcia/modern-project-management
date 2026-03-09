@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Diagram } from "@/lib/types";
 import { ensureDiagramsDir } from "@/lib/diagramsDir.server";
+import { listJsonFilesSafe, writeJsonFileAtomic } from "@/lib/jsonFiles.server";
 
 const SAFE_DIAGRAM_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -22,14 +23,7 @@ function diagramsDir(): string {
 /** GET /api/diagrams — list all diagrams */
 export async function GET() {
   const DIAGRAMS_DIR = diagramsDir();
-  const files = fs
-    .readdirSync(DIAGRAMS_DIR)
-    .filter((f) => f.endsWith(".json"));
-
-  const diagrams: Diagram[] = files.map((f) => {
-    const raw = fs.readFileSync(path.join(DIAGRAMS_DIR, f), "utf-8");
-    return JSON.parse(raw) as Diagram;
-  });
+  const diagrams = listJsonFilesSafe<Diagram>(DIAGRAMS_DIR);
 
   // Sort newest first
   diagrams.sort(
@@ -43,7 +37,12 @@ export async function GET() {
 /** POST /api/diagrams — create or update a diagram */
 export async function POST(req: Request) {
   const DIAGRAMS_DIR = diagramsDir();
-  const diagram = (await req.json()) as Diagram;
+  let diagram: Diagram;
+  try {
+    diagram = (await req.json()) as Diagram;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   if (!diagram.id) {
     return NextResponse.json({ error: "Missing diagram id" }, { status: 400 });
@@ -53,6 +52,6 @@ export async function POST(req: Request) {
   }
 
   const filePath = path.join(DIAGRAMS_DIR, `${diagram.id}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(diagram, null, 2), "utf-8");
+  writeJsonFileAtomic(filePath, diagram);
   return NextResponse.json({ ok: true, id: diagram.id });
 }

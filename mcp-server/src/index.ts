@@ -9,11 +9,40 @@ import type { Diagram, GanttChart, GanttTask } from "./types.js";
 
 const storage = new DiagramStorage(process.env.DIAGRAMS_DIR);
 const ganttStorage = new GanttStorage(storage.baseDir);
+const MERMAID_NODE_ID_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 const server = new McpServer({
   name: "archdiagram",
   version: "1.0.0",
 });
+
+function escapeMermaidQuotedText(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\r?\n/g, "\\n")
+    .replace(/"/g, '\\"');
+}
+
+function sanitizeMermaidEdgeLabel(value: string): string {
+  return value.replace(/\r?\n/g, " ").replace(/\|/g, "/").trim();
+}
+
+function escapeErQuotedText(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\r?\n/g, " ")
+    .replace(/"/g, '\\"');
+}
+
+function sanitizeErToken(value: string, fallback: string): string {
+  const cleaned = value.replace(/[^A-Za-z0-9_[\](),.-]/g, "");
+  return cleaned || fallback;
+}
+
+function markDiagramFlowStale(diagram: Diagram): void {
+  diagram.nodes = [];
+  diagram.edges = [];
+}
 
 // ─── Tool: list_diagrams ─────────────────────────────────────────────
 server.tool("list_diagrams", "List all saved diagrams", {}, async () => {
@@ -116,13 +145,18 @@ server.tool(
       };
     }
 
+    const nextMermaidCode = mermaidCode ?? existing.mermaidCode;
+    const mermaidChanged = mermaidCode !== undefined && mermaidCode !== existing.mermaidCode;
     const updated: Diagram = {
       ...existing,
       name: name ?? existing.name,
       description: description ?? existing.description,
-      mermaidCode: mermaidCode ?? existing.mermaidCode,
+      mermaidCode: nextMermaidCode,
       updatedAt: new Date().toISOString(),
     };
+    if (mermaidChanged) {
+      markDiagramFlowStale(updated);
+    }
     storage.save(updated);
     return {
       content: [
@@ -166,7 +200,10 @@ server.tool(
   "Add a new node (component) to a diagram's mermaid code",
   {
     id: z.string().describe("The diagram ID"),
-    nodeId: z.string().describe("Unique node identifier (e.g. 'api_gateway')"),
+    nodeId: z
+      .string()
+      .regex(MERMAID_NODE_ID_RE, "Invalid Mermaid node ID")
+      .describe("Unique node identifier (e.g. 'api_gateway')"),
     label: z.string().describe("Display label for the node"),
     shapeType: z
       .enum([
@@ -195,6 +232,7 @@ server.tool(
     }
 
     const fullLabel = description ? `${label} - ${description}` : label;
+    const safeLabel = escapeMermaidQuotedText(fullLabel);
     const shapeMap: Record<string, (id: string, l: string) => string> = {
       service: (i, l) => `${i}["${l}"]`,
       database: (i, l) => `${i}[("${l}")]`,
@@ -210,7 +248,7 @@ server.tool(
     };
 
     const formatter = shapeMap[shapeType] ?? shapeMap.service;
-    const nodeLine = `    ${formatter(nodeId, fullLabel)}`;
+    const nodeLine = `    ${formatter(nodeId, safeLabel)}`;
 
     const lines = diagram.mermaidCode.split("\n");
     // Insert after the last node definition (before edges/style lines)
@@ -230,6 +268,7 @@ server.tool(
     lines.splice(insertIdx, 0, nodeLine);
 
     diagram.mermaidCode = lines.join("\n");
+    markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
     storage.save(diagram);
 
@@ -254,8 +293,14 @@ server.tool(
   "Add a connection (edge) between two nodes in a diagram",
   {
     id: z.string().describe("The diagram ID"),
-    source: z.string().describe("Source node ID"),
-    target: z.string().describe("Target node ID"),
+    source: z
+      .string()
+      .regex(MERMAID_NODE_ID_RE, "Invalid Mermaid node ID")
+      .describe("Source node ID"),
+    target: z
+      .string()
+      .regex(MERMAID_NODE_ID_RE, "Invalid Mermaid node ID")
+      .describe("Target node ID"),
     label: z.string().optional().describe("Optional edge label (e.g. 'HTTP', 'gRPC')"),
   },
   async ({ id, source, target, label }) => {
@@ -267,8 +312,9 @@ server.tool(
       };
     }
 
-    const edgeLine = label
-      ? `    ${source} -->|${label}| ${target}`
+    const safeEdgeLabel = label ? sanitizeMermaidEdgeLabel(label) : "";
+    const edgeLine = safeEdgeLabel
+      ? `    ${source} -->|${safeEdgeLabel}| ${target}`
       : `    ${source} --> ${target}`;
 
     const lines = diagram.mermaidCode.split("\n");
@@ -284,6 +330,7 @@ server.tool(
     lines.splice(insertIdx, 0, edgeLine);
 
     diagram.mermaidCode = lines.join("\n");
+    markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
     storage.save(diagram);
 
@@ -352,13 +399,15 @@ server.tool(
     const lines: string[] = ["erDiagram"];
 
     for (const table of tables) {
-      const safeName = table.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+      const safeName = table.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "table";
       lines.push(`    ${safeName} {`);
       for (const col of table.columns) {
+        const safeType = sanitizeErToken(col.type, "string");
+        const safeColumnName = sanitizeErToken(col.name, "column");
         const constraintStr = col.constraint
           ? ` ${col.constraint.toUpperCase()}`
           : "";
-        lines.push(`        ${col.type} ${col.name}${constraintStr}`);
+        lines.push(`        ${safeType} ${safeColumnName}${constraintStr}`);
       }
       lines.push("    }");
     }
@@ -370,10 +419,10 @@ server.tool(
         "many-to-many": "}o--o{",
       };
       for (const rel of relationships) {
-        const from = rel.from.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
-        const to = rel.to.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+        const from = rel.from.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "from_table";
+        const to = rel.to.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "to_table";
         const card = cardinalityMap[rel.cardinality ?? "one-to-many"] ?? "||--o{";
-        lines.push(`    ${from} ${card} ${to} : "${rel.label}"`);
+        lines.push(`    ${from} ${card} ${to} : "${escapeErQuotedText(rel.label)}"`);
       }
     }
 
@@ -437,15 +486,17 @@ server.tool(
       };
     }
 
-    const safeName = tableName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+    const safeName = tableName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "table";
 
     const tableLines: string[] = [];
     tableLines.push(`    ${safeName} {`);
     for (const col of columns) {
+      const safeType = sanitizeErToken(col.type, "string");
+      const safeColumnName = sanitizeErToken(col.name, "column");
       const constraintStr = col.constraint
         ? ` ${col.constraint.toUpperCase()}`
         : "";
-      tableLines.push(`        ${col.type} ${col.name}${constraintStr}`);
+      tableLines.push(`        ${safeType} ${safeColumnName}${constraintStr}`);
     }
     tableLines.push("    }");
 
@@ -480,6 +531,7 @@ server.tool(
 
     lines.splice(insertIdx, 0, ...tableLines);
     diagram.mermaidCode = lines.join("\n");
+    markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
     storage.save(diagram);
 
@@ -530,10 +582,10 @@ server.tool(
       "one-to-many": "||--o{",
       "many-to-many": "}o--o{",
     };
-    const safeFrom = from.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
-    const safeTo = to.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+    const safeFrom = from.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "from_table";
+    const safeTo = to.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "to_table";
     const card = cardinalityMap[cardinality ?? "one-to-many"] ?? "||--o{";
-    const relLine = `    ${safeFrom} ${card} ${safeTo} : "${label}"`;
+    const relLine = `    ${safeFrom} ${card} ${safeTo} : "${escapeErQuotedText(label)}"`;
 
     // Ensure erDiagram section exists
     let code = diagram.mermaidCode;
@@ -543,6 +595,7 @@ server.tool(
 
     code = code.trimEnd() + "\n" + relLine + "\n";
     diagram.mermaidCode = code;
+    markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
     storage.save(diagram);
 
@@ -631,7 +684,7 @@ server.tool(
             .array(
               z.object({
                 label: z.string(),
-                url: z.string(),
+                url: z.string().url(),
                 type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]),
               })
             )
@@ -708,7 +761,7 @@ server.tool(
       .array(
         z.object({
           label: z.string(),
-          url: z.string(),
+          url: z.string().url(),
           type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]),
         })
       )
@@ -818,7 +871,7 @@ server.tool(
     chartId: z.string().describe("The Gantt chart ID"),
     taskId: z.string().describe("The task ID"),
     label: z.string().describe("Link label (e.g. 'PROJ-123')"),
-    url: z.string().describe("Link URL"),
+    url: z.string().url().describe("Link URL"),
     type: z
       .enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"])
       .describe("Type of link"),

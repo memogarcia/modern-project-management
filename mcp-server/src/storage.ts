@@ -9,6 +9,39 @@ function isSafeDiagramId(id: string): boolean {
   return SAFE_DIAGRAM_ID_RE.test(id);
 }
 
+function readJsonFile<T>(filePath: string): T {
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Corrupt JSON file: ${filePath}`);
+    }
+    throw error;
+  }
+}
+
+function writeJsonFileAtomic(filePath: string, value: unknown): void {
+  const dir = path.dirname(filePath);
+  const baseName = path.basename(filePath);
+  const tempPath = path.join(
+    dir,
+    `.${baseName}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+  );
+
+  try {
+    fs.writeFileSync(tempPath, JSON.stringify(value, null, 2), "utf-8");
+    fs.renameSync(tempPath, filePath);
+  } catch (error) {
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch {
+      // ignore cleanup failure
+    }
+    throw error;
+  }
+}
+
 function resolveDiagramsDir(explicitDir?: string): string {
   const fromEnv = explicitDir ?? process.env.DIAGRAMS_DIR;
 
@@ -68,18 +101,28 @@ export class DiagramStorage {
 
   list(): Diagram[] {
     const files = fs.readdirSync(this.dir).filter((f) => f.endsWith(".json"));
-    return files.map((f) => {
-      const raw = fs.readFileSync(path.join(this.dir, f), "utf-8");
-      return JSON.parse(raw) as Diagram;
-    });
+    const diagrams: Diagram[] = [];
+    for (const fileName of files) {
+      const filePath = path.join(this.dir, fileName);
+      try {
+        diagrams.push(readJsonFile<Diagram>(filePath));
+      } catch (error) {
+        console.error(`Skipping unreadable diagram file: ${filePath}`, error);
+      }
+    }
+    return diagrams;
   }
 
   get(id: string): Diagram | null {
     const fp = this.filePath(id);
     if (!fp) return null;
     if (!fs.existsSync(fp)) return null;
-    const raw = fs.readFileSync(fp, "utf-8");
-    return JSON.parse(raw) as Diagram;
+    try {
+      return readJsonFile<Diagram>(fp);
+    } catch (error) {
+      console.error(`Failed to read diagram file: ${fp}`, error);
+      return null;
+    }
   }
 
   save(diagram: Diagram): void {
@@ -87,7 +130,7 @@ export class DiagramStorage {
     if (!fp) {
       throw new Error(`Invalid diagram id: ${diagram.id}`);
     }
-    fs.writeFileSync(fp, JSON.stringify(diagram, null, 2), "utf-8");
+    writeJsonFileAtomic(fp, diagram);
   }
 
   delete(id: string): boolean {
@@ -117,18 +160,28 @@ export class GanttStorage {
   list(): GanttChart[] {
     if (!fs.existsSync(this.dir)) return [];
     const files = fs.readdirSync(this.dir).filter((f) => f.endsWith(".json"));
-    return files.map((f) => {
-      const raw = fs.readFileSync(path.join(this.dir, f), "utf-8");
-      return JSON.parse(raw) as GanttChart;
-    });
+    const charts: GanttChart[] = [];
+    for (const fileName of files) {
+      const filePath = path.join(this.dir, fileName);
+      try {
+        charts.push(readJsonFile<GanttChart>(filePath));
+      } catch (error) {
+        console.error(`Skipping unreadable Gantt chart file: ${filePath}`, error);
+      }
+    }
+    return charts;
   }
 
   get(id: string): GanttChart | null {
     const fp = this.filePath(id);
     if (!fp) return null;
     if (!fs.existsSync(fp)) return null;
-    const raw = fs.readFileSync(fp, "utf-8");
-    return JSON.parse(raw) as GanttChart;
+    try {
+      return readJsonFile<GanttChart>(fp);
+    } catch (error) {
+      console.error(`Failed to read Gantt chart file: ${fp}`, error);
+      return null;
+    }
   }
 
   save(chart: GanttChart): void {
@@ -136,7 +189,7 @@ export class GanttStorage {
     if (!fp) {
       throw new Error(`Invalid chart id: ${chart.id}`);
     }
-    fs.writeFileSync(fp, JSON.stringify(chart, null, 2), "utf-8");
+    writeJsonFileAtomic(fp, chart);
   }
 
   delete(id: string): boolean {

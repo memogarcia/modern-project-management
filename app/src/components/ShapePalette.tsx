@@ -3,11 +3,13 @@
 import { useDiagramStore } from "@/store/diagramStore";
 import { getAllShapeTypes, getShapeDef } from "@/lib/types";
 import ShapeIcon from "@/components/ShapeIcon";
+import { Type } from "lucide-react";
 
 export default function ShapePalette() {
   const addNode = useDiagramStore((s) => s.addNode);
   const addDatabaseSchemaNode = useDiagramStore((s) => s.addDatabaseSchemaNode);
   const addGroupNode = useDiagramStore((s) => s.addGroupNode);
+  const addTextNode = useDiagramStore((s) => s.addTextNode);
   const shapeTypes = getAllShapeTypes();
 
   return (
@@ -122,6 +124,26 @@ export default function ShapePalette() {
         onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
       >
         <ShapeIcon type="database" size={24} />
+      </button>
+
+      <button
+        onClick={() => addTextNode("Text")}
+        title="Text"
+        style={{
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          padding: "6px",
+          borderRadius: "8px",
+          width: "100%",
+          display: "flex",
+          justifyContent: "center",
+          transition: "background 0.2s",
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface)"}
+        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+      >
+        <Type size={22} strokeWidth={2} style={{ opacity: 0.85 }} />
       </button>
 
     </div>

@@ -10,6 +10,7 @@ import { Plus, Trash2, ArrowLeft, FileText } from "lucide-react";
 export default function DiagramsListPage() {
   const router = useRouter();
   const [diagrams, setDiagrams] = useState<DiagramMeta[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -21,15 +22,29 @@ export default function DiagramsListPage() {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    const id = await initNewDiagram(newName.trim(), newDesc.trim());
-    router.push(`/diagrams/${id}`);
+    setActionError(null);
+    try {
+      const id = await initNewDiagram(newName.trim(), newDesc.trim());
+      router.push(`/diagrams/${id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create diagram";
+      setActionError(message);
+      console.error("Failed to create diagram", error);
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this diagram?")) return;
-    await deleteDiagram(id);
-    const updated = await loadDiagrams();
-    setDiagrams(updated);
+    setActionError(null);
+    try {
+      await deleteDiagram(id);
+      const updated = await loadDiagrams();
+      setDiagrams(updated);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete diagram";
+      setActionError(message);
+      console.error("Failed to delete diagram", error);
+    }
   };
 
   return (
@@ -105,6 +120,22 @@ export default function DiagramsListPage() {
           </button>
         </div>
       </header>
+
+      {actionError && (
+        <div
+          role="alert"
+          style={{
+            padding: "10px 40px",
+            borderBottom: "1px solid var(--border)",
+            background: "color-mix(in srgb, var(--danger) 10%, var(--panel-bg))",
+            color: "var(--danger)",
+            fontSize: "13px",
+            fontWeight: 600,
+          }}
+        >
+          {actionError}
+        </div>
+      )}
 
       {/* Modern Create modal */}
       {showCreate && (

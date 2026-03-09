@@ -209,10 +209,20 @@ export interface DatabaseSchemaNodeData {
   [key: string]: unknown;
 }
 
+// ─── Text Node Data ────────────────────────────────────────────────
+export interface TextNodeData {
+  text: string;
+  fontSize?: number;
+  color?: string;
+  backgroundColor?: string;
+  [key: string]: unknown;
+}
+
 export type ArchNode = Node<ArchNodeData, "archNode">;
 export type DatabaseSchemaNode = Node<DatabaseSchemaNodeData, "databaseSchemaNode">;
 export type GroupNode = Node<GroupNodeData, "groupNode">;
-export type DiagramNode = ArchNode | DatabaseSchemaNode | GroupNode;
+export type TextNode = Node<TextNodeData, "textNode">;
+export type DiagramNode = ArchNode | DatabaseSchemaNode | GroupNode | TextNode;
 
 export type ArchEdge = Edge & {
   data?: {

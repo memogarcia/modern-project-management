@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { GanttChart } from "@/lib/ganttTypes";
 import { ensureDiagramsDir } from "@/lib/diagramsDir.server";
+import { CorruptJsonFileError, readJsonFile } from "@/lib/jsonFiles.server";
 
 const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -33,8 +34,15 @@ export async function GET(
   if (!fs.existsSync(fp)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  const chart = JSON.parse(fs.readFileSync(fp, "utf-8")) as GanttChart;
-  return NextResponse.json(chart);
+  try {
+    const chart = readJsonFile<GanttChart>(fp);
+    return NextResponse.json(chart);
+  } catch (error) {
+    if (error instanceof CorruptJsonFileError) {
+      return NextResponse.json({ error: "Corrupt Gantt chart file" }, { status: 500 });
+    }
+    throw error;
+  }
 }
 
 /** DELETE /api/gantt/:id */

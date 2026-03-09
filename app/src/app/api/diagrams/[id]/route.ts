@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Diagram } from "@/lib/types";
 import { ensureDiagramsDir } from "@/lib/diagramsDir.server";
+import { CorruptJsonFileError, readJsonFile } from "@/lib/jsonFiles.server";
 
 const SAFE_DIAGRAM_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -29,8 +30,15 @@ export async function GET(
   if (!fs.existsSync(fp)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  const diagram = JSON.parse(fs.readFileSync(fp, "utf-8")) as Diagram;
-  return NextResponse.json(diagram);
+  try {
+    const diagram = readJsonFile<Diagram>(fp);
+    return NextResponse.json(diagram);
+  } catch (error) {
+    if (error instanceof CorruptJsonFileError) {
+      return NextResponse.json({ error: "Corrupt diagram file" }, { status: 500 });
+    }
+    throw error;
+  }
 }
 
 /** DELETE /api/diagrams/:id — delete a diagram */

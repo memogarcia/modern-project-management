@@ -89,8 +89,20 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
     borderTop: idx === 0 ? "1px solid var(--border, rgba(0,0,0,0.05))" : "none",
   });
 
+  const targetHandleStyle: CSSProperties = {
+    width: 8,
+    height: 8,
+    opacity: 0,
+    pointerEvents: "none",
+  };
+
   return (
     <div style={containerStyle}>
+      <Handle type="target" id="t-top" position={Position.Top} style={targetHandleStyle} />
+      <Handle type="target" id="t-left" position={Position.Left} style={targetHandleStyle} />
+      <Handle type="target" id="t-bottom" position={Position.Bottom} style={targetHandleStyle} />
+      <Handle type="target" id="t-right" position={Position.Right} style={targetHandleStyle} />
+
       <Handle type="source" id="top" position={Position.Top} style={{ width: 8, height: 8 }} />
       <Handle type="source" id="left" position={Position.Left} style={{ width: 8, height: 8 }} />
 

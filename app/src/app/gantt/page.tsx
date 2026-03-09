@@ -10,6 +10,7 @@ import { Plus, Trash2, ArrowLeft, Calendar } from "lucide-react";
 export default function GanttListPage() {
   const router = useRouter();
   const [charts, setCharts] = useState<GanttChartMeta[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -21,15 +22,29 @@ export default function GanttListPage() {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    const id = await initNewChart(newName.trim(), newDesc.trim());
-    router.push(`/gantt/${id}`);
+    setActionError(null);
+    try {
+      const id = await initNewChart(newName.trim(), newDesc.trim());
+      router.push(`/gantt/${id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create Gantt chart";
+      setActionError(message);
+      console.error("Failed to create Gantt chart", error);
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this Gantt chart?")) return;
-    await deleteGanttChart(id);
-    const updated = await loadGanttCharts();
-    setCharts(updated);
+    setActionError(null);
+    try {
+      await deleteGanttChart(id);
+      const updated = await loadGanttCharts();
+      setCharts(updated);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete Gantt chart";
+      setActionError(message);
+      console.error("Failed to delete Gantt chart", error);
+    }
   };
 
   return (
@@ -92,6 +107,22 @@ export default function GanttListPage() {
           </button>
         </div>
       </header>
+
+      {actionError && (
+        <div
+          role="alert"
+          style={{
+            padding: "10px 40px",
+            borderBottom: "1px solid var(--border)",
+            background: "color-mix(in srgb, var(--danger) 10%, var(--panel-bg))",
+            color: "var(--danger)",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          {actionError}
+        </div>
+      )}
 
       {/* Modern Create modal */}
       {showCreate && (

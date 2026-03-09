@@ -88,8 +88,19 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
     height: 8,
   };
 
+  const targetHandleStyle: CSSProperties = {
+    ...handleStyle,
+    opacity: 0,
+    pointerEvents: "none",
+  };
+
   return (
     <div style={style} onDoubleClick={handleDoubleClick} className={isAnimated ? "node-pulse-animation" : ""}>
+      <Handle type="target" id="t-top" position={Position.Top} style={targetHandleStyle} />
+      <Handle type="target" id="t-left" position={Position.Left} style={targetHandleStyle} />
+      <Handle type="target" id="t-bottom" position={Position.Bottom} style={targetHandleStyle} />
+      <Handle type="target" id="t-right" position={Position.Right} style={targetHandleStyle} />
+
       <Handle type="source" id="top" position={Position.Top} style={handleStyle} />
       <Handle type="source" id="left" position={Position.Left} style={handleStyle} />
       <div

@@ -91,7 +91,7 @@ export function flowToMermaid(nodes: DiagramNode[], edges: ArchEdge[]): string {
     lines.push("");
     const archIds = new Set(archNodes.map((n) => n.id));
     for (const edge of edges) {
-      if (!archIds.has(edge.source) && !archIds.has(edge.target)) continue;
+      if (!archIds.has(edge.source) || !archIds.has(edge.target)) continue;
       const rawLabel = edge.data?.label ?? edge.label;
       if (rawLabel) {
         const label = typeof rawLabel === "string" ? rawLabel : String(rawLabel);

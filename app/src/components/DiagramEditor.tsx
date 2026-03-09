@@ -37,16 +37,26 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const onEdgesChange = useDiagramStore((s) => s.onEdgesChange);
   const onConnect = useDiagramStore((s) => s.onConnect);
   const addNode = useDiagramStore((s) => s.addNode);
+  const currentDiagramId = useDiagramStore((s) => s.diagramId);
   const diagramName = useDiagramStore((s) => s.diagramName);
+  const isDiagramLoading = useDiagramStore((s) => s.isLoading);
+  const diagramLoadError = useDiagramStore((s) => s.loadError);
+  const diagramPersistError = useDiagramStore((s) => s.persistError);
   const loadDiagramFn = useDiagramStore((s) => s.loadDiagram);
   const mermaidCode = useDiagramStore((s) => s.mermaidCode);
   const syncMermaidToFlow = useDiagramStore((s) => s.syncMermaidToFlow);
   const persist = useDiagramStore((s) => s.persist);
   const deleteSelected = useDiagramStore((s) => s.deleteSelected);
+  const undo = useDiagramStore((s) => s.undo);
+  const redo = useDiagramStore((s) => s.redo);
+  const copySelected = useDiagramStore((s) => s.copySelected);
+  const cutSelected = useDiagramStore((s) => s.cutSelected);
+  const pasteClipboard = useDiagramStore((s) => s.pasteClipboard);
   const updateNodeData = useDiagramStore((s) => s.updateNodeData);
   const updateEdge = useDiagramStore((s) => s.updateEdge);
   const groupSelectedNodes = useDiagramStore((s) => s.groupSelectedNodes);
   const ungroupSelectedNodes = useDiagramStore((s) => s.ungroupSelectedNodes);
+  const runAutoLayout = useDiagramStore((s) => s.runAutoLayout);
   const reparentNode = useDiagramStore((s) => s.reparentNode);
   const resolveOverlapsForNode = useDiagramStore((s) => s.resolveOverlapsForNode);
   const sendToFront = useDiagramStore((s) => s.sendToFront);
@@ -58,6 +68,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   // Modal state for editing nodes and edges
   const [editingNode, setEditingNode] = useState<ArchNode | null>(null);
   const [editingEdge, setEditingEdge] = useState<ArchEdge | null>(null);
+  const [hasRequestedLoad, setHasRequestedLoad] = useState(false);
 
   // ─── Resizable Mermaid panel ──────────────────────────────────────
   const widthStorageKey = "archdiagram.mermaid.width";
@@ -71,6 +82,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(380);
+  const lastPointerFlowPosRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     panelWidthRef.current = panelWidth;
@@ -137,12 +149,14 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   }, [isMermaidCollapsed, panelWidth, widthStorageKey]);
 
   useEffect(() => {
-    loadDiagramFn(diagramId);
+    setHasRequestedLoad(true);
+    void loadDiagramFn(diagramId);
   }, [diagramId, loadDiagramFn]);
 
   // Auto-parse mermaid → flow nodes when diagram has mermaid code but no nodes
   // (e.g. diagrams created by the MCP server that only have mermaid code)
   useEffect(() => {
+    if (isDiagramLoading || diagramLoadError) return;
     if (nodes.length === 0 && mermaidCode && mermaidCode.trim() !== "graph TD\n" && mermaidCode.trim() !== "graph TD") {
       void syncMermaidToFlow().then(() => {
         requestAnimationFrame(() => {
@@ -150,7 +164,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         });
       });
     }
-  }, [nodes.length, mermaidCode, syncMermaidToFlow, fitView]);
+  }, [nodes.length, mermaidCode, syncMermaidToFlow, fitView, isDiagramLoading, diagramLoadError]);
 
   // Auto-save on changes (debounced)
   useEffect(() => {
@@ -160,13 +174,112 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
 
   // Keyboard shortcuts
   useEffect(() => {
+    const isTextInput = (target: EventTarget | null) => {
+      if (!target || !(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (target.isContentEditable) return true;
+      if (target.closest(".monaco-editor")) return true;
+      return false;
+    };
+
+    const isValidClipboardPayload = (value: unknown): value is { version: 1; nodes: unknown[]; edges: unknown[] } => {
+      if (!value || typeof value !== "object") return false;
+      const v = value as { version?: unknown; nodes?: unknown; edges?: unknown };
+      return v.version === 1 && Array.isArray(v.nodes) && Array.isArray(v.edges);
+    };
+
     const handler = (e: KeyboardEvent) => {
+      if (isTextInput(e.target)) return;
+
       // CMD+S / Ctrl+S → save diagram
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         persist();
         return;
       }
+
+      // CMD+Z / Ctrl+Z → undo (Shift → redo)
+      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      // Ctrl+Y → redo (Windows/Linux)
+      if (e.ctrlKey && !e.metaKey && (e.key === "y" || e.key === "Y")) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      // CMD+L / Ctrl+L → auto-layout (Shift → top-to-bottom)
+      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
+        e.preventDefault();
+        const direction = e.shiftKey ? "DOWN" : "RIGHT";
+        const closest = e.altKey;
+        void runAutoLayout(direction, closest ? "CLOSEST" : "ORIENTED").then(() => {
+          requestAnimationFrame(() => {
+            void fitView({ padding: 0.18, duration: 250 });
+          });
+        });
+        return;
+      }
+
+      // CMD+C / Ctrl+C → copy selected
+      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
+        e.preventDefault();
+        const payload = copySelected();
+        if (!payload) return;
+        try {
+          void navigator.clipboard?.writeText(JSON.stringify(payload));
+        } catch {
+          // ignore
+        }
+        return;
+      }
+
+      // CMD+X / Ctrl+X → cut selected
+      if ((e.metaKey || e.ctrlKey) && e.key === "x") {
+        e.preventDefault();
+        const payload = cutSelected();
+        if (!payload) return;
+        try {
+          void navigator.clipboard?.writeText(JSON.stringify(payload));
+        } catch {
+          // ignore
+        }
+        return;
+      }
+
+      // CMD+V / Ctrl+V → paste
+      if ((e.metaKey || e.ctrlKey) && e.key === "v") {
+        e.preventDefault();
+        const fallbackPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+        const pos = lastPointerFlowPosRef.current ?? fallbackPos;
+
+        const pasteFromSystemClipboard = async () => {
+          try {
+            const text = await navigator.clipboard?.readText?.();
+            if (!text) {
+              pasteClipboard(pos);
+              return;
+            }
+            const parsed = JSON.parse(text) as unknown;
+            if (isValidClipboardPayload(parsed)) {
+              pasteClipboard(pos, parsed as any);
+              return;
+            }
+          } catch {
+            // ignore
+          }
+          pasteClipboard(pos);
+        };
+
+        void pasteFromSystemClipboard();
+        return;
+      }
+
       // CMD+G / Ctrl+G → group selected nodes
       if ((e.metaKey || e.ctrlKey) && e.key === "g" && !e.shiftKey) {
         e.preventDefault();
@@ -194,14 +307,12 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         return;
       }
       if (e.key === "Delete" || e.key === "Backspace") {
-        const tag = (e.target as HTMLElement)?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA") return;
         deleteSelected();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [deleteSelected, persist, groupSelectedNodes, ungroupSelectedNodes, sendToFront, sendToBack, sendForward, sendBackward]);
+  }, [deleteSelected, persist, undo, redo, runAutoLayout, fitView, groupSelectedNodes, ungroupSelectedNodes, sendToFront, sendToBack, sendForward, sendBackward, copySelected, cutSelected, pasteClipboard, screenToFlowPosition]);
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -304,6 +415,52 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
     [getNodes, getInternalNode, reparentNode, resolveOverlapsForNode],
   );
 
+  if (!hasRequestedLoad || isDiagramLoading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+          background: "var(--background)",
+          color: "var(--text-muted)",
+        }}
+      >
+        Loading diagram...
+      </div>
+    );
+  }
+
+  if (!currentDiagramId) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+          gap: 12,
+          background: "var(--background)",
+          color: "var(--text-muted)",
+        }}
+      >
+        <div>{diagramLoadError ?? "Diagram not found"}</div>
+        <a
+          href="/diagrams"
+          style={{
+            color: "var(--accent)",
+            textDecoration: "none",
+            fontWeight: 600,
+          }}
+        >
+          Back to diagrams
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--background)" }}>
       {/* Header */}
@@ -344,6 +501,22 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         </div>
       </div>
 
+      {diagramPersistError && (
+        <div
+          style={{
+            padding: "8px 20px",
+            background: "color-mix(in srgb, var(--danger) 12%, var(--panel-bg))",
+            color: "var(--danger)",
+            borderBottom: "1px solid color-mix(in srgb, var(--danger) 28%, var(--border))",
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+          role="alert"
+        >
+          Save failed: {diagramPersistError}
+        </div>
+      )}
+
       {/* Main content */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
 
@@ -356,6 +529,12 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            onPaneMouseMove={(e) => {
+              lastPointerFlowPosRef.current = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+            }}
+            onPaneClick={(e) => {
+              lastPointerFlowPosRef.current = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+            }}
             onDragOver={onDragOver}
             onDrop={onDrop}
             onNodeDoubleClick={onNodeDoubleClick}
@@ -371,6 +550,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             snapToGrid
             snapGrid={[20, 20]}
             deleteKeyCode="Delete"
+            selectionKeyCode="Shift"
             multiSelectionKeyCode="Shift"
             style={{ background: "transparent" }}
             proOptions={{ hideAttribution: true }}

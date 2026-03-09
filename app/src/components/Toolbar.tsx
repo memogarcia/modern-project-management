@@ -5,6 +5,8 @@ import { toSvg } from "html-to-image";
 import { useReactFlow } from "@xyflow/react";
 import {
   LayoutGrid,
+  Undo2,
+  Redo2,
   Trash2,
   Save,
   Camera,
@@ -20,6 +22,10 @@ import { useTheme } from "@/components/ThemeProvider";
 
 export default function Toolbar() {
   const runAutoLayout = useDiagramStore((s) => s.runAutoLayout);
+  const canUndo = useDiagramStore((s) => s.canUndo);
+  const canRedo = useDiagramStore((s) => s.canRedo);
+  const undo = useDiagramStore((s) => s.undo);
+  const redo = useDiagramStore((s) => s.redo);
   const deleteSelected = useDiagramStore((s) => s.deleteSelected);
   const persist = useDiagramStore((s) => s.persist);
   const diagramName = useDiagramStore((s) => s.diagramName);
@@ -30,8 +36,8 @@ export default function Toolbar() {
   const { theme, toggleTheme } = useTheme();
   const { fitView } = useReactFlow();
 
-  const handleAutoLayout = useCallback(async () => {
-    await runAutoLayout();
+  const handleAutoLayout = useCallback(async (direction: "RIGHT" | "DOWN", closest: boolean) => {
+    await runAutoLayout(direction, closest ? "CLOSEST" : "ORIENTED");
     requestAnimationFrame(() => {
       void fitView({ padding: 0.18, duration: 250 });
     });
@@ -190,9 +196,9 @@ export default function Toolbar() {
       }}
     >
       <button
-        onClick={() => void handleAutoLayout()}
+        onClick={(e) => void handleAutoLayout(e.shiftKey ? "DOWN" : "RIGHT", e.altKey)}
         style={btnStyle}
-        title="Auto-arrange nodes (⌘L)"
+        title="Auto-arrange left-to-right (⌘L). Shift: top-to-bottom. Alt/Option: closest connectors."
         onMouseEnter={(e) => {
           e.currentTarget.style.background = "var(--surface-hover)";
           e.currentTarget.style.color = "var(--accent)";
@@ -203,6 +209,50 @@ export default function Toolbar() {
         }}
       >
         <LayoutGrid size={18} strokeWidth={2} />
+      </button>
+
+      <button
+        onClick={undo}
+        disabled={!canUndo}
+        style={{
+          ...btnStyle,
+          opacity: canUndo ? 1 : 0.35,
+          cursor: canUndo ? "pointer" : "not-allowed",
+        }}
+        title="Undo (⌘Z)"
+        onMouseEnter={(e) => {
+          if (!canUndo) return;
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
+      >
+        <Undo2 size={18} strokeWidth={2} />
+      </button>
+
+      <button
+        onClick={redo}
+        disabled={!canRedo}
+        style={{
+          ...btnStyle,
+          opacity: canRedo ? 1 : 0.35,
+          cursor: canRedo ? "pointer" : "not-allowed",
+        }}
+        title="Redo (⇧⌘Z)"
+        onMouseEnter={(e) => {
+          if (!canRedo) return;
+          e.currentTarget.style.background = "var(--surface-hover)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--foreground)";
+        }}
+      >
+        <Redo2 size={18} strokeWidth={2} />
       </button>
 
       <div style={separatorStyle} />

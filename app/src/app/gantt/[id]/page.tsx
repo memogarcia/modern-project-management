@@ -26,6 +26,8 @@ export default function GanttDetailPage() {
   const id = params.id as string;
 
   const chart = useGanttStore((s) => s.chart);
+  const loadError = useGanttStore((s) => s.loadError);
+  const persistError = useGanttStore((s) => s.persistError);
   const selectedTaskId = useGanttStore((s) => s.selectedTaskId);
   const loadChart = useGanttStore((s) => s.loadChart);
   const addTask = useGanttStore((s) => s.addTask);
@@ -43,7 +45,8 @@ export default function GanttDetailPage() {
   );
 
   useEffect(() => {
-    loadChart(id).then(() => setLoading(false));
+    setLoading(true);
+    void loadChart(id).finally(() => setLoading(false));
   }, [id, loadChart]);
 
   const selectedTask = useMemo(
@@ -75,7 +78,7 @@ export default function GanttDetailPage() {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, background: "var(--background)", color: "var(--text-muted)", gap: 16 }}>
         <AlertCircle size={48} style={{ color: "var(--text-muted)", opacity: 0.5 }} />
-        <div>Gantt chart not found</div>
+        <div>{loadError ?? "Gantt chart not found"}</div>
         <button
           onClick={() => router.push(pageView === "calendar" ? "/calendar" : "/gantt")}
           style={{ padding: "8px 16px", background: "var(--accent)", color: "var(--accent-foreground)", border: "none", borderRadius: 6, cursor: "pointer" }}
@@ -244,6 +247,23 @@ export default function GanttDetailPage() {
           + Add Task
         </button>
       </div>
+
+      {persistError && (
+        <div
+          role="alert"
+          style={{
+            padding: "8px 20px",
+            borderBottom: "1px solid var(--border)",
+            background: "color-mix(in srgb, var(--danger) 12%, var(--panel-bg))",
+            color: "var(--danger)",
+            fontSize: 12,
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          Save failed: {persistError}
+        </div>
+      )}
 
       {/* Main view: Gantt or Calendar */}
       <div style={{ flex: 1, overflow: "hidden" }}>
