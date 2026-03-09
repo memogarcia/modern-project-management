@@ -60,32 +60,41 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
     }
   }, [commitRename]);
 
+  const borderRadius = shape.mermaidShape === "cylinder" ? "12px 12px 24px 24px" :
+    shape.mermaidShape === "stadium" ? "35px" :
+      shape.mermaidShape === "diamond" ? "8px" :
+        shape.mermaidShape === "hexagon" ? "4px" : "10px";
+
+  const innerHighlight = textColor === "#ffffff"
+    ? "inset 0 1px 0 0 rgba(255,255,255,0.08)"
+    : "inset 0 1px 0 0 rgba(255,255,255,0.5)";
+
   const style: CSSProperties = {
-    background: nodeBg,
-    border: `2px solid ${selected ? "var(--accent, #3b82f6)" : nodeBorder}`,
-    borderRadius: shape.mermaidShape === "cylinder" ? "12px 12px 24px 24px" :
-      shape.mermaidShape === "stadium" ? "35px" :
-        shape.mermaidShape === "diamond" ? "8px" :
-          shape.mermaidShape === "hexagon" ? "4px" : "8px",
-    padding: "12px 16px",
+    background: `linear-gradient(180deg, ${nodeBg} 0%, color-mix(in srgb, ${nodeBg} 92%, black) 100%)`,
+    border: `1.5px solid ${selected ? "var(--accent, #3b82f6)" : nodeBorder}`,
+    borderRadius,
+    padding: "14px 20px",
     minWidth: shape.defaultWidth,
     minHeight: shape.defaultHeight,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: "4px",
+    gap: "6px",
     boxShadow: selected
       ? `var(--node-shadow-selected)`
-      : `var(--node-shadow)`,
-    transition: "box-shadow 0.15s, border-color 0.15s",
+      : `var(--node-shadow), ${innerHighlight}`,
+    transition: "box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease",
     cursor: editing ? "text" : "grab",
     transform: shape.mermaidShape === "diamond" ? "rotate(0deg)" : undefined,
+    backdropFilter: "blur(8px)",
   };
 
   const handleStyle: CSSProperties = {
-    width: 8,
-    height: 8,
+    width: 10,
+    height: 10,
+    opacity: 0.4,
+    transition: "opacity 0.15s ease, width 0.15s ease, height 0.15s ease",
   };
 
   const targetHandleStyle: CSSProperties = {
@@ -107,11 +116,17 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
         style={{
           lineHeight: 1,
           filter: textColor === "#ffffff" ? "drop-shadow(0 1px 2px rgba(0,0,0,0.3))" : "none",
+          background: textColor === "#ffffff" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
+          borderRadius: "50%",
+          padding: "5px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         <ShapeIcon
           type={data.shapeType}
-          size={20}
+          size={18}
           color={textColor}
           strokeWidth={1.5}
         />
@@ -141,9 +156,10 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
           style={{
             fontWeight: 600,
             fontSize: "13px",
+            letterSpacing: "-0.01em",
             color: textColor,
             textAlign: "center",
-            lineHeight: 1.2,
+            lineHeight: 1.3,
             maxWidth: shape.defaultWidth - 32,
             whiteSpace: "pre-line",
             overflowWrap: "anywhere",

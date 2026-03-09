@@ -24,8 +24,8 @@
   --scrollbar-thumb: #3f3f46;
   --scrollbar-thumb-hover: #52525b;
   --modal-overlay: rgba(0, 0, 0, 0.8);
-  --node-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --node-shadow-selected: 0 0 0 2px var(--accent);
+  --node-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 2px 6px 0 rgba(0, 0, 0, 0.2), 0 4px 12px -2px rgba(0, 0, 0, 0.15), 0 8px 24px -4px rgba(0, 0, 0, 0.1);
+  --node-shadow-selected: 0 0 0 2px var(--accent), 0 4px 16px 0 rgba(0, 0, 0, 0.3), 0 8px 32px -4px rgba(0, 0, 0, 0.2);
   --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
   --card-shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
   --glass-bg: rgba(9, 9, 11, 0.8);
@@ -59,8 +59,8 @@
   --scrollbar-thumb: #d4d4d8;
   --scrollbar-thumb-hover: #a1a1aa;
   --modal-overlay: rgba(0, 0, 0, 0.4);
-  --node-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --node-shadow-selected: 0 0 0 2px var(--accent);
+  --node-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04), 0 2px 6px 0 rgba(0, 0, 0, 0.05), 0 4px 12px -2px rgba(0, 0, 0, 0.06), 0 8px 24px -4px rgba(0, 0, 0, 0.04);
+  --node-shadow-selected: 0 0 0 2px var(--accent), 0 4px 12px 0 rgba(0, 0, 0, 0.1), 0 8px 24px -4px rgba(0, 0, 0, 0.08);
   --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
   --card-shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
   --glass-bg: rgba(255, 255, 255, 0.8);
@@ -127,8 +127,33 @@ select:focus {
 
 .react-flow__edge-path {
   stroke: var(--edge-color);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--foreground);
   stroke-width: 2;
-  transition: stroke 0.15s ease, stroke-width 0.15s ease;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.1));
+}
+
+/* Subtle lift effect on node hover */
+.react-flow__node:hover {
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.12));
+}
+
+.react-flow__edge-text {
+  font-size: 11px;
+  fill: var(--text-muted);
+  font-weight: 500;
+}
+
+.react-flow__node:hover .react-flow__handle {
+  opacity: 1;
+  width: 12px;
+  height: 12px;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {

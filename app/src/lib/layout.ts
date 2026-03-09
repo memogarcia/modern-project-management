@@ -6,44 +6,18 @@ import type {
   TextNodeData,
 } from "@/lib/types";
 import { getShapeDef } from "@/lib/types";
-
-// Lazy-load ELK to keep the initial bundle small.
-// Uses the standard 'elkjs' entry (elk-api.js ~9KB + web worker) instead
-// of 'elkjs/lib/elk.bundled.js' (~1.6MB) which crashes Turbopack.
-// Requires 'web-worker' package for the worker thread support.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _elkInstance: any = null;
-
-async function getElk() {
-  if (!_elkInstance) {
-    const ELK = (await import("elkjs")).default;
-    _elkInstance = new ELK();
-  }
-  return _elkInstance;
-}
+import dagre from "dagre";
 
 export type LayoutDirection = "DOWN" | "RIGHT";
 
-export type AutoLayoutStrategy = "RELAX" | "ELK";
+export type AutoLayoutStrategy = "RELAX" | "DAGRE";
 
-const DEFAULT_LAYOUT_OPTIONS_BASE = {
-  "elk.algorithm": "layered",
-  "elk.edgeRouting": "ORTHOGONAL",
-  "elk.spacing.nodeNode": "60",
-  "elk.spacing.edgeNode": "40",
-  "elk.spacing.componentComponent": "120",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "80",
-  "elk.layered.spacing.edgeNodeBetweenLayers": "40",
-  "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
-  "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+const DAGRE_DEFAULTS = {
+  nodeSep: 100,
+  rankSep: 160,
+  edgeSep: 40,
+  ranker: "network-simplex" as const,
 };
-
-function layoutOptions(direction: LayoutDirection) {
-  return {
-    ...DEFAULT_LAYOUT_OPTIONS_BASE,
-    "elk.direction": direction,
-  };
-}
 
 function estimateNodeSize(node: DiagramNode): { width: number; height: number } {
   const explicitW = typeof node.width === "number" ? node.width : undefined;
@@ -106,7 +80,6 @@ function fallbackGridLayout(nodes: DiagramNode[], direction: LayoutDirection): D
   const yGap = 90;
 
   const cols = Math.max(1, Math.ceil(Math.sqrt(sorted.length)));
-  const rows = Math.max(1, Math.ceil(sorted.length / cols));
 
   const gridW = maxW + xGap;
   const gridH = maxH + yGap;
@@ -277,12 +250,12 @@ function relaxLayoutFromCurrentPositions(
 
   const simById = new Map(sim.map((n) => [n.id, n]));
 
-  const padding = 26;
+  const padding = 40;
   const iterations = 90;
   const damping = 0.78;
   const anchorStrength = lockedNodeIds.size > 0 ? 0.04 : 0.065;
   const linkStrength = 0.012;
-  const linkDistance = direction === "RIGHT" ? 220 : 190;
+  const linkDistance = direction === "RIGHT" ? 280 : 240;
 
   for (let iter = 0; iter < iterations; iter++) {
     // Collision / overlap resolution (O(n^2), fine for typical diagrams).
@@ -399,66 +372,57 @@ function relaxLayoutFromCurrentPositions(
   });
 }
 
-async function elkLayeredLayout(
+/**
+ * Dagre-based hierarchical layout — matches verachi's approach.
+ * Uses dagre for clean top-to-bottom or left-to-right ranked layout.
+ */
+function dagreLayout(
   nodes: DiagramNode[],
   edges: ArchEdge[],
   direction: LayoutDirection
-): Promise<DiagramNode[]> {
-  const elkNodes = nodes.map((node) => {
-    const { width, height } = estimateNodeSize(node);
-    return { id: node.id, width, height };
+): DiagramNode[] {
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({
+    rankdir: direction === "DOWN" ? "TB" : "LR",
+    nodesep: DAGRE_DEFAULTS.nodeSep,
+    ranksep: DAGRE_DEFAULTS.rankSep,
+    edgesep: DAGRE_DEFAULTS.edgeSep,
+    ranker: DAGRE_DEFAULTS.ranker,
   });
 
-  const elkEdges = edges.map((edge) => ({
-    id: edge.id,
-    sources: [edge.source],
-    targets: [edge.target],
-  }));
+  // Add nodes with estimated dimensions
+  const nodeDimensions = new Map<string, { width: number; height: number }>();
+  for (const node of nodes) {
+    const { width, height } = estimateNodeSize(node);
+    nodeDimensions.set(node.id, { width, height });
+    g.setNode(node.id, { width, height });
+  }
 
-  const graph = {
-    id: "root",
-    layoutOptions: layoutOptions(direction),
-    children: elkNodes,
-    edges: elkEdges,
-  };
+  // Add edges
+  for (const edge of edges) {
+    if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
+      g.setEdge(edge.source, edge.target);
+    }
+  }
 
-  let layouted: { children?: Array<{ id: string; x?: number; y?: number }> };
+  // Compute layout
   try {
-    const elk = await getElk();
-    layouted = await elk.layout(graph);
+    dagre.layout(g);
   } catch {
     return fallbackGridLayout(nodes, direction);
   }
 
-  const layoutChildren = layouted.children ?? [];
-  const byId = new Map(layoutChildren.map((n) => [n.id, n]));
-  let havePositions = 0;
-  const uniquePositions = new Set<string>();
-
-  for (const node of nodes) {
-    const child = byId.get(node.id);
-    if (!child) continue;
-    const x = child.x;
-    const y = child.y;
-    if (typeof x !== "number" || typeof y !== "number") continue;
-    havePositions++;
-    uniquePositions.add(`${Math.round(x)}:${Math.round(y)}`);
-  }
-
-  // If ELK gives us degenerate output (common when edges are missing/malformed),
-  // fall back to a simple deterministic grid so nothing overlaps.
-  if (havePositions < Math.ceil(nodes.length * 0.6) || uniquePositions.size <= 1) {
-    return fallbackGridLayout(nodes, direction);
-  }
-
+  // Apply computed positions (dagre gives center coords, convert to top-left)
   return nodes.map((node) => {
-    const elkNode = byId.get(node.id);
-    if (elkNode) {
+    const pos = g.node(node.id);
+    const dim = nodeDimensions.get(node.id);
+    if (pos && dim) {
       return {
         ...node,
         position: {
-          x: elkNode.x ?? node.position.x,
-          y: elkNode.y ?? node.position.y,
+          x: pos.x - dim.width / 2,
+          y: pos.y - dim.height / 2,
         },
       };
     }
@@ -492,7 +456,7 @@ export async function autoLayout(
 
   const strategy: AutoLayoutStrategy =
     options?.strategy ??
-    (hasMeaningfulPositions(nodes) ? "RELAX" : "ELK");
+    (hasMeaningfulPositions(nodes) ? "RELAX" : "DAGRE");
 
   if (edges.length === 0) {
     // With no edges, the best we can do is de-overlap while keeping the current
@@ -501,8 +465,8 @@ export async function autoLayout(
     return relaxLayoutFromCurrentPositions(nodes, edges, direction);
   }
 
-  if (strategy === "ELK") {
-    return elkLayeredLayout(nodes, edges, direction);
+  if (strategy === "DAGRE") {
+    return dagreLayout(nodes, edges, direction);
   }
 
   return relaxLayoutFromCurrentPositions(nodes, edges, direction);

@@ -6,6 +6,7 @@ import {
   Background,
   Controls,
   ConnectionMode,
+  MarkerType,
   type ReactFlowInstance,
   type NodeMouseHandler,
   type EdgeMouseHandler,
@@ -545,6 +546,12 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
               type: "smoothstep",
               animated: false,
               style: { stroke: "var(--edge-color)", strokeWidth: 1.5 },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 14,
+                height: 14,
+                color: "var(--edge-color)",
+              },
             }}
             fitView
             snapToGrid

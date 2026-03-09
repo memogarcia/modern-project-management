@@ -587,10 +587,10 @@ function applyMermaidSubgraphGroups(
     arr.sort((a, b) => a.order - b.order);
   }
 
-  const GROUP_PADDING = 36;
-  const GROUP_LABEL_HEIGHT = 28;
-  const DEFAULT_GROUP_W = 360;
-  const DEFAULT_GROUP_H = 240;
+  const GROUP_PADDING = 28;
+  const GROUP_LABEL_HEIGHT = 24;
+  const DEFAULT_GROUP_W = 280;
+  const DEFAULT_GROUP_H = 180;
 
   type Rect = { x: number; y: number; w: number; h: number };
   const groupNodeByKey = new Map<string, DiagramNode>();
@@ -947,6 +947,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       targetHandle: connection.targetHandle,
       type: "smoothstep",
       animated: false,
+      markerEnd: { type: "arrowclosed", width: 16, height: 16 },
     };
     const [patched] = applyEdgePositions(get().nodes, [base], dir, "CLOSEST");
     set((s) => {
@@ -1293,7 +1294,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       data: {
         text: text ?? "Text",
         fontSize: 16,
-    } satisfies TextNodeData,
+      } satisfies TextNodeData,
     };
 
     set((s) => {
@@ -1817,6 +1818,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       }
       finalNodes = applyMermaidSubgraphGroups(finalNodes, subgraphs);
 
+      // Assign edge handles based on closest-side routing
+      const layoutDir: LayoutDirection = s.layoutDirection ?? "DOWN";
+      const positionedEdges = applyEdgePositions(finalNodes, parsedEdges, layoutDir, "CLOSEST");
+
       if (preservedNonMermaidNodes.length > 0) {
         const finalNodeIds = new Set(finalNodes.map((n) => n.id));
         const preserved = preservedNonMermaidNodes.map((n) => {
@@ -1832,7 +1837,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       // Preserve existing edge objects when source/target/label haven't changed
       // so React Flow doesn't re-route them.
       const existingEdgeMap = new Map(s.edges.map((e) => [e.id, e]));
-      const mergedEdges = parsedEdges.map((pe) => {
+      const mergedEdges = positionedEdges.map((pe) => {
         const existing = existingEdgeMap.get(pe.id);
         if (existing) {
           // Keep the existing edge, only update label if changed
@@ -1875,7 +1880,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     if (s.nodes.length === 0) return;
 
     const dir: LayoutDirection = direction ?? s.layoutDirection ?? "RIGHT";
-    const attachMode: EdgeAttachMode = edgeAttachMode ?? "ORIENTED";
+    const attachMode: EdgeAttachMode = edgeAttachMode ?? "CLOSEST";
 
     const hasGroups = s.nodes.some((n) => n.type === "groupNode");
     if (!hasGroups) {

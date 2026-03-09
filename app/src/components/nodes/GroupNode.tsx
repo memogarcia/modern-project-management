@@ -56,13 +56,14 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
 
   const containerStyle: CSSProperties = {
     background: bgColor,
-    border: `2px dashed ${selected ? "var(--accent, #3b82f6)" : borderColor}`,
-    borderRadius: "12px",
+    border: `1.5px dashed ${selected ? "var(--accent, #3b82f6)" : borderColor}`,
+    borderRadius: "16px",
     width: "100%",
     height: "100%",
     minWidth: 200,
     minHeight: 120,
     position: "relative",
+    boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.04), 0 1px 4px 0 rgba(0,0,0,0.06)`,
   };
 
   const labelStyle: CSSProperties = {
@@ -72,9 +73,13 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
     fontSize: "11px",
     fontWeight: 600,
     color: borderColor,
-    letterSpacing: "0.3px",
+    letterSpacing: "0.5px",
     textTransform: "uppercase",
     pointerEvents: "auto",
+    background: `color-mix(in srgb, ${borderColor} 10%, transparent)`,
+    padding: "3px 10px",
+    borderRadius: "6px",
+    lineHeight: 1.4,
   };
 
   return (
