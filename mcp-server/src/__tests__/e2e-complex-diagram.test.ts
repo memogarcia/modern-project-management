@@ -242,7 +242,7 @@ async function runTest() {
 
     // ── Step 8: Read the resource endpoint ────────────────────────
     const resourceResult = await client.readResource({
-      uri: "archdiagram://diagrams",
+      uri: "planview://diagrams",
     });
     const resourceText = (
       resourceResult.contents as Array<{ text: string }>

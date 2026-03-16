@@ -9,27 +9,58 @@ interface McpConfigViewProps {
   project: KanbanProject;
 }
 
+type ClientType = "claude" | "gemini" | "vscode" | "cursor";
+
+const CLIENT_LABELS: Record<ClientType, { name: string; file: string }> = {
+  claude: { name: "Claude Desktop", file: "claude_desktop_config.json" },
+  gemini: { name: "Gemini CLI", file: "settings.json" },
+  vscode: { name: "VS Code / Copilot", file: ".vscode/mcp.json" },
+  cursor: { name: "Cursor", file: ".cursor/mcp.json" },
+};
+
+function buildConfig(client: ClientType): string {
+  const serverBlock = {
+    command: "node",
+    args: ["/absolute/path/to/mcp-server/dist/index.js"],
+    env: {
+      PLANVIEW_DB: "/absolute/path/to/mcp-server/data/planview.db",
+    },
+  };
+
+  switch (client) {
+    case "claude":
+      return JSON.stringify({ mcpServers: { planview: serverBlock } }, null, 2);
+    case "gemini":
+      return JSON.stringify({ mcpServers: { planview: { ...serverBlock, cwd: "/absolute/path/to/project" } } }, null, 2);
+    case "vscode":
+      return JSON.stringify({
+        servers: {
+          planview: {
+            type: "stdio",
+            ...serverBlock,
+          },
+        },
+      }, null, 2);
+    case "cursor":
+      return JSON.stringify({
+        mcpServers: {
+          planview: {
+            ...serverBlock,
+          },
+        },
+      }, null, 2);
+  }
+}
+
 export default function McpConfigView({ project }: McpConfigViewProps) {
   const [copied, setCopied] = useState<string | null>(null);
+  const [activeClient, setActiveClient] = useState<ClientType>("claude");
 
   const buildCmd = `npm --prefix mcp-server install
 npm --prefix mcp-server run build`;
 
-  const mcpConfig = JSON.stringify(
-    {
-      mcpServers: {
-        planview: {
-          command: "node",
-          args: ["/absolute/path/to/mcp-server/dist/index.js"],
-          env: {
-            PLANVIEW_DB: "/absolute/path/to/mcp-server/data/planview.db",
-          },
-        },
-      },
-    },
-    null,
-    2
-  );
+  const mcpConfig = buildConfig(activeClient);
+  const clientMeta = CLIENT_LABELS[activeClient];
 
   const tools = [
     ["list_projects", "List all projects"],
@@ -41,6 +72,17 @@ npm --prefix mcp-server run build`;
     ["add_project_session", "Create a focus session"],
     ["create_diagram", "Create a diagram"],
     ["link_diagram_to_project", "Link a diagram to a project"],
+  ];
+
+  const resources = [
+    ["planview://projects", "All projects (summary)"],
+    ["planview://projects/{id}", "Single project (full detail)"],
+    ["planview://diagrams", "All diagrams"],
+  ];
+
+  const prompts = [
+    ["plan-sprint", "Generate a sprint plan from backlog"],
+    ["project-status", "Status report for a project"],
   ];
 
   const handleCopy = async (text: string, key: string) => {
@@ -58,7 +100,7 @@ npm --prefix mcp-server run build`;
             MCP Configuration
           </h2>
           <p className="text-sm text-[var(--text-muted)]">
-            Connect this workspace to Claude, Copilot, or any MCP-compatible AI.
+            Connect this workspace to Claude, Gemini CLI, VS Code, Cursor, or any MCP-compatible AI.
           </p>
         </div>
 
@@ -87,10 +129,28 @@ npm --prefix mcp-server run build`;
           <div className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
             2 — Add to AI config
           </div>
+
+          {/* Client tabs */}
+          <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1">
+            {(Object.keys(CLIENT_LABELS) as ClientType[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => setActiveClient(key)}
+                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                  activeClient === key
+                    ? "bg-[var(--accent)] text-white shadow-sm"
+                    : "text-[var(--text-muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {CLIENT_LABELS[key].name}
+              </button>
+            ))}
+          </div>
+
           <p className="text-xs text-[var(--text-muted)]">
             Paste into{" "}
             <code className="rounded bg-[var(--surface)] px-1.5 py-0.5 border border-[var(--border)] text-[11px]">
-              claude_desktop_config.json
+              {clientMeta.file}
             </code>
           </p>
           <div className="relative">
@@ -115,6 +175,40 @@ npm --prefix mcp-server run build`;
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {tools.map(([name, desc]) => (
+              <div key={name} className="flex flex-col gap-1">
+                <code className="w-fit rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-xs font-mono text-[var(--foreground)]">
+                  {name}
+                </code>
+                <span className="text-xs text-[var(--text-muted)]">{desc}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Step 4: Resources */}
+        <section className="space-y-3">
+          <div className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+            4 — Resources
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            {resources.map(([uri, desc]) => (
+              <div key={uri} className="flex flex-col gap-1">
+                <code className="w-fit rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-xs font-mono text-[var(--foreground)]">
+                  {uri}
+                </code>
+                <span className="text-xs text-[var(--text-muted)]">{desc}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Step 5: Prompts */}
+        <section className="space-y-3">
+          <div className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+            5 — Prompts
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {prompts.map(([name, desc]) => (
               <div key={name} className="flex flex-col gap-1">
                 <code className="w-fit rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-xs font-mono text-[var(--foreground)]">
                   {name}

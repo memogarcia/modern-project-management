@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
@@ -24,8 +24,8 @@ getDb();
 const MERMAID_NODE_ID_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 const server = new McpServer({
-  name: "archdiagram",
-  version: "1.0.0",
+  name: "planview",
+  version: "1.1.0",
 });
 
 function escapeMermaidQuotedText(value: string): string {
@@ -57,7 +57,11 @@ function markDiagramFlowStale(diagram: Diagram): void {
 }
 
 // ─── Tool: list_diagrams ─────────────────────────────────────────────
-server.tool("list_diagrams", "List all saved diagrams", {}, async () => {
+server.registerTool("list_diagrams", {
+  title: "List Diagrams",
+  description: "List all saved diagrams",
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async () => {
   const diagrams = dbListDiagrams();
   const summary = diagrams.map((d) => ({
     id: d.id,
@@ -76,11 +80,12 @@ server.tool("list_diagrams", "List all saved diagrams", {}, async () => {
 });
 
 // ─── Tool: get_diagram ───────────────────────────────────────────────
-server.tool(
-  "get_diagram",
-  "Get a diagram by ID, returns full mermaid code and metadata",
-  { id: z.string().describe("The diagram ID") },
-  async ({ id }) => {
+server.registerTool("get_diagram", {
+  title: "Get Diagram",
+  description: "Get a diagram by ID, returns full mermaid code and metadata",
+  inputSchema: { id: z.string().describe("The diagram ID") },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ id }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
@@ -100,17 +105,18 @@ server.tool(
 );
 
 // ─── Tool: create_diagram ────────────────────────────────────────────
-server.tool(
-  "create_diagram",
-  "Create a new architecture diagram from mermaid code",
-  {
+server.registerTool("create_diagram", {
+  title: "Create Diagram",
+  description: "Create a new architecture diagram from mermaid code",
+  inputSchema: {
     name: z.string().describe("Name of the diagram"),
     description: z.string().optional().describe("Description of the diagram"),
     mermaidCode: z
       .string()
       .describe("Mermaid code defining the diagram (graph TD format)"),
   },
-  async ({ name, description, mermaidCode }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ name, description, mermaidCode }) => {
     const now = new Date().toISOString();
     const diagram: Diagram = {
       id: uuidv4(),
@@ -139,16 +145,17 @@ server.tool(
 );
 
 // ─── Tool: update_diagram ────────────────────────────────────────────
-server.tool(
-  "update_diagram",
-  "Update an existing diagram's mermaid code, name, or description",
-  {
+server.registerTool("update_diagram", {
+  title: "Update Diagram",
+  description: "Update an existing diagram's mermaid code, name, or description",
+  inputSchema: {
     id: z.string().describe("The diagram ID"),
     name: z.string().optional().describe("New name"),
     description: z.string().optional().describe("New description"),
     mermaidCode: z.string().optional().describe("New mermaid code"),
   },
-  async ({ id, name, description, mermaidCode }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ id, name, description, mermaidCode }) => {
     const existing = dbGetDiagram(id);
     if (!existing) {
       return {
@@ -186,11 +193,12 @@ server.tool(
 );
 
 // ─── Tool: delete_diagram ────────────────────────────────────────────
-server.tool(
-  "delete_diagram",
-  "Delete a diagram by ID",
-  { id: z.string().describe("The diagram ID") },
-  async ({ id }) => {
+server.registerTool("delete_diagram", {
+  title: "Delete Diagram",
+  description: "Delete a diagram by ID",
+  inputSchema: { id: z.string().describe("The diagram ID") },
+  annotations: { readOnlyHint: false, destructiveHint: true },
+}, async ({ id }) => {
     const deleted = dbDeleteDiagram(id);
     return {
       content: [
@@ -207,10 +215,10 @@ server.tool(
 );
 
 // ─── Tool: add_node ──────────────────────────────────────────────────
-server.tool(
-  "add_node_to_diagram",
-  "Add a new node (component) to a diagram's mermaid code",
-  {
+server.registerTool("add_node_to_diagram", {
+  title: "Add Node to Diagram",
+  description: "Add a new node (component) to a diagram's mermaid code",
+  inputSchema: {
     id: z.string().describe("The diagram ID"),
     nodeId: z
       .string()
@@ -234,7 +242,8 @@ server.tool(
       .describe("The shape type for the node"),
     description: z.string().optional().describe("Optional description"),
   },
-  async ({ id, nodeId, label, shapeType, description }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ id, nodeId, label, shapeType, description }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
@@ -300,10 +309,10 @@ server.tool(
 );
 
 // ─── Tool: add_edge ──────────────────────────────────────────────────
-server.tool(
-  "add_edge_to_diagram",
-  "Add a connection (edge) between two nodes in a diagram",
-  {
+server.registerTool("add_edge_to_diagram", {
+  title: "Add Edge to Diagram",
+  description: "Add a connection (edge) between two nodes in a diagram",
+  inputSchema: {
     id: z.string().describe("The diagram ID"),
     source: z
       .string()
@@ -315,7 +324,8 @@ server.tool(
       .describe("Target node ID"),
     label: z.string().optional().describe("Optional edge label (e.g. 'HTTP', 'gRPC')"),
   },
-  async ({ id, source, target, label }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ id, source, target, label }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
@@ -364,11 +374,11 @@ server.tool(
   }
 );
 
-// ─── Tool: create_database_schema ────────────────────────────────────
-server.tool(
-  "create_database_schema",
-  "Create a new diagram with database schema (ER diagram) using erDiagram mermaid syntax. Defines tables with columns and relationships between them.",
-  {
+// ─── Tool: create_database_schema ────────────────────────────────────────
+server.registerTool("create_database_schema", {
+  title: "Create Database Schema",
+  description: "Create a new diagram with database schema (ER diagram) using erDiagram mermaid syntax. Defines tables with columns and relationships between them.",
+  inputSchema: {
     name: z.string().describe("Name of the diagram"),
     description: z.string().optional().describe("Description of the diagram"),
     tables: z
@@ -404,7 +414,8 @@ server.tool(
       .optional()
       .describe("Relationships between tables"),
   },
-  async ({ name, description, tables, relationships }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ name, description, tables, relationships }) => {
     const now = new Date().toISOString();
 
     // Build erDiagram mermaid code
@@ -471,11 +482,11 @@ server.tool(
   }
 );
 
-// ─── Tool: add_table_to_diagram ──────────────────────────────────────
-server.tool(
-  "add_table_to_diagram",
-  "Add a database table (with columns) to an existing diagram's erDiagram mermaid code",
-  {
+// ─── Tool: add_table_to_diagram ──────────────────────────────────────────
+server.registerTool("add_table_to_diagram", {
+  title: "Add Table to Diagram",
+  description: "Add a database table (with columns) to an existing diagram's erDiagram mermaid code",
+  inputSchema: {
     id: z.string().describe("The diagram ID"),
     tableName: z.string().describe("Name of the table"),
     columns: z.array(
@@ -489,7 +500,8 @@ server.tool(
       })
     ),
   },
-  async ({ id, tableName, columns }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ id, tableName, columns }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
@@ -565,11 +577,11 @@ server.tool(
   }
 );
 
-// ─── Tool: add_relationship_to_diagram ───────────────────────────────
-server.tool(
-  "add_relationship_to_diagram",
-  "Add a relationship between two tables in an existing diagram's erDiagram",
-  {
+// ─── Tool: add_relationship_to_diagram ─────────────────────────────────────
+server.registerTool("add_relationship_to_diagram", {
+  title: "Add Relationship to Diagram",
+  description: "Add a relationship between two tables in an existing diagram's erDiagram",
+  inputSchema: {
     id: z.string().describe("The diagram ID"),
     from: z.string().describe("Source table name"),
     to: z.string().describe("Target table name"),
@@ -580,7 +592,8 @@ server.tool(
       .default("one-to-many")
       .describe("Relationship cardinality"),
   },
-  async ({ id, from, to, label, cardinality }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ id, from, to, label, cardinality }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
@@ -605,8 +618,24 @@ server.tool(
       code = code.trimEnd() + "\n\nerDiagram\n";
     }
 
-    code = code.trimEnd() + "\n" + relLine + "\n";
-    diagram.mermaidCode = code;
+    const lines = code.split("\n");
+    // Find the end of erDiagram section to insert before styles
+    let insertIdx = lines.length;
+    const erIdx = lines.findIndex((l) => l.trim() === "erDiagram");
+    if (erIdx !== -1) {
+      for (let i = lines.length - 1; i >= erIdx; i--) {
+        if (lines[i].trim().startsWith("style ")) {
+          insertIdx = i;
+        } else if (lines[i].trim().length > 0 && i > erIdx) {
+          // Insert after the last non-empty line in the erDiagram block, before styles
+          insertIdx = i + 1;
+          break;
+        }
+      }
+    }
+
+    lines.splice(insertIdx, 0, relLine);
+    diagram.mermaidCode = lines.join("\n");
     markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
     dbSaveDiagram(diagram);
@@ -634,7 +663,11 @@ server.tool(
 // ═══════════════════════════════════════════════════════════════════════
 
 // ─── Tool: list_projects ─────────────────────────────────────────────
-server.tool("list_projects", "List all projects (summary)", {}, async () => {
+server.registerTool("list_projects", {
+  title: "List Projects",
+  description: "List all projects (summary)",
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async () => {
   const projects = dbListProjects();
   const summary = projects.map((p) => ({
     id: p.id,
@@ -653,11 +686,12 @@ server.tool("list_projects", "List all projects (summary)", {}, async () => {
 });
 
 // ─── Tool: get_project ───────────────────────────────────────────────
-server.tool(
-  "get_project",
-  "Get a project by ID with all columns, epics, tasks, sessions, and diagram links",
-  { id: z.string().describe("The project ID") },
-  async ({ id }) => {
+server.registerTool("get_project", {
+  title: "Get Project",
+  description: "Get a project by ID with all columns, epics, tasks, sessions, and diagram links",
+  inputSchema: { id: z.string().describe("The project ID") },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ id }) => {
     const project = dbGetProject(id);
     if (!project) {
       return {
@@ -672,10 +706,10 @@ server.tool(
 );
 
 // ─── Tool: create_project ────────────────────────────────────────────
-server.tool(
-  "create_project",
-  "Create a new project with optional custom columns (defaults to Backlog/To Do/In Progress/Review/Done)",
-  {
+server.registerTool("create_project", {
+  title: "Create Project",
+  description: "Create a new project with optional custom columns (defaults to Backlog/To Do/In Progress/Review/Done)",
+  inputSchema: {
     name: z.string().describe("Project name"),
     description: z.string().optional().describe("Project description"),
     columns: z
@@ -691,7 +725,8 @@ server.tool(
       .optional()
       .describe("Custom columns (defaults to 5 standard columns)"),
   },
-  async ({ name, description, columns }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ name, description, columns }) => {
     const now = new Date().toISOString();
     const project: KanbanProject = {
       id: uuidv4(),
@@ -722,15 +757,16 @@ server.tool(
 );
 
 // ─── Tool: update_project ────────────────────────────────────────────
-server.tool(
-  "update_project",
-  "Update project metadata (name, description)",
-  {
+server.registerTool("update_project", {
+  title: "Update Project",
+  description: "Update project metadata (name, description)",
+  inputSchema: {
     id: z.string().describe("The project ID"),
     name: z.string().optional().describe("New name"),
     description: z.string().optional().describe("New description"),
   },
-  async ({ id, name, description }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ id, name, description }) => {
     const project = dbGetProject(id);
     if (!project) {
       return {
@@ -754,11 +790,12 @@ server.tool(
 );
 
 // ─── Tool: delete_project ────────────────────────────────────────────
-server.tool(
-  "delete_project",
-  "Delete a project and all its data",
-  { id: z.string().describe("The project ID") },
-  async ({ id }) => {
+server.registerTool("delete_project", {
+  title: "Delete Project",
+  description: "Delete a project and all its data",
+  inputSchema: { id: z.string().describe("The project ID") },
+  annotations: { readOnlyHint: false, destructiveHint: true },
+}, async ({ id }) => {
     const deleted = dbDeleteProject(id);
     return {
       content: [
@@ -773,17 +810,18 @@ server.tool(
 );
 
 // ─── Tool: add_kanban_column ─────────────────────────────────────────
-server.tool(
-  "add_kanban_column",
-  "Add a column to a project",
-  {
+server.registerTool("add_kanban_column", {
+  title: "Add Kanban Column",
+  description: "Add a column to a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     name: z.string().describe("Column name"),
     color: z.string().describe("Column color (hex)"),
     position: z.number().optional().describe("Position (appends to end if omitted)"),
     wipLimit: z.number().optional().describe("Work-in-progress limit"),
   },
-  async ({ projectId, name, color, position, wipLimit }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, name, color, position, wipLimit }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -815,17 +853,18 @@ server.tool(
 );
 
 // ─── Tool: update_kanban_column ──────────────────────────────────────
-server.tool(
-  "update_kanban_column",
-  "Update a column (name, color, wipLimit)",
-  {
+server.registerTool("update_kanban_column", {
+  title: "Update Kanban Column",
+  description: "Update a column (name, color, wipLimit)",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     columnId: z.string().describe("The column ID"),
     name: z.string().optional().describe("New name"),
     color: z.string().optional().describe("New color (hex)"),
     wipLimit: z.number().optional().describe("New WIP limit"),
   },
-  async ({ projectId, columnId, name, color, wipLimit }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ projectId, columnId, name, color, wipLimit }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -857,14 +896,15 @@ server.tool(
 );
 
 // ─── Tool: reorder_kanban_columns ────────────────────────────────────
-server.tool(
-  "reorder_kanban_columns",
-  "Reorder all columns in a project",
-  {
+server.registerTool("reorder_kanban_columns", {
+  title: "Reorder Kanban Columns",
+  description: "Reorder all columns in a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     columnIds: z.array(z.string()).describe("Ordered column IDs"),
   },
-  async ({ projectId, columnIds }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ projectId, columnIds }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -900,15 +940,16 @@ server.tool(
 );
 
 // ─── Tool: delete_kanban_column ──────────────────────────────────────
-server.tool(
-  "delete_kanban_column",
-  "Delete a column and move orphaned tasks to a target column",
-  {
+server.registerTool("delete_kanban_column", {
+  title: "Delete Kanban Column",
+  description: "Delete a column and move orphaned tasks to a target column",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     columnId: z.string().describe("The column to delete"),
     targetColumnId: z.string().describe("Column to move orphaned tasks to"),
   },
-  async ({ projectId, columnId, targetColumnId }) => {
+  annotations: { readOnlyHint: false, destructiveHint: true },
+}, async ({ projectId, columnId, targetColumnId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -950,11 +991,12 @@ server.tool(
 );
 
 // ─── Tool: list_kanban_epics ─────────────────────────────────────────
-server.tool(
-  "list_kanban_epics",
-  "List all epics in a project",
-  { projectId: z.string().describe("The project ID") },
-  async ({ projectId }) => {
+server.registerTool("list_kanban_epics", {
+  title: "List Kanban Epics",
+  description: "List all epics in a project",
+  inputSchema: { projectId: z.string().describe("The project ID") },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ projectId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -969,14 +1011,15 @@ server.tool(
 );
 
 // ─── Tool: get_kanban_epic ───────────────────────────────────────────
-server.tool(
-  "get_kanban_epic",
-  "Get an epic and its tasks",
-  {
+server.registerTool("get_kanban_epic", {
+  title: "Get Kanban Epic",
+  description: "Get an epic and its tasks",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     epicId: z.string().describe("The epic ID"),
   },
-  async ({ projectId, epicId }) => {
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ projectId, epicId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1004,16 +1047,17 @@ server.tool(
 );
 
 // ─── Tool: create_kanban_epic ────────────────────────────────────────
-server.tool(
-  "create_kanban_epic",
-  "Create an epic in a project",
-  {
+server.registerTool("create_kanban_epic", {
+  title: "Create Kanban Epic",
+  description: "Create an epic in a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     name: z.string().describe("Epic name"),
     description: z.string().optional().describe("Epic description"),
     color: z.string().optional().describe("Badge color (hex)"),
   },
-  async ({ projectId, name, description, color }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, name, description, color }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1045,17 +1089,18 @@ server.tool(
 );
 
 // ─── Tool: update_kanban_epic ────────────────────────────────────────
-server.tool(
-  "update_kanban_epic",
-  "Update an epic in a project",
-  {
+server.registerTool("update_kanban_epic", {
+  title: "Update Kanban Epic",
+  description: "Update an epic in a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     epicId: z.string().describe("The epic ID"),
     name: z.string().optional().describe("New name"),
     description: z.string().optional().describe("New description"),
     color: z.string().optional().describe("New badge color"),
   },
-  async ({ projectId, epicId, name, description, color }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ projectId, epicId, name, description, color }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1088,15 +1133,16 @@ server.tool(
 );
 
 // ─── Tool: delete_kanban_epic ────────────────────────────────────────
-server.tool(
-  "delete_kanban_epic",
-  "Delete an epic. Optionally move its tasks to another epic, otherwise tasks are deleted.",
-  {
+server.registerTool("delete_kanban_epic", {
+  title: "Delete Kanban Epic",
+  description: "Delete an epic. Optionally move its tasks to another epic, otherwise tasks are deleted.",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     epicId: z.string().describe("The epic to delete"),
     targetEpicId: z.string().optional().describe("Epic to move tasks to (tasks deleted if omitted)"),
   },
-  async ({ projectId, epicId, targetEpicId }) => {
+  annotations: { readOnlyHint: false, destructiveHint: true },
+}, async ({ projectId, epicId, targetEpicId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1138,10 +1184,10 @@ server.tool(
 );
 
 // ─── Tool: create_kanban_task ────────────────────────────────────────
-server.tool(
-  "create_kanban_task",
-  "Create a task in a project",
-  {
+server.registerTool("create_kanban_task", {
+  title: "Create Kanban Task",
+  description: "Create a task in a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     epicId: z.string().describe("The epic ID this task belongs to"),
     columnId: z.string().describe("The column ID for Kanban placement"),
@@ -1165,7 +1211,8 @@ server.tool(
       .default([]),
     metadata: z.record(z.string()).optional().default({}),
   },
-  async ({ projectId, epicId, columnId, name, description, priority, assignee, tags, startDate, dueDate, progress, links, metadata }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, epicId, columnId, name, description, priority, assignee, tags, startDate, dueDate, progress, links, metadata }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1220,10 +1267,10 @@ server.tool(
 );
 
 // ─── Tool: update_kanban_task ────────────────────────────────────────
-server.tool(
-  "update_kanban_task",
-  "Update any fields of a task",
-  {
+server.registerTool("update_kanban_task", {
+  title: "Update Kanban Task",
+  description: "Update any fields of a task",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     taskId: z.string().describe("The task ID"),
     name: z.string().optional(),
@@ -1236,7 +1283,8 @@ server.tool(
     progress: z.number().min(0).max(100).optional(),
     metadata: z.record(z.string()).optional(),
   },
-  async ({ projectId, taskId, ...updates }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ projectId, taskId, ...updates }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1275,16 +1323,17 @@ server.tool(
 );
 
 // ─── Tool: move_kanban_task ──────────────────────────────────────────
-server.tool(
-  "move_kanban_task",
-  "Move a task to a different column and/or position (drag-and-drop)",
-  {
+server.registerTool("move_kanban_task", {
+  title: "Move Kanban Task",
+  description: "Move a task to a different column and/or position (drag-and-drop)",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     taskId: z.string().describe("The task ID"),
     columnId: z.string().optional().describe("Target column ID"),
     position: z.number().optional().describe("Target position within column"),
   },
-  async ({ projectId, taskId, columnId, position }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ projectId, taskId, columnId, position }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1328,14 +1377,15 @@ server.tool(
 );
 
 // ─── Tool: delete_kanban_task ────────────────────────────────────────
-server.tool(
-  "delete_kanban_task",
-  "Delete a task from a project",
-  {
+server.registerTool("delete_kanban_task", {
+  title: "Delete Kanban Task",
+  description: "Delete a task from a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     taskId: z.string().describe("The task ID"),
   },
-  async ({ projectId, taskId }) => {
+  annotations: { readOnlyHint: false, destructiveHint: true },
+}, async ({ projectId, taskId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1369,10 +1419,10 @@ server.tool(
 );
 
 // ─── Tool: list_kanban_tasks ─────────────────────────────────────────
-server.tool(
-  "list_kanban_tasks",
-  "List and filter tasks in a project",
-  {
+server.registerTool("list_kanban_tasks", {
+  title: "List Kanban Tasks",
+  description: "List and filter tasks in a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     epicId: z.string().optional().describe("Filter by epic"),
     columnId: z.string().optional().describe("Filter by column"),
@@ -1380,7 +1430,8 @@ server.tool(
     priority: z.enum(["low", "medium", "high", "critical"]).optional().describe("Filter by priority"),
     tag: z.string().optional().describe("Filter by tag"),
   },
-  async ({ projectId, epicId, columnId, assignee, priority, tag }) => {
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ projectId, epicId, columnId, assignee, priority, tag }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1401,17 +1452,18 @@ server.tool(
 );
 
 // ─── Tool: add_link_to_kanban_task ───────────────────────────────────
-server.tool(
-  "add_link_to_kanban_task",
-  "Add a typed link to a task",
-  {
+server.registerTool("add_link_to_kanban_task", {
+  title: "Add Link to Task",
+  description: "Add a typed link to a task",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     taskId: z.string().describe("The task ID"),
     label: z.string().describe("Link label"),
     url: z.string().url().describe("Link URL"),
     type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]).describe("Link type"),
   },
-  async ({ projectId, taskId, label, url, type }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, taskId, label, url, type }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1446,16 +1498,17 @@ server.tool(
 // ═══════════════════════════════════════════════════════════════════════
 
 // ─── Tool: add_project_session ───────────────────────────────────────
-server.tool(
-  "add_project_session",
-  "Create a new focus session within a project",
-  {
+server.registerTool("add_project_session", {
+  title: "Add Project Session",
+  description: "Create a new focus session within a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     title: z.string().describe("Session title"),
     notes: z.string().optional().describe("Session notes"),
     taskIds: z.array(z.string()).optional().describe("Task IDs to link to this session"),
   },
-  async ({ projectId, title, notes, taskIds }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, title, notes, taskIds }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1488,16 +1541,17 @@ server.tool(
 );
 
 // ─── Tool: update_project_session ────────────────────────────────────
-server.tool(
-  "update_project_session",
-  "Update a session's title or notes",
-  {
+server.registerTool("update_project_session", {
+  title: "Update Project Session",
+  description: "Update a session's title or notes",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     sessionId: z.string().describe("The session ID"),
     title: z.string().optional().describe("New title"),
     notes: z.string().optional().describe("New notes"),
   },
-  async ({ projectId, sessionId, title, notes }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ projectId, sessionId, title, notes }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1529,14 +1583,15 @@ server.tool(
 );
 
 // ─── Tool: remove_project_session ────────────────────────────────────
-server.tool(
-  "remove_project_session",
-  "Remove a session from a project",
-  {
+server.registerTool("remove_project_session", {
+  title: "Remove Project Session",
+  description: "Remove a session from a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     sessionId: z.string().describe("The session ID"),
   },
-  async ({ projectId, sessionId }) => {
+  annotations: { readOnlyHint: false, destructiveHint: true },
+}, async ({ projectId, sessionId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1566,15 +1621,16 @@ server.tool(
 );
 
 // ─── Tool: add_task_to_project_session ───────────────────────────────
-server.tool(
-  "add_task_to_project_session",
-  "Link a task to a project session",
-  {
+server.registerTool("add_task_to_project_session", {
+  title: "Add Task to Session",
+  description: "Link a task to a project session",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     sessionId: z.string().describe("The session ID"),
     taskId: z.string().describe("The task ID to link"),
   },
-  async ({ projectId, sessionId, taskId }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, sessionId, taskId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1613,15 +1669,16 @@ server.tool(
 );
 
 // ─── Tool: remove_task_from_project_session ──────────────────────────
-server.tool(
-  "remove_task_from_project_session",
-  "Unlink a task from a project session",
-  {
+server.registerTool("remove_task_from_project_session", {
+  title: "Remove Task from Session",
+  description: "Unlink a task from a project session",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     sessionId: z.string().describe("The session ID"),
     taskId: z.string().describe("The task ID to unlink"),
   },
-  async ({ projectId, sessionId, taskId }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, sessionId, taskId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1656,14 +1713,15 @@ server.tool(
 // ═══════════════════════════════════════════════════════════════════════
 
 // ─── Tool: link_diagram_to_project ───────────────────────────────────
-server.tool(
-  "link_diagram_to_project",
-  "Link a diagram to a project",
-  {
+server.registerTool("link_diagram_to_project", {
+  title: "Link Diagram to Project",
+  description: "Link a diagram to a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     diagramId: z.string().describe("The diagram ID to link"),
   },
-  async ({ projectId, diagramId }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, diagramId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1696,14 +1754,15 @@ server.tool(
 );
 
 // ─── Tool: unlink_diagram_from_project ───────────────────────────────
-server.tool(
-  "unlink_diagram_from_project",
-  "Unlink a diagram from a project",
-  {
+server.registerTool("unlink_diagram_from_project", {
+  title: "Unlink Diagram from Project",
+  description: "Unlink a diagram from a project",
+  inputSchema: {
     projectId: z.string().describe("The project ID"),
     diagramId: z.string().describe("The diagram ID to unlink"),
   },
-  async ({ projectId, diagramId }) => {
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ projectId, diagramId }) => {
     const project = dbGetProject(projectId);
     if (!project) {
       return {
@@ -1729,8 +1788,12 @@ server.tool(
 // RESOURCES
 // ═══════════════════════════════════════════════════════════════════════
 
-// ─── Resources: diagram listing ──────────────────────────────────────
-server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
+// ─── Resource: all diagrams ──────────────────────────────────────────
+server.registerResource("diagrams", "planview://diagrams", {
+  title: "All Diagrams",
+  description: "List of all diagrams in the workspace",
+  mimeType: "application/json",
+}, async (uri) => {
   const diagrams = dbListDiagrams();
   return {
     contents: [
@@ -1751,29 +1814,131 @@ server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
   };
 });
 
-// ─── Resources: project listing ──────────────────────────────────────
-server.resource("projects", "archdiagram://projects", async (uri) => {
-  const projects = dbListProjects();
+// ─── Resource: all projects ──────────────────────────────────────────
+server.registerResource("projects", "planview://projects", {
+  title: "All Projects",
+  description: "List of all projects in the workspace",
+  mimeType: "application/json",
+}, async (uri) => {
+  const projects = dbListProjectsMeta();
   return {
     contents: [
       {
         uri: uri.href,
         mimeType: "application/json",
-        text: JSON.stringify(
-          projects.map((p) => ({
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            epicCount: p.epics.length,
-            taskCount: p.tasks.length,
-            sessionCount: p.sessions.length,
-            diagramCount: p.diagramIds.length,
-          })),
-          null,
-          2
-        ),
+        text: JSON.stringify(projects, null, 2),
       },
     ],
+  };
+});
+
+// ─── Resource: single project (dynamic) ──────────────────────────────
+server.registerResource(
+  "project",
+  new ResourceTemplate("planview://projects/{projectId}", {
+    list: async () => ({
+      resources: dbListProjectsMeta().map((p) => ({
+        uri: `planview://projects/${p.id}`,
+        name: p.name,
+      })),
+    }),
+  }),
+  {
+    title: "Project Details",
+    description: "Full project with tasks, columns, epics, and sessions",
+    mimeType: "application/json",
+  },
+  async (uri, { projectId }) => {
+    const project = dbGetProject(projectId as string);
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: project
+            ? JSON.stringify(project, null, 2)
+            : JSON.stringify({ error: "Project not found" }),
+        },
+      ],
+    };
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+// PROMPTS
+// ═══════════════════════════════════════════════════════════════════════
+
+server.registerPrompt("plan-sprint", {
+  title: "Plan Sprint",
+  description: "Generate a sprint plan from backlog tasks",
+  argsSchema: {
+    projectId: z.string().describe("Project to plan"),
+    sprintGoal: z.string().optional().describe("Sprint goal or theme"),
+  },
+}, ({ projectId, sprintGoal }) => {
+  const project = dbGetProject(projectId);
+  if (!project) {
+    return {
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: "Project not found" },
+      }],
+    };
+  }
+  const backlog = project.tasks.filter((t) => t.columnId === project.columns[0]?.id);
+  return {
+    messages: [{
+      role: "user" as const,
+      content: {
+        type: "text" as const,
+        text: `Plan a sprint for "${project.name}"${sprintGoal ? ` with goal: ${sprintGoal}` : ""}.
+
+Backlog tasks (${backlog.length}):
+${backlog.map((t) => `- [${t.priority}] ${t.name}${t.dueDate ? ` (due: ${t.dueDate})` : ""}`).join("\n") || "(empty)"}
+
+Suggest which tasks to move to "To Do" and estimate a timeline.`,
+      },
+    }],
+  };
+});
+
+server.registerPrompt("project-status", {
+  title: "Project Status Report",
+  description: "Generate a status report for a project",
+  argsSchema: {
+    projectId: z.string().describe("Project to report on"),
+  },
+}, ({ projectId }) => {
+  const project = dbGetProject(projectId);
+  if (!project) {
+    return {
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: "Project not found" },
+      }],
+    };
+  }
+  const tasksByColumn = project.columns.map((col) => {
+    const tasks = project.tasks.filter((t) => t.columnId === col.id);
+    return `${col.name}: ${tasks.length} tasks`;
+  });
+  return {
+    messages: [{
+      role: "user" as const,
+      content: {
+        type: "text" as const,
+        text: `Generate a concise status report for project "${project.name}".
+
+Column breakdown:
+${tasksByColumn.join("\n")}
+
+Total tasks: ${project.tasks.length}
+Epics: ${project.epics.length}
+Sessions: ${project.sessions.length}
+
+Highlight blockers, progress, and next steps.`,
+      },
+    }],
   };
 });
 
@@ -1781,7 +1946,7 @@ server.resource("projects", "archdiagram://projects", async (uri) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("ArchDiagram MCP server running on stdio");
+  console.error("PlanView MCP server running on stdio");
 }
 
 main().catch((err) => {
