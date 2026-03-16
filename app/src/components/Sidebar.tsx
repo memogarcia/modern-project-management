@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import {
   Moon,
@@ -41,6 +41,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const searchParams = useSearchParams();
 
   const storageKey = "planview.sidebar.collapsed";
   const [collapsed, setCollapsed] = useState(false);
@@ -50,11 +51,7 @@ export function Sidebar() {
   // Derive active project ID from URL
   const projectMatch = pathname.match(/^\/projects\/([^/]+)/);
   const activeProjectId = projectMatch ? projectMatch[1] : null;
-  const activeView = (() => {
-    if (!activeProjectId) return null;
-    const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-    return searchParams?.get("view") || "kanban";
-  })();
+  const activeView = activeProjectId ? (searchParams.get("view") || "kanban") : null;
 
   useEffect(() => {
     try {
@@ -111,7 +108,7 @@ export function Sidebar() {
       )}
     >
       {/* Logo + collapse */}
-      <div className="flex h-12 items-center border-b border-[var(--border)] px-3 justify-between">
+      <div className="flex h-10 items-center border-b border-[var(--border)] px-3 justify-between">
         {!collapsed && (
           <Link href="/projects" className="flex items-center gap-2 min-w-0">
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[var(--accent-foreground)]">

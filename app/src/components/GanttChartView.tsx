@@ -2,16 +2,19 @@
 
 import { useMemo } from "react";
 import type { KanbanProject } from "@/lib/projectTypes";
+import type { CreateItemDefaults } from "./CreateItemModal";
 import { PRIORITY_CONFIG } from "@/lib/projectTypes";
 import { EmptyState } from "./ui/empty-state";
-import { BarChart3 } from "lucide-react";
+import { Button } from "./ui/button";
+import { BarChart3, Plus } from "lucide-react";
 
 interface GanttChartViewProps {
   project: KanbanProject;
   onSelectTask?: (taskId: string) => void;
+  onRequestCreate?: (defaults?: CreateItemDefaults) => void;
 }
 
-export default function GanttChartView({ project, onSelectTask }: GanttChartViewProps) {
+export default function GanttChartView({ project, onSelectTask, onRequestCreate }: GanttChartViewProps) {
   const tasks = useMemo(() => {
     return project.tasks
       .filter((t) => t.startDate && t.dueDate)
@@ -48,6 +51,11 @@ export default function GanttChartView({ project, onSelectTask }: GanttChartView
           icon={<BarChart3 />}
           title="No tasks with date ranges"
           description="Add startDate and dueDate to see the timeline."
+          action={onRequestCreate && (
+            <Button size="sm" onClick={() => onRequestCreate()} className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" /> New Task
+            </Button>
+          )}
         />
       </div>
     );

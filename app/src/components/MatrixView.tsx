@@ -1,19 +1,28 @@
 "use client";
 
 import { useMemo } from "react";
-import type { KanbanProject, KanbanTask, MatrixQuadrant } from "@/lib/projectTypes";
+import type { KanbanProject, KanbanTask, KanbanTaskPriority, MatrixQuadrant } from "@/lib/projectTypes";
+import type { CreateItemDefaults } from "./CreateItemModal";
 import { deriveQuadrant, QUADRANT_CONFIG, PRIORITY_CONFIG } from "@/lib/projectTypes";
 import { Badge } from "./ui/badge";
 import { EmptyState } from "./ui/empty-state";
 import { cn } from "@/lib/utils";
 
+const QUADRANT_PRIORITY: Record<MatrixQuadrant, KanbanTaskPriority> = {
+  "do-first": "critical",
+  schedule: "high",
+  delegate: "medium",
+  drop: "low",
+};
+
 interface MatrixViewProps {
   project: KanbanProject;
   onUpdateTask: (taskId: string, updates: Partial<KanbanTask>) => void;
   onSelectTask?: (taskId: string) => void;
+  onRequestCreate?: (defaults?: CreateItemDefaults) => void;
 }
 
-export default function MatrixView({ project, onUpdateTask, onSelectTask }: MatrixViewProps) {
+export default function MatrixView({ project, onUpdateTask, onSelectTask, onRequestCreate }: MatrixViewProps) {
   const tasksByQuadrant = useMemo(() => {
     const map: Record<MatrixQuadrant, KanbanTask[]> = {
       "do-first": [],
@@ -78,7 +87,18 @@ export default function MatrixView({ project, onUpdateTask, onSelectTask }: Matr
                 <span className="text-sm font-bold text-[var(--foreground)]">{cfg.label}</span>
                 <Badge color={cfg.color} size="sm">{tasks.length}</Badge>
               </div>
-              <span className="text-[11px] text-[var(--text-muted)]">{cfg.tag}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-[var(--text-muted)]">{cfg.tag}</span>
+                {onRequestCreate && (
+                  <button
+                    onClick={() => onRequestCreate({ priority: QUADRANT_PRIORITY[q] })}
+                    title={`Add ${cfg.tag} task`}
+                    className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border)] bg-transparent text-[var(--text-muted)] text-sm leading-none cursor-pointer transition-all duration-100 hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
+                  >
+                    +
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Task list */}

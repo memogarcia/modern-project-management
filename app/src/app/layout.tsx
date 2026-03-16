@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Sidebar } from "@/components/Sidebar";
@@ -19,7 +20,9 @@ export default function RootLayout({
       <body className="antialiased">
         <ThemeProvider>
           <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-            <Sidebar />
+            <Suspense>
+              <Sidebar />
+            </Suspense>
             <main style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", background: "var(--background)" }}>
               {children}
             </main>

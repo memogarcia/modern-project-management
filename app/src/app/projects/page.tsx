@@ -45,6 +45,10 @@ export default function ProjectsListPage() {
 
   return (
     <div className="flex h-full flex-col bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
+      {/* Top header bar — aligned with sidebar header */}
+      <div className="flex h-10 items-center border-b border-[var(--border)] px-4 shrink-0">
+        <span className="text-sm font-semibold text-[var(--foreground)]">Projects</span>
+      </div>
       <div className="flex-1 overflow-y-auto p-8">
         <div className="mx-auto w-full max-w-2xl">
           <div className="flex items-center justify-between mb-8">

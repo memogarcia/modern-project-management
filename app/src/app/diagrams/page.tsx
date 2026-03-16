@@ -61,75 +61,20 @@ export default function DiagramsListPage() {
     <div
       style={{
         flex: 1,
+        display: "flex",
+        flexDirection: "column",
         background: "var(--background)",
         color: "var(--foreground)",
+        overflow: "hidden",
       }}
     >
-      {/* Modern Header */}
-      <header
-        style={{
-          padding: "20px 40px",
-          borderBottom: "1px solid var(--border)",
-          background: "var(--panel-bg)",
-          backdropFilter: "blur(12px)",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: "20px", fontWeight: 700, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
-                <FileText size={24} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
-                Diagrams
-              </h1>
-              <p
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "14px",
-                  color: "var(--text-muted)",
-                  fontWeight: 400,
-                }}
-              >
-                Architecture diagrams with React Flow & Mermaid
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{
-              padding: "10px 20px",
-              background: "var(--accent)",
-              color: "var(--accent-foreground)",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              boxShadow: "0 2px 8px var(--accent-soft)",
-              transition: "all 0.15s ease",
-              letterSpacing: "-0.01em",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--accent-hover)";
-              e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow = "0 4px 12px var(--accent-soft)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--accent)";
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = "0 2px 8px var(--accent-soft)";
-            }}
-          >
-            <Plus size={18} strokeWidth={2.5} />
-            New Diagram
-          </button>
-        </div>
-      </header>
+      {/* Top header bar — aligned with sidebar header */}
+      <div className="flex h-10 items-center border-b border-[var(--border)] px-4 shrink-0">
+        <span className="text-sm font-semibold text-[var(--foreground)]">Diagrams</span>
+      </div>
+
+      {/* Scrollable content */}
+      <div style={{ flex: 1, overflowY: "auto" }}>
 
       {actionError && (
         <div
@@ -212,8 +157,45 @@ export default function DiagramsListPage() {
         </div>
       )}
 
-      {/* Modern Diagram Grid */}
+      {/* Diagram content */}
       <main style={{ padding: "32px 40px", maxWidth: 1400, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
+              <FileText size={20} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
+              All Diagrams
+            </h2>
+            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--text-muted)" }}>
+              Architecture diagrams with React Flow & Mermaid
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            style={{
+              padding: "8px 16px",
+              background: "var(--accent)",
+              color: "var(--accent-foreground)",
+              border: "none",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--accent-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "var(--accent)";
+            }}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            New Diagram
+          </button>
+        </div>
         {diagrams.length === 0 ? (
           <div
             style={{
@@ -384,6 +366,7 @@ export default function DiagramsListPage() {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }

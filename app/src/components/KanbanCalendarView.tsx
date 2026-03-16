@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import type { KanbanProject } from "@/lib/projectTypes";
+import type { CreateItemDefaults } from "./CreateItemModal";
 import { PRIORITY_CONFIG } from "@/lib/projectTypes";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
@@ -10,11 +11,12 @@ import { cn } from "@/lib/utils";
 interface KanbanCalendarViewProps {
   project: KanbanProject;
   onSelectTask?: (taskId: string) => void;
+  onRequestCreate?: (defaults?: CreateItemDefaults) => void;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export default function KanbanCalendarView({ project, onSelectTask }: KanbanCalendarViewProps) {
+export default function KanbanCalendarView({ project, onSelectTask, onRequestCreate }: KanbanCalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
   const year = currentDate.getFullYear();
@@ -92,10 +94,16 @@ export default function KanbanCalendarView({ project, onSelectTask }: KanbanCale
           return (
             <div
               key={dateStr}
+              onClick={() => {
+                if (dayTasks.length === 0 && onRequestCreate) {
+                  onRequestCreate({ dueDate: dateStr });
+                }
+              }}
               className={cn(
-                "border-r border-b border-[var(--border)] p-1.5 min-h-20",
+                "border-r border-b border-[var(--border)] p-1.5 min-h-20 transition-colors duration-100",
                 isToday && "bg-[var(--accent-soft)] ring-1 ring-inset ring-[var(--accent)]/30",
-                !isToday && isWeekend && "bg-[var(--surface-hover)]/20"
+                !isToday && isWeekend && "bg-[var(--surface-hover)]/20",
+                dayTasks.length === 0 && onRequestCreate && "cursor-pointer hover:bg-[var(--surface-hover)]/40"
               )}
             >
               <div className={cn(

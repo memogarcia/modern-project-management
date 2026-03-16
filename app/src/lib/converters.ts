@@ -1,53 +1,5 @@
 import type { ArchNode, ArchEdge, ShapeType, DiagramNode, DatabaseSchemaNodeData, SchemaColumn } from "@/lib/types";
 
-type MermaidArchGroup = "clients" | "edge" | "app" | "async" | "data" | "other";
-
-const ARCH_GROUP_LABELS: Record<MermaidArchGroup, string> = {
-  clients: "Clients",
-  edge: "Edge & Entry",
-  app: "Application",
-  async: "Messaging & Async",
-  data: "Data Stores",
-  other: "Components",
-};
-
-const SHAPE_TO_ARCH_GROUP: Record<ShapeType, MermaidArchGroup> = {
-  client: "clients",
-  gateway: "edge",
-  cloud: "edge",
-  service: "app",
-  container: "app",
-  function: "app",
-  queue: "async",
-  cache: "async",
-  database: "data",
-  storage: "data",
-  custom: "other",
-};
-
-const SHAPE_TO_MERMAID_CLASS: Record<ShapeType, string> = {
-  client: "clientNode",
-  gateway: "edgeNode",
-  cloud: "edgeNode",
-  service: "serviceNode",
-  container: "serviceNode",
-  function: "serviceNode",
-  queue: "asyncNode",
-  cache: "asyncNode",
-  database: "dataNode",
-  storage: "dataNode",
-  custom: "otherNode",
-};
-
-const MERMAID_CLASS_DEFS: Array<[string, string]> = [
-  ["clientNode", "fill:#e0f7fa,stroke:#0891b2,stroke-width:2px,color:#0f172a"],
-  ["edgeNode", "fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a"],
-  ["serviceNode", "fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#0f172a"],
-  ["asyncNode", "fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#0f172a"],
-  ["dataNode", "fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a"],
-  ["otherNode", "fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#111827"],
-];
-
 export interface MermaidSubgraph {
   key: string;
   id: string;
@@ -59,10 +11,8 @@ export interface MermaidSubgraph {
 }
 
 // ─── Flow → Mermaid ─────────────────────────────────────────────────
-// Mermaid is kept simple: just structure (nodes + edges).
-// Visual metadata (colors, shapes, icons) lives on the diagram side only.
-// If any databaseSchemaNode exists we emit an erDiagram block after the
-// main graph block so Mermaid can render ER diagrams alongside arch diagrams.
+// Mermaid is purely structural: nodes + edges.
+// All presentation (colors, grouping, styling) is owned by React Flow.
 export function flowToMermaid(nodes: DiagramNode[], edges: ArchEdge[]): string {
   const archNodes = nodes.filter((n) => n.type === "archNode") as ArchNode[];
   const schemaNodes = nodes.filter((n) => n.type === "databaseSchemaNode") as Array<
@@ -73,19 +23,10 @@ export function flowToMermaid(nodes: DiagramNode[], edges: ArchEdge[]): string {
 
   // ─── Architecture graph section ──────────────────────────────────
   if (archNodes.length > 0) {
-    lines.push(
-      "%%{init: {\"theme\":\"base\", \"flowchart\": {\"curve\":\"stepBefore\", \"nodeSpacing\": 42, \"rankSpacing\": 70, \"useMaxWidth\": false}}}%%"
-    );
     lines.push("flowchart LR");
 
-    const groupedNodes = groupArchNodes(archNodes);
-    for (const [group, nodesInGroup] of groupedNodes) {
-      if (nodesInGroup.length === 0) continue;
-      lines.push(`    subgraph ${group}["${ARCH_GROUP_LABELS[group]}"]`);
-      for (const node of nodesInGroup) {
-        lines.push(`        ${formatArchNodeForMermaid(node)}`);
-      }
-      lines.push("    end");
+    for (const node of archNodes) {
+      lines.push(`    ${formatArchNodeForMermaid(node)}`);
     }
 
     lines.push("");
@@ -100,24 +41,6 @@ export function flowToMermaid(nodes: DiagramNode[], edges: ArchEdge[]): string {
         lines.push(`    ${edge.source} --> ${edge.target}`);
       }
     }
-
-    lines.push("");
-    for (const [className, style] of MERMAID_CLASS_DEFS) {
-      lines.push(`    classDef ${className} ${style};`);
-    }
-
-    const classAssignments = new Map<string, string[]>();
-    for (const node of archNodes) {
-      const className = SHAPE_TO_MERMAID_CLASS[node.data.shapeType ?? "service"];
-      if (!classAssignments.has(className)) classAssignments.set(className, []);
-      classAssignments.get(className)!.push(node.id);
-    }
-    for (const [className, nodeIds] of classAssignments) {
-      if (nodeIds.length > 0) {
-        lines.push(`    class ${nodeIds.join(",")} ${className};`);
-      }
-    }
-    lines.push("    linkStyle default stroke:#64748b,stroke-width:1.8px;");
   } else if (schemaNodes.length === 0 && edges.length === 0) {
     // Preserve the existing empty-diagram default to avoid sync loops and
     // keep the new diagram experience unchanged.
@@ -202,19 +125,7 @@ function hashLabelToken(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function groupArchNodes(nodes: ArchNode[]): Array<[MermaidArchGroup, ArchNode[]]> {
-  const order: MermaidArchGroup[] = ["clients", "edge", "app", "async", "data", "other"];
-  const buckets = new Map<MermaidArchGroup, ArchNode[]>(
-    order.map((group) => [group, []])
-  );
 
-  for (const node of nodes) {
-    const group = SHAPE_TO_ARCH_GROUP[node.data.shapeType ?? "service"] ?? "other";
-    buckets.get(group)!.push(node);
-  }
-
-  return order.map((group) => [group, buckets.get(group)!]);
-}
 
 function formatArchNodeForMermaid(node: ArchNode): string {
   const label = escapeMermaidText(node.data.label ?? node.id);

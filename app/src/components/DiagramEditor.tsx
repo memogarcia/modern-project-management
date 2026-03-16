@@ -465,39 +465,19 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--background)" }}>
       {/* Header */}
-      <div
-        style={{
-          height: 60,
-          padding: "0 20px",
-          background: "var(--panel-bg)",
-          borderBottom: "1px solid var(--border)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexShrink: 0,
-          zIndex: 10,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <div className="flex h-10 items-center justify-between border-b border-[var(--border)] px-4 shrink-0 z-10 bg-[var(--panel-bg)]">
+        <div className="flex items-center gap-2">
           <a
             href="/diagrams"
-            style={{
-              color: "var(--text-muted)",
-              textDecoration: "none",
-              fontSize: "13px",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              fontWeight: 500,
-            }}
+            className="text-[13px] text-[var(--text-muted)] font-medium no-underline hover:text-[var(--foreground)] transition-colors"
           >
             Diagrams
           </a>
-          <span style={{ color: "var(--border)", fontSize: "16px", fontWeight: 300 }}>/</span>
-          <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--foreground)" }}>{diagramName}</span>
+          <span className="text-[var(--border)] text-base font-light">/</span>
+          <span className="text-sm font-semibold text-[var(--foreground)]">{diagramName}</span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="flex items-center gap-2">
           {/* Additional header actions could go here */}
         </div>
       </div>

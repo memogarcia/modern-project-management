@@ -3,13 +3,14 @@
 import { useState } from "react";
 import type { KanbanProject, KanbanTask, KanbanColumn } from "@/lib/projectTypes";
 import { PRIORITY_CONFIG } from "@/lib/projectTypes";
+import type { CreateItemDefaults } from "./CreateItemModal";
 import { Badge } from "./ui/badge";
 import { EmptyState } from "./ui/empty-state";
 import { cn } from "@/lib/utils";
 
 interface KanbanBoardViewProps {
   project: KanbanProject;
-  onAddTask: (columnId: string, name: string) => void;
+  onRequestCreate: (defaults?: CreateItemDefaults) => void;
   onMoveTask: (taskId: string, columnId: string, position: number) => void;
   onUpdateTask: (taskId: string, updates: Partial<KanbanTask>) => void;
   onRemoveTask: (taskId: string) => void;
@@ -19,26 +20,17 @@ interface KanbanBoardViewProps {
 
 export default function KanbanBoardView({
   project,
-  onAddTask,
+  onRequestCreate,
   onMoveTask,
   onUpdateTask,
   onRemoveTask,
   onSelectTask,
   selectedTaskId,
 }: KanbanBoardViewProps) {
-  const [addingTo, setAddingTo] = useState<string | null>(null);
-  const [newTitle, setNewTitle] = useState("");
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
   const columns = [...project.columns].sort((a, b) => a.position - b.position);
-
-  const confirmAdd = (columnId: string) => {
-    if (!newTitle.trim()) { setAddingTo(null); return; }
-    onAddTask(columnId, newTitle.trim());
-    setNewTitle("");
-    setAddingTo(null);
-  };
 
   const handleDrop = (targetColumnId: string) => {
     if (!dragTaskId) return;
@@ -99,7 +91,7 @@ export default function KanbanBoardView({
                 )}
               </div>
               <button
-                onClick={() => { setAddingTo(col.id); setNewTitle(""); }}
+                onClick={() => onRequestCreate({ columnId: col.id })}
                 title="Add task"
                 className="flex items-center justify-center w-7 h-7 rounded-md border border-[var(--border)] bg-transparent text-[var(--text-muted)] text-lg leading-none cursor-pointer transition-all duration-100 hover:text-white hover:border-transparent"
                 style={{ "--hover-bg": col.color } as React.CSSProperties}
@@ -174,52 +166,19 @@ export default function KanbanBoardView({
                 );
               })}
 
-              {tasks.length === 0 && addingTo !== col.id && (
+              {tasks.length === 0 && (
                 <EmptyState title="No tasks yet" compact className="py-5" />
               )}
             </div>
 
-            {/* Add task form */}
+            {/* Add task button (opens modal) */}
             <div className="p-2.5 shrink-0">
-              {addingTo === col.id ? (
-                <div>
-                  <textarea
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="Task name…"
-                    autoFocus
-                    rows={2}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); confirmAdd(col.id); }
-                      if (e.key === "Escape") { setAddingTo(null); setNewTitle(""); }
-                    }}
-                    className="w-full p-2 bg-[var(--background)] rounded-lg text-[var(--foreground)] text-[13px] resize-none outline-none border font-[inherit] mb-1.5 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
-                    style={{ borderColor: col.color }}
-                  />
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => confirmAdd(col.id)}
-                      className="flex-1 py-1.5 text-white border-none rounded-md cursor-pointer text-xs font-semibold"
-                      style={{ background: col.color }}
-                    >
-                      Add task
-                    </button>
-                    <button
-                      onClick={() => { setAddingTo(null); setNewTitle(""); }}
-                      className="flex-1 py-1.5 bg-transparent text-[var(--text-muted)] border border-[var(--border)] rounded-md cursor-pointer text-xs"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => { setAddingTo(col.id); setNewTitle(""); }}
-                  className="w-full py-2 bg-transparent border border-dashed border-[var(--border)] rounded-lg text-[var(--text-muted)] cursor-pointer text-xs font-medium transition-colors duration-150 hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                >
-                  + Add task
-                </button>
-              )}
+              <button
+                onClick={() => onRequestCreate({ columnId: col.id })}
+                className="w-full py-2 bg-transparent border border-dashed border-[var(--border)] rounded-lg text-[var(--text-muted)] cursor-pointer text-xs font-medium transition-colors duration-150 hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              >
+                + Add task
+              </button>
             </div>
           </div>
         );
