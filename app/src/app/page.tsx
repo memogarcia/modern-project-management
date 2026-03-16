@@ -2,29 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Calendar, BarChart, Share2, Timer, ListTree, Terminal, ChevronDown } from "lucide-react";
-
-const tools = [
-  { href: "/diagrams", icon: Share2, title: "Diagrams", desc: "Architecture diagrams, flowcharts, and database schemas with an intuitive node-based editor." },
-  { href: "/gantt", icon: BarChart, title: "Gantt Charts", desc: "Interactive timelines, task dependencies, and progress tracking for your projects." },
-  { href: "/calendar", icon: Calendar, title: "Calendar", desc: "View tasks and deadlines in a familiar calendar format to manage your schedule." },
-  { href: "/sessions", icon: Timer, title: "Sessions", desc: "Focus sessions with a built-in Pomodoro timer. Link diagrams, notes, and track what you get done." },
-  { href: "/matrix", icon: ListTree, title: "Eisenhower Matrix", desc: "Prioritize tasks across four quadrants: do first, schedule, delegate, and drop." },
-];
-
-const cardStyle: React.CSSProperties = {
-  background: "var(--panel-bg)",
-  border: "1px solid var(--border)",
-  borderRadius: 16,
-  padding: 32,
-  height: "100%",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "flex-start",
-  transition: "all 0.2s ease",
-  boxShadow: "var(--card-shadow)",
-  cursor: "pointer",
-};
+import { Share2, Terminal, ChevronDown, Layers, BarChart3, CalendarDays, Grid3X3, Timer } from "lucide-react";
 
 const mcpConfig = `{
   "mcpServers": {
@@ -38,6 +16,15 @@ const mcpConfig = `{
   }
 }`;
 
+const features = [
+  { icon: Layers, label: "Kanban Boards" },
+  { icon: BarChart3, label: "Gantt Timelines" },
+  { icon: CalendarDays, label: "Calendar View" },
+  { icon: Grid3X3, label: "Eisenhower Matrix" },
+  { icon: Timer, label: "Focus Sessions" },
+  { icon: Share2, label: "Architecture Diagrams" },
+];
+
 export default function Home() {
   const [mcpOpen, setMcpOpen] = useState(false);
 
@@ -45,42 +32,70 @@ export default function Home() {
     <div style={{ flex: 1, background: "var(--background)", color: "var(--foreground)", display: "flex", flexDirection: "column", alignItems: "center", padding: "60px 20px", overflowY: "auto" }}>
       <div style={{ textAlign: "center", marginBottom: 56 }}>
         <h1 style={{ fontSize: 48, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 16, background: "linear-gradient(135deg, var(--foreground) 0%, var(--text-muted) 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-          Workspace
+          Planview
         </h1>
         <p style={{ fontSize: 18, color: "var(--text-muted)", maxWidth: 600, margin: "0 auto", lineHeight: 1.6 }}>
           Plan, visualize, and focus — all from a single place.
         </p>
       </div>
 
-      {/* Tool cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20, width: "100%", maxWidth: 1100, marginBottom: 80 }}>
-        {tools.map(({ href, icon: Icon, title, desc }) => (
-          <Link key={href} href={href} style={{ textDecoration: "none" }}>
-            <div
-              style={cardStyle}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "var(--accent)";
-                e.currentTarget.style.transform = "translateY(-4px)";
-                e.currentTarget.style.boxShadow = "var(--card-shadow-hover)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "var(--border)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "var(--card-shadow)";
-              }}
-            >
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: "var(--surface-hover)", border: "1px solid var(--border)", color: "var(--foreground)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
-                <Icon size={20} strokeWidth={2} />
-              </div>
-              <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10, color: "var(--foreground)", letterSpacing: "-0.02em" }}>{title}</h2>
-              <p style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6, margin: 0 }}>{desc}</p>
+      {/* Main Projects card */}
+      <div style={{ width: "100%", maxWidth: 560, marginBottom: 80 }}>
+        <Link href="/projects" style={{ textDecoration: "none" }}>
+          <div
+            style={{
+              background: "var(--panel-bg)",
+              border: "1px solid var(--border)",
+              borderRadius: 16,
+              padding: 32,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              transition: "all 0.2s ease",
+              boxShadow: "var(--card-shadow)",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "var(--accent)";
+              e.currentTarget.style.transform = "translateY(-4px)";
+              e.currentTarget.style.boxShadow = "var(--card-shadow-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "var(--border)";
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "var(--card-shadow)";
+            }}
+          >
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: "var(--surface-hover)", border: "1px solid var(--border)", color: "var(--foreground)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+              <Layers size={20} strokeWidth={2} />
             </div>
-          </Link>
-        ))}
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 10, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
+              Projects
+            </h2>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6, margin: "0 0 20px" }}>
+              Everything you need to plan and ship — from task boards to architecture diagrams.
+            </p>
+
+            {/* Feature pills */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {features.map(({ icon: Icon, label }) => (
+                <div key={label} style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "5px 12px", borderRadius: 20,
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  fontSize: 12, fontWeight: 500, color: "var(--text-muted)",
+                }}>
+                  <Icon size={13} strokeWidth={2} />
+                  {label}
+                </div>
+              ))}
+            </div>
+          </div>
+        </Link>
       </div>
 
       {/* MCP section */}
-      <div style={{ width: "100%", maxWidth: 1100 }}>
+      <div style={{ width: "100%", maxWidth: 800 }}>
         <button
           onClick={() => setMcpOpen((v) => !v)}
           style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: mcpOpen ? 24 : 0, width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
@@ -119,14 +134,12 @@ npm --prefix mcp-server run build`}</pre>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 8 }}>Step 3 — Available tools</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {[
-                ["list_diagrams", "List all diagrams"],
-                ["create_diagram", "Create a new diagram"],
-                ["list_gantt_charts", "List all Gantt charts"],
-                ["create_gantt_chart", "Create a Gantt chart"],
-                ["list_sessions", "List focus sessions"],
-                ["create_session", "Create a session"],
-                ["create_matrix_board", "Create an Eisenhower board"],
-                ["add_matrix_task", "Add task to a quadrant"],
+                ["list_projects", "List all projects"],
+                ["create_project", "Create a new project"],
+                ["create_kanban_task", "Add a task to a project"],
+                ["add_project_session", "Create a focus session"],
+                ["create_diagram", "Create a diagram"],
+                ["link_diagram_to_project", "Link a diagram to a project"],
               ].map(([name, desc]) => (
                 <div key={name} style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
                   <code style={{ fontSize: 12, fontFamily: "monospace", color: "var(--foreground)", background: "var(--surface)", border: "1px solid var(--border)", padding: "1px 6px", borderRadius: 4, whiteSpace: "nowrap" }}>{name}</code>

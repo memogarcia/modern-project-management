@@ -4,7 +4,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { Sidebar } from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "ArchDiagram — Architecture Diagramming Tool",
+  title: "Planview — Plan, visualize, and focus",
   description:
     "Visual architecture diagramming with React Flow and Mermaid, with bidirectional sync.",
 };

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Diagram, GanttChart, Session, MatrixBoard } from "./types.js";
+import type { Diagram, KanbanProject } from "./types.js";
 
 const SAFE_DIAGRAM_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -142,11 +142,11 @@ export class DiagramStorage {
   }
 }
 
-export class GanttStorage {
+export class ProjectStorage {
   private dir: string;
 
   constructor(baseDir: string) {
-    this.dir = path.join(baseDir, "gantt");
+    this.dir = path.join(baseDir, "kanban");
     if (!fs.existsSync(this.dir)) {
       fs.mkdirSync(this.dir, { recursive: true });
     }
@@ -157,157 +157,47 @@ export class GanttStorage {
     return path.join(this.dir, `${id}.json`);
   }
 
-  list(): GanttChart[] {
+  list(): KanbanProject[] {
     if (!fs.existsSync(this.dir)) return [];
     const files = fs.readdirSync(this.dir).filter((f) => f.endsWith(".json"));
-    const charts: GanttChart[] = [];
+    const projects: KanbanProject[] = [];
     for (const fileName of files) {
       const filePath = path.join(this.dir, fileName);
       try {
-        charts.push(readJsonFile<GanttChart>(filePath));
+        const project = readJsonFile<KanbanProject>(filePath);
+        // Ensure new fields exist
+        if (!project.sessions) project.sessions = [];
+        if (!project.diagramIds) project.diagramIds = [];
+        projects.push(project);
       } catch (error) {
-        console.error(`Skipping unreadable Gantt chart file: ${filePath}`, error);
+        console.error(`Skipping unreadable project file: ${filePath}`, error);
       }
     }
-    return charts;
+    return projects;
   }
 
-  get(id: string): GanttChart | null {
+  get(id: string): KanbanProject | null {
     const fp = this.filePath(id);
     if (!fp) return null;
     if (!fs.existsSync(fp)) return null;
     try {
-      return readJsonFile<GanttChart>(fp);
+      const project = readJsonFile<KanbanProject>(fp);
+      // Ensure new fields exist
+      if (!project.sessions) project.sessions = [];
+      if (!project.diagramIds) project.diagramIds = [];
+      return project;
     } catch (error) {
-      console.error(`Failed to read Gantt chart file: ${fp}`, error);
+      console.error(`Failed to read project file: ${fp}`, error);
       return null;
     }
   }
 
-  save(chart: GanttChart): void {
-    const fp = this.filePath(chart.id);
+  save(project: KanbanProject): void {
+    const fp = this.filePath(project.id);
     if (!fp) {
-      throw new Error(`Invalid chart id: ${chart.id}`);
+      throw new Error(`Invalid project id: ${project.id}`);
     }
-    writeJsonFileAtomic(fp, chart);
-  }
-
-  delete(id: string): boolean {
-    const fp = this.filePath(id);
-    if (!fp) return false;
-    if (!fs.existsSync(fp)) return false;
-    fs.unlinkSync(fp);
-    return true;
-  }
-}
-
-export class SessionStorage {
-  private dir: string;
-
-  constructor(baseDir: string) {
-    this.dir = path.join(baseDir, "sessions");
-    if (!fs.existsSync(this.dir)) {
-      fs.mkdirSync(this.dir, { recursive: true });
-    }
-  }
-
-  private filePath(id: string): string | null {
-    if (!isSafeDiagramId(id)) return null;
-    return path.join(this.dir, `${id}.json`);
-  }
-
-  list(): Session[] {
-    if (!fs.existsSync(this.dir)) return [];
-    const files = fs.readdirSync(this.dir).filter((f) => f.endsWith(".json"));
-    const sessions: Session[] = [];
-    for (const fileName of files) {
-      const filePath = path.join(this.dir, fileName);
-      try {
-        sessions.push(readJsonFile<Session>(filePath));
-      } catch (error) {
-        console.error(`Skipping unreadable session file: ${filePath}`, error);
-      }
-    }
-    return sessions;
-  }
-
-  get(id: string): Session | null {
-    const fp = this.filePath(id);
-    if (!fp) return null;
-    if (!fs.existsSync(fp)) return null;
-    try {
-      return readJsonFile<Session>(fp);
-    } catch (error) {
-      console.error(`Failed to read session file: ${fp}`, error);
-      return null;
-    }
-  }
-
-  save(session: Session): void {
-    const fp = this.filePath(session.id);
-    if (!fp) {
-      throw new Error(`Invalid session id: ${session.id}`);
-    }
-    writeJsonFileAtomic(fp, session);
-  }
-
-  delete(id: string): boolean {
-    const fp = this.filePath(id);
-    if (!fp) return false;
-    if (!fs.existsSync(fp)) return false;
-    fs.unlinkSync(fp);
-    return true;
-  }
-}
-
-export class MatrixStorage {
-  private dir: string;
-
-  constructor(baseDir: string) {
-    this.dir = path.join(baseDir, "matrix");
-    if (!fs.existsSync(this.dir)) {
-      fs.mkdirSync(this.dir, { recursive: true });
-    }
-  }
-
-  private filePath(id: string): string | null {
-    if (!isSafeDiagramId(id)) return null;
-    return path.join(this.dir, `${id}.json`);
-  }
-
-  list(): MatrixBoard[] {
-    if (!fs.existsSync(this.dir)) return [];
-    const files = fs.readdirSync(this.dir).filter((f) => f.endsWith(".json"));
-    const boards: MatrixBoard[] = [];
-    for (const fileName of files) {
-      const filePath = path.join(this.dir, fileName);
-      try {
-        boards.push(readJsonFile<MatrixBoard>(filePath));
-      } catch (error) {
-        console.error(`Skipping unreadable matrix board file: ${filePath}`, error);
-      }
-    }
-    return boards;
-  }
-
-  get(id: string): MatrixBoard | null {
-    const fp = this.filePath(id);
-    if (!fp) return null;
-    if (!fs.existsSync(fp)) return null;
-    try {
-      return readJsonFile<MatrixBoard>(fp);
-    } catch (error) {
-      console.error(`Failed to read matrix board file: ${fp}`, error);
-      return null;
-    }
-  }
-
-  save(board: MatrixBoard): void {
-    const fp = this.filePath(board.id);
-    if (!fp) {
-      throw new Error(`Invalid matrix board id: ${board.id}`);
-    }
-    writeJsonFileAtomic(fp, board);
+    writeJsonFileAtomic(fp, project);
   }
 
   delete(id: string): boolean {

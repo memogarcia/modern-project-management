@@ -4,13 +4,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import { DiagramStorage, GanttStorage, SessionStorage, MatrixStorage } from "./storage.js";
-import type { Diagram, GanttChart, GanttTask, Session, MatrixBoard, MatrixTask } from "./types.js";
+import { DiagramStorage, ProjectStorage } from "./storage.js";
+import type { Diagram, KanbanProject, KanbanEpic, KanbanTask, KanbanColumn, KanbanTaskLink, ProjectSession } from "./types.js";
+import { DEFAULT_KANBAN_COLUMNS } from "./types.js";
 
 const storage = new DiagramStorage(process.env.DIAGRAMS_DIR);
-const ganttStorage = new GanttStorage(storage.baseDir);
-const sessionStorage = new SessionStorage(storage.baseDir);
-const matrixStorage = new MatrixStorage(storage.baseDir);
+const projectStorage = new ProjectStorage(storage.baseDir);
 const MERMAID_NODE_ID_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 const server = new McpServer({
@@ -620,115 +619,88 @@ server.tool(
 );
 
 // ═══════════════════════════════════════════════════════════════════════
-// GANTT CHART TOOLS
+// PROJECT TOOLS (Unified Task Management)
 // ═══════════════════════════════════════════════════════════════════════
 
-// ─── Tool: list_gantt_charts ─────────────────────────────────────────
-server.tool("list_gantt_charts", "List all saved Gantt charts", {}, async () => {
-  const charts = ganttStorage.list();
-  const summary = charts.map((c) => ({
-    id: c.id,
-    name: c.name,
-    description: c.description,
-    taskCount: c.tasks.length,
-    updatedAt: c.updatedAt,
+// ─── Tool: list_projects ─────────────────────────────────────────────
+server.tool("list_projects", "List all projects (summary)", {}, async () => {
+  const projects = projectStorage.list();
+  const summary = projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    epicCount: p.epics.length,
+    taskCount: p.tasks.length,
+    columnCount: p.columns.length,
+    sessionCount: p.sessions.length,
+    diagramCount: p.diagramIds.length,
+    updatedAt: p.updatedAt,
   }));
   return {
     content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
   };
 });
 
-// ─── Tool: get_gantt_chart ───────────────────────────────────────────
+// ─── Tool: get_project ───────────────────────────────────────────────
 server.tool(
-  "get_gantt_chart",
-  "Get a Gantt chart by ID, returns tasks and metadata",
-  { id: z.string().describe("The Gantt chart ID") },
+  "get_project",
+  "Get a project by ID with all columns, epics, tasks, sessions, and diagram links",
+  { id: z.string().describe("The project ID") },
   async ({ id }) => {
-    const chart = ganttStorage.get(id);
-    if (!chart) {
+    const project = projectStorage.get(id);
+    if (!project) {
       return {
-        content: [{ type: "text" as const, text: `Gantt chart not found: ${id}` }],
+        content: [{ type: "text" as const, text: `Project not found: ${id}` }],
         isError: true,
       };
     }
     return {
-      content: [{ type: "text" as const, text: JSON.stringify(chart, null, 2) }],
+      content: [{ type: "text" as const, text: JSON.stringify(project, null, 2) }],
     };
   }
 );
 
-// ─── Tool: create_gantt_chart ────────────────────────────────────────
+// ─── Tool: create_project ────────────────────────────────────────────
 server.tool(
-  "create_gantt_chart",
-  "Create a new Gantt chart with tasks for project planning. Each task has a name, start date, end date, status, priority, progress, and optional links to JIRA/GitHub.",
+  "create_project",
+  "Create a new project with optional custom columns (defaults to Backlog/To Do/In Progress/Review/Done)",
   {
-    name: z.string().describe("Name of the Gantt chart"),
-    description: z.string().optional().describe("Description of the chart"),
-    tasks: z
+    name: z.string().describe("Project name"),
+    description: z.string().optional().describe("Project description"),
+    columns: z
       .array(
         z.object({
-          name: z.string().describe("Task name"),
-          startDate: z.string().describe("Start date (YYYY-MM-DD)"),
-          endDate: z.string().describe("End date (YYYY-MM-DD)"),
-          status: z
-            .enum(["not-started", "in-progress", "completed", "blocked", "cancelled"])
-            .optional()
-            .default("not-started"),
-          priority: z
-            .enum(["low", "medium", "high", "critical"])
-            .optional()
-            .default("medium"),
-          progress: z.number().min(0).max(100).optional().default(0),
-          assignee: z.string().optional().describe("Person or team assigned"),
-          group: z.string().optional().describe("Group/section name"),
-          description: z.string().optional(),
-          links: z
-            .array(
-              z.object({
-                label: z.string(),
-                url: z.string().url(),
-                type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]),
-              })
-            )
-            .optional()
-            .default([]),
-          metadata: z.record(z.string()).optional().default({}),
+          id: z.string(),
+          name: z.string(),
+          color: z.string(),
+          position: z.number(),
+          wipLimit: z.number().optional(),
         })
       )
       .optional()
-      .default([]),
+      .describe("Custom columns (defaults to 5 standard columns)"),
   },
-  async ({ name, description, tasks }) => {
+  async ({ name, description, columns }) => {
     const now = new Date().toISOString();
-    const chart: GanttChart = {
+    const project: KanbanProject = {
       id: uuidv4(),
       name,
       description: description ?? "",
       createdAt: now,
       updatedAt: now,
-      tasks: tasks.map((t) => ({
-        id: uuidv4(),
-        name: t.name,
-        startDate: t.startDate,
-        endDate: t.endDate,
-        status: t.status,
-        priority: t.priority,
-        progress: t.progress,
-        assignee: t.assignee,
-        group: t.group,
-        description: t.description,
-        links: t.links,
-        dependencies: [],
-        metadata: t.metadata,
-      })),
+      columns: columns ?? [...DEFAULT_KANBAN_COLUMNS],
+      epics: [],
+      tasks: [],
+      sessions: [],
+      diagramIds: [],
     };
-    ganttStorage.save(chart);
+    projectStorage.save(project);
     return {
       content: [
         {
           type: "text" as const,
           text: JSON.stringify(
-            { id: chart.id, name: chart.name, taskCount: chart.tasks.length, message: "Gantt chart created" },
+            { id: project.id, name: project.name, columnCount: project.columns.length, message: "Project created" },
             null,
             2
           ),
@@ -738,27 +710,438 @@ server.tool(
   }
 );
 
-// ─── Tool: add_gantt_task ────────────────────────────────────────────
+// ─── Tool: update_project ────────────────────────────────────────────
 server.tool(
-  "add_gantt_task",
-  "Add a task to an existing Gantt chart",
+  "update_project",
+  "Update project metadata (name, description)",
   {
-    chartId: z.string().describe("The Gantt chart ID"),
+    id: z.string().describe("The project ID"),
+    name: z.string().optional().describe("New name"),
+    description: z.string().optional().describe("New description"),
+  },
+  async ({ id, name, description }) => {
+    const project = projectStorage.get(id);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${id}` }],
+        isError: true,
+      };
+    }
+    if (name !== undefined) project.name = name;
+    if (description !== undefined) project.description = description;
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ id: project.id, name: project.name, message: "Project updated" }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: delete_project ────────────────────────────────────────────
+server.tool(
+  "delete_project",
+  "Delete a project and all its data",
+  { id: z.string().describe("The project ID") },
+  async ({ id }) => {
+    const deleted = projectStorage.delete(id);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: deleted ? `Project ${id} deleted` : `Project not found: ${id}`,
+        },
+      ],
+      isError: !deleted,
+    };
+  }
+);
+
+// ─── Tool: add_kanban_column ─────────────────────────────────────────
+server.tool(
+  "add_kanban_column",
+  "Add a column to a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    name: z.string().describe("Column name"),
+    color: z.string().describe("Column color (hex)"),
+    position: z.number().optional().describe("Position (appends to end if omitted)"),
+    wipLimit: z.number().optional().describe("Work-in-progress limit"),
+  },
+  async ({ projectId, name, color, position, wipLimit }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const column: KanbanColumn = {
+      id: uuidv4(),
+      name,
+      color,
+      position: position ?? project.columns.length,
+      wipLimit,
+    };
+    project.columns.push(column);
+    project.columns.sort((a, b) => a.position - b.position);
+    project.columns.forEach((c, i) => { c.position = i; });
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ columnId: column.id, name: column.name, message: "Column added" }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: update_kanban_column ──────────────────────────────────────
+server.tool(
+  "update_kanban_column",
+  "Update a column (name, color, wipLimit)",
+  {
+    projectId: z.string().describe("The project ID"),
+    columnId: z.string().describe("The column ID"),
+    name: z.string().optional().describe("New name"),
+    color: z.string().optional().describe("New color (hex)"),
+    wipLimit: z.number().optional().describe("New WIP limit"),
+  },
+  async ({ projectId, columnId, name, color, wipLimit }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const column = project.columns.find((c) => c.id === columnId);
+    if (!column) {
+      return {
+        content: [{ type: "text" as const, text: `Column not found: ${columnId}` }],
+        isError: true,
+      };
+    }
+    if (name !== undefined) column.name = name;
+    if (color !== undefined) column.color = color;
+    if (wipLimit !== undefined) column.wipLimit = wipLimit;
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ columnId: column.id, name: column.name, message: "Column updated" }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: reorder_kanban_columns ────────────────────────────────────
+server.tool(
+  "reorder_kanban_columns",
+  "Reorder all columns in a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    columnIds: z.array(z.string()).describe("Ordered column IDs"),
+  },
+  async ({ projectId, columnIds }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const columnMap = new Map(project.columns.map((c) => [c.id, c]));
+    const reordered: KanbanColumn[] = [];
+    for (let i = 0; i < columnIds.length; i++) {
+      const col = columnMap.get(columnIds[i]);
+      if (!col) {
+        return {
+          content: [{ type: "text" as const, text: `Column not found: ${columnIds[i]}` }],
+          isError: true,
+        };
+      }
+      col.position = i;
+      reordered.push(col);
+    }
+    project.columns = reordered;
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: "Columns reordered", order: columnIds }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: delete_kanban_column ──────────────────────────────────────
+server.tool(
+  "delete_kanban_column",
+  "Delete a column and move orphaned tasks to a target column",
+  {
+    projectId: z.string().describe("The project ID"),
+    columnId: z.string().describe("The column to delete"),
+    targetColumnId: z.string().describe("Column to move orphaned tasks to"),
+  },
+  async ({ projectId, columnId, targetColumnId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    if (!project.columns.some((c) => c.id === targetColumnId)) {
+      return {
+        content: [{ type: "text" as const, text: `Target column not found: ${targetColumnId}` }],
+        isError: true,
+      };
+    }
+    if (columnId === targetColumnId) {
+      return {
+        content: [{ type: "text" as const, text: "Cannot delete column into itself" }],
+        isError: true,
+      };
+    }
+    for (const task of project.tasks) {
+      if (task.columnId === columnId) {
+        task.columnId = targetColumnId;
+      }
+    }
+    project.columns = project.columns.filter((c) => c.id !== columnId);
+    project.columns.sort((a, b) => a.position - b.position);
+    project.columns.forEach((c, i) => { c.position = i; });
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Column ${columnId} deleted, tasks moved to ${targetColumnId}` }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: list_kanban_epics ─────────────────────────────────────────
+server.tool(
+  "list_kanban_epics",
+  "List all epics in a project",
+  { projectId: z.string().describe("The project ID") },
+  async ({ projectId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(project.epics, null, 2) }],
+    };
+  }
+);
+
+// ─── Tool: get_kanban_epic ───────────────────────────────────────────
+server.tool(
+  "get_kanban_epic",
+  "Get an epic and its tasks",
+  {
+    projectId: z.string().describe("The project ID"),
+    epicId: z.string().describe("The epic ID"),
+  },
+  async ({ projectId, epicId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const epic = project.epics.find((e) => e.id === epicId);
+    if (!epic) {
+      return {
+        content: [{ type: "text" as const, text: `Epic not found: ${epicId}` }],
+        isError: true,
+      };
+    }
+    const tasks = project.tasks.filter((t) => t.epicId === epicId);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ ...epic, tasks }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: create_kanban_epic ────────────────────────────────────────
+server.tool(
+  "create_kanban_epic",
+  "Create an epic in a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    name: z.string().describe("Epic name"),
+    description: z.string().optional().describe("Epic description"),
+    color: z.string().optional().describe("Badge color (hex)"),
+  },
+  async ({ projectId, name, description, color }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const now = new Date().toISOString();
+    const epic: KanbanEpic = {
+      id: uuidv4(),
+      name,
+      description,
+      color,
+      createdAt: now,
+      updatedAt: now,
+    };
+    project.epics.push(epic);
+    project.updatedAt = now;
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ epicId: epic.id, name: epic.name, message: "Epic created" }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: update_kanban_epic ────────────────────────────────────────
+server.tool(
+  "update_kanban_epic",
+  "Update an epic in a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    epicId: z.string().describe("The epic ID"),
+    name: z.string().optional().describe("New name"),
+    description: z.string().optional().describe("New description"),
+    color: z.string().optional().describe("New badge color"),
+  },
+  async ({ projectId, epicId, name, description, color }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const epic = project.epics.find((e) => e.id === epicId);
+    if (!epic) {
+      return {
+        content: [{ type: "text" as const, text: `Epic not found: ${epicId}` }],
+        isError: true,
+      };
+    }
+    if (name !== undefined) epic.name = name;
+    if (description !== undefined) epic.description = description;
+    if (color !== undefined) epic.color = color;
+    epic.updatedAt = new Date().toISOString();
+    project.updatedAt = epic.updatedAt;
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ epicId: epic.id, name: epic.name, message: "Epic updated" }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: delete_kanban_epic ────────────────────────────────────────
+server.tool(
+  "delete_kanban_epic",
+  "Delete an epic. Optionally move its tasks to another epic, otherwise tasks are deleted.",
+  {
+    projectId: z.string().describe("The project ID"),
+    epicId: z.string().describe("The epic to delete"),
+    targetEpicId: z.string().optional().describe("Epic to move tasks to (tasks deleted if omitted)"),
+  },
+  async ({ projectId, epicId, targetEpicId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    if (!project.epics.some((e) => e.id === epicId)) {
+      return {
+        content: [{ type: "text" as const, text: `Epic not found: ${epicId}` }],
+        isError: true,
+      };
+    }
+    if (targetEpicId) {
+      if (!project.epics.some((e) => e.id === targetEpicId)) {
+        return {
+          content: [{ type: "text" as const, text: `Target epic not found: ${targetEpicId}` }],
+          isError: true,
+        };
+      }
+      for (const task of project.tasks) {
+        if (task.epicId === epicId) task.epicId = targetEpicId;
+      }
+    } else {
+      project.tasks = project.tasks.filter((t) => t.epicId !== epicId);
+    }
+    project.epics = project.epics.filter((e) => e.id !== epicId);
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Epic ${epicId} deleted${targetEpicId ? ", tasks moved" : ", tasks removed"}` }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: create_kanban_task ────────────────────────────────────────
+server.tool(
+  "create_kanban_task",
+  "Create a task in a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    epicId: z.string().describe("The epic ID this task belongs to"),
+    columnId: z.string().describe("The column ID for Kanban placement"),
     name: z.string().describe("Task name"),
-    startDate: z.string().describe("Start date (YYYY-MM-DD)"),
-    endDate: z.string().describe("End date (YYYY-MM-DD)"),
-    status: z
-      .enum(["not-started", "in-progress", "completed", "blocked", "cancelled"])
-      .optional()
-      .default("not-started"),
-    priority: z
-      .enum(["low", "medium", "high", "critical"])
-      .optional()
-      .default("medium"),
-    progress: z.number().min(0).max(100).optional().default(0),
-    assignee: z.string().optional(),
-    group: z.string().optional(),
     description: z.string().optional(),
+    priority: z.enum(["low", "medium", "high", "critical"]).optional().default("medium"),
+    assignee: z.string().optional(),
+    tags: z.array(z.string()).optional().default([]),
+    startDate: z.string().optional().describe("Start date (YYYY-MM-DD)"),
+    dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
+    progress: z.number().min(0).max(100).optional().default(0),
     links: z
       .array(
         z.object({
@@ -771,671 +1154,569 @@ server.tool(
       .default([]),
     metadata: z.record(z.string()).optional().default({}),
   },
-  async ({ chartId, name, startDate, endDate, status, priority, progress, assignee, group, description, links, metadata }) => {
-    const chart = ganttStorage.get(chartId);
-    if (!chart) {
+  async ({ projectId, epicId, columnId, name, description, priority, assignee, tags, startDate, dueDate, progress, links, metadata }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
       return {
-        content: [{ type: "text" as const, text: `Gantt chart not found: ${chartId}` }],
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
         isError: true,
       };
     }
-
-    const task: GanttTask = {
+    if (!project.epics.some((e) => e.id === epicId)) {
+      return {
+        content: [{ type: "text" as const, text: `Epic not found: ${epicId}` }],
+        isError: true,
+      };
+    }
+    if (!project.columns.some((c) => c.id === columnId)) {
+      return {
+        content: [{ type: "text" as const, text: `Column not found: ${columnId}` }],
+        isError: true,
+      };
+    }
+    const now = new Date().toISOString();
+    const tasksInColumn = project.tasks.filter((t) => t.columnId === columnId);
+    const task: KanbanTask = {
       id: uuidv4(),
+      epicId,
+      columnId,
       name,
-      startDate,
-      endDate,
-      status,
-      priority,
-      progress,
-      assignee,
-      group,
       description,
+      priority,
+      assignee,
+      tags,
+      startDate,
+      dueDate,
+      progress,
+      position: tasksInColumn.length,
       links,
-      dependencies: [],
       metadata,
+      createdAt: now,
+      updatedAt: now,
     };
-
-    chart.tasks.push(task);
-    chart.updatedAt = new Date().toISOString();
-    ganttStorage.save(chart);
-
+    project.tasks.push(task);
+    project.updatedAt = now;
+    projectStorage.save(project);
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify(
-            { message: `Task '${name}' added`, taskId: task.id, chartId },
-            null,
-            2
-          ),
+          text: JSON.stringify({ taskId: task.id, name: task.name, message: "Task created" }, null, 2),
         },
       ],
     };
   }
 );
 
-// ─── Tool: update_gantt_task ─────────────────────────────────────────
+// ─── Tool: update_kanban_task ────────────────────────────────────────
 server.tool(
-  "update_gantt_task",
-  "Update an existing task in a Gantt chart",
+  "update_kanban_task",
+  "Update any fields of a task",
   {
-    chartId: z.string().describe("The Gantt chart ID"),
-    taskId: z.string().describe("The task ID to update"),
-    name: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    status: z.enum(["not-started", "in-progress", "completed", "blocked", "cancelled"]).optional(),
-    priority: z.enum(["low", "medium", "high", "critical"]).optional(),
-    progress: z.number().min(0).max(100).optional(),
-    assignee: z.string().optional(),
-    group: z.string().optional(),
-    description: z.string().optional(),
-  },
-  async ({ chartId, taskId, ...updates }) => {
-    const chart = ganttStorage.get(chartId);
-    if (!chart) {
-      return {
-        content: [{ type: "text" as const, text: `Gantt chart not found: ${chartId}` }],
-        isError: true,
-      };
-    }
-
-    const taskIdx = chart.tasks.findIndex((t) => t.id === taskId);
-    if (taskIdx === -1) {
-      return {
-        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
-        isError: true,
-      };
-    }
-
-    const task = chart.tasks[taskIdx];
-    Object.assign(task, Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined)));
-    chart.updatedAt = new Date().toISOString();
-    ganttStorage.save(chart);
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Task '${task.name}' updated`, task }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: add_link_to_gantt_task ────────────────────────────────────
-server.tool(
-  "add_link_to_gantt_task",
-  "Add a link (JIRA, GitHub PR, etc.) to a task in a Gantt chart",
-  {
-    chartId: z.string().describe("The Gantt chart ID"),
+    projectId: z.string().describe("The project ID"),
     taskId: z.string().describe("The task ID"),
-    label: z.string().describe("Link label (e.g. 'PROJ-123')"),
-    url: z.string().url().describe("Link URL"),
-    type: z
-      .enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"])
-      .describe("Type of link"),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    priority: z.enum(["low", "medium", "high", "critical"]).optional(),
+    assignee: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    startDate: z.string().optional(),
+    dueDate: z.string().optional(),
+    progress: z.number().min(0).max(100).optional(),
+    metadata: z.record(z.string()).optional(),
   },
-  async ({ chartId, taskId, label, url, type }) => {
-    const chart = ganttStorage.get(chartId);
-    if (!chart) {
+  async ({ projectId, taskId, ...updates }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
       return {
-        content: [{ type: "text" as const, text: `Gantt chart not found: ${chartId}` }],
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
         isError: true,
       };
     }
-
-    const task = chart.tasks.find((t) => t.id === taskId);
+    const task = project.tasks.find((t) => t.id === taskId);
     if (!task) {
       return {
         content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
         isError: true,
       };
     }
-
-    task.links.push({ label, url, type });
-    chart.updatedAt = new Date().toISOString();
-    ganttStorage.save(chart);
-
+    if (updates.name !== undefined) task.name = updates.name;
+    if (updates.description !== undefined) task.description = updates.description;
+    if (updates.priority !== undefined) task.priority = updates.priority;
+    if (updates.assignee !== undefined) task.assignee = updates.assignee;
+    if (updates.tags !== undefined) task.tags = updates.tags;
+    if (updates.startDate !== undefined) task.startDate = updates.startDate;
+    if (updates.dueDate !== undefined) task.dueDate = updates.dueDate;
+    if (updates.progress !== undefined) task.progress = updates.progress;
+    if (updates.metadata !== undefined) task.metadata = updates.metadata;
+    task.updatedAt = new Date().toISOString();
+    project.updatedAt = task.updatedAt;
+    projectStorage.save(project);
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify({ message: `Link '${label}' added to task '${task.name}'` }, null, 2),
+          text: JSON.stringify({ task, message: "Task updated" }, null, 2),
         },
       ],
     };
   }
 );
 
-// ─── Tool: delete_gantt_chart ────────────────────────────────────────
+// ─── Tool: move_kanban_task ──────────────────────────────────────────
 server.tool(
-  "delete_gantt_chart",
-  "Delete a Gantt chart by ID",
-  { id: z.string().describe("The Gantt chart ID") },
-  async ({ id }) => {
-    const deleted = ganttStorage.delete(id);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: deleted ? `Gantt chart ${id} deleted` : `Gantt chart not found: ${id}`,
-        },
-      ],
-      isError: !deleted,
-    };
-  }
-);
-
-// ─── Tool: list_sessions ─────────────────────────────────────────────
-server.tool("list_sessions", "List all saved focus sessions", {}, async () => {
-  const sessions = sessionStorage.list();
-  const summary = sessions.map((s) => ({
-    id: s.id,
-    title: s.title,
-    taskCount: s.tasks.length,
-    pomodorosCompleted: s.pomodorosCompleted,
-    updatedAt: s.updatedAt,
-  }));
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
-  };
-});
-
-// ─── Tool: get_session ───────────────────────────────────────────────
-server.tool(
-  "get_session",
-  "Get a session by ID, returns tasks, links, notes, and metadata",
-  { id: z.string().describe("The session ID") },
-  async ({ id }) => {
-    const session = sessionStorage.get(id);
-    if (!session) {
+  "move_kanban_task",
+  "Move a task to a different column and/or position (drag-and-drop)",
+  {
+    projectId: z.string().describe("The project ID"),
+    taskId: z.string().describe("The task ID"),
+    columnId: z.string().optional().describe("Target column ID"),
+    position: z.number().optional().describe("Target position within column"),
+  },
+  async ({ projectId, taskId, columnId, position }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
       return {
-        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
         isError: true,
       };
     }
+    const task = project.tasks.find((t) => t.id === taskId);
+    if (!task) {
+      return {
+        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
+        isError: true,
+      };
+    }
+    const targetCol = columnId ?? task.columnId;
+    if (!project.columns.some((c) => c.id === targetCol)) {
+      return {
+        content: [{ type: "text" as const, text: `Column not found: ${targetCol}` }],
+        isError: true,
+      };
+    }
+    task.columnId = targetCol;
+    const colTasks = project.tasks
+      .filter((t) => t.columnId === targetCol && t.id !== taskId)
+      .sort((a, b) => a.position - b.position);
+    const insertAt = position !== undefined ? Math.min(position, colTasks.length) : colTasks.length;
+    colTasks.splice(insertAt, 0, task);
+    colTasks.forEach((t, i) => { t.position = i; });
+    task.updatedAt = new Date().toISOString();
+    project.updatedAt = task.updatedAt;
+    projectStorage.save(project);
     return {
-      content: [{ type: "text" as const, text: JSON.stringify(session, null, 2) }],
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ taskId: task.id, columnId: task.columnId, position: task.position, message: "Task moved" }, null, 2),
+        },
+      ],
     };
   }
 );
 
-// ─── Tool: create_session ────────────────────────────────────────────
+// ─── Tool: delete_kanban_task ────────────────────────────────────────
 server.tool(
-  "create_session",
-  "Create a new focus session with optional tasks and links",
+  "delete_kanban_task",
+  "Delete a task from a project",
   {
-    title: z.string().describe("Title of the session"),
-    notes: z.string().optional().default("").describe("Session notes"),
-    tasks: z.array(z.string()).optional().default([]).describe("List of task strings"),
-    links: z
-      .array(
-        z.object({
-          label: z.string(),
-          url: z.string().url(),
-          type: z.enum(["diagram", "gantt", "matrix", "github", "other"]),
-        })
-      )
-      .optional()
-      .default([]),
+    projectId: z.string().describe("The project ID"),
+    taskId: z.string().describe("The task ID"),
   },
-  async ({ title, notes, tasks, links }) => {
+  async ({ projectId, taskId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const before = project.tasks.length;
+    project.tasks = project.tasks.filter((t) => t.id !== taskId);
+    if (project.tasks.length === before) {
+      return {
+        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
+        isError: true,
+      };
+    }
+    // Also remove task from any sessions
+    for (const session of project.sessions) {
+      session.taskIds = session.taskIds.filter((tid) => tid !== taskId);
+    }
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Task ${taskId} deleted` }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: list_kanban_tasks ─────────────────────────────────────────
+server.tool(
+  "list_kanban_tasks",
+  "List and filter tasks in a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    epicId: z.string().optional().describe("Filter by epic"),
+    columnId: z.string().optional().describe("Filter by column"),
+    assignee: z.string().optional().describe("Filter by assignee"),
+    priority: z.enum(["low", "medium", "high", "critical"]).optional().describe("Filter by priority"),
+    tag: z.string().optional().describe("Filter by tag"),
+  },
+  async ({ projectId, epicId, columnId, assignee, priority, tag }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    let tasks = project.tasks;
+    if (epicId) tasks = tasks.filter((t) => t.epicId === epicId);
+    if (columnId) tasks = tasks.filter((t) => t.columnId === columnId);
+    if (assignee) tasks = tasks.filter((t) => t.assignee === assignee);
+    if (priority) tasks = tasks.filter((t) => t.priority === priority);
+    if (tag) tasks = tasks.filter((t) => t.tags.includes(tag));
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(tasks, null, 2) }],
+    };
+  }
+);
+
+// ─── Tool: add_link_to_kanban_task ───────────────────────────────────
+server.tool(
+  "add_link_to_kanban_task",
+  "Add a typed link to a task",
+  {
+    projectId: z.string().describe("The project ID"),
+    taskId: z.string().describe("The task ID"),
+    label: z.string().describe("Link label"),
+    url: z.string().url().describe("Link URL"),
+    type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]).describe("Link type"),
+  },
+  async ({ projectId, taskId, label, url, type }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const task = project.tasks.find((t) => t.id === taskId);
+    if (!task) {
+      return {
+        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
+        isError: true,
+      };
+    }
+    task.links.push({ label, url, type });
+    task.updatedAt = new Date().toISOString();
+    project.updatedAt = task.updatedAt;
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Link added to task ${taskId}`, linkCount: task.links.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+// PROJECT SESSION TOOLS
+// ═══════════════════════════════════════════════════════════════════════
+
+// ─── Tool: add_project_session ───────────────────────────────────────
+server.tool(
+  "add_project_session",
+  "Create a new focus session within a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    title: z.string().describe("Session title"),
+    notes: z.string().optional().describe("Session notes"),
+    taskIds: z.array(z.string()).optional().describe("Task IDs to link to this session"),
+  },
+  async ({ projectId, title, notes, taskIds }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
     const now = new Date().toISOString();
-    const session: Session = {
+    const session: ProjectSession = {
       id: uuidv4(),
       title,
-      notes,
-      tasks,
-      links,
+      notes: notes ?? "",
+      taskIds: taskIds ?? [],
       pomodorosCompleted: 0,
       createdAt: now,
       updatedAt: now,
     };
-    sessionStorage.save(session);
+    project.sessions.push(session);
+    project.updatedAt = now;
+    projectStorage.save(project);
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify(
-            { id: session.id, title: session.title, message: "Session created" },
-            null,
-            2
-          ),
+          text: JSON.stringify({ sessionId: session.id, title: session.title, message: "Session created" }, null, 2),
         },
       ],
     };
   }
 );
 
-// ─── Tool: update_session ────────────────────────────────────────────
+// ─── Tool: update_project_session ────────────────────────────────────
 server.tool(
-  "update_session",
-  "Update the title or notes of an existing session",
+  "update_project_session",
+  "Update a session's title or notes",
   {
-    id: z.string().describe("The session ID"),
-    title: z.string().optional(),
-    notes: z.string().optional(),
+    projectId: z.string().describe("The project ID"),
+    sessionId: z.string().describe("The session ID"),
+    title: z.string().optional().describe("New title"),
+    notes: z.string().optional().describe("New notes"),
   },
-  async ({ id, title, notes }) => {
-    const session = sessionStorage.get(id);
+  async ({ projectId, sessionId, title, notes }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const session = project.sessions.find((s) => s.id === sessionId);
     if (!session) {
       return {
-        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        content: [{ type: "text" as const, text: `Session not found: ${sessionId}` }],
         isError: true,
       };
     }
     if (title !== undefined) session.title = title;
     if (notes !== undefined) session.notes = notes;
     session.updatedAt = new Date().toISOString();
-    sessionStorage.save(session);
+    project.updatedAt = session.updatedAt;
+    projectStorage.save(project);
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify({ message: "Session updated", id: session.id }, null, 2),
+          text: JSON.stringify({ sessionId: session.id, title: session.title, message: "Session updated" }, null, 2),
         },
       ],
     };
   }
 );
 
-// ─── Tool: delete_session ────────────────────────────────────────────
+// ─── Tool: remove_project_session ────────────────────────────────────
 server.tool(
-  "delete_session",
-  "Delete a session by ID",
-  { id: z.string().describe("The session ID") },
-  async ({ id }) => {
-    const deleted = sessionStorage.delete(id);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: deleted ? `Session ${id} deleted` : `Session not found: ${id}`,
-        },
-      ],
-      isError: !deleted,
-    };
-  }
-);
-
-// ─── Tool: add_session_task ──────────────────────────────────────────
-server.tool(
-  "add_session_task",
-  "Add a task string to an existing session",
+  "remove_project_session",
+  "Remove a session from a project",
   {
-    id: z.string().describe("The session ID"),
-    task: z.string().describe("Task description"),
+    projectId: z.string().describe("The project ID"),
+    sessionId: z.string().describe("The session ID"),
   },
-  async ({ id, task }) => {
-    const session = sessionStorage.get(id);
+  async ({ projectId, sessionId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const before = project.sessions.length;
+    project.sessions = project.sessions.filter((s) => s.id !== sessionId);
+    if (project.sessions.length === before) {
+      return {
+        content: [{ type: "text" as const, text: `Session not found: ${sessionId}` }],
+        isError: true,
+      };
+    }
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Session ${sessionId} removed`, sessionCount: project.sessions.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: add_task_to_project_session ───────────────────────────────
+server.tool(
+  "add_task_to_project_session",
+  "Link a task to a project session",
+  {
+    projectId: z.string().describe("The project ID"),
+    sessionId: z.string().describe("The session ID"),
+    taskId: z.string().describe("The task ID to link"),
+  },
+  async ({ projectId, sessionId, taskId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    const session = project.sessions.find((s) => s.id === sessionId);
     if (!session) {
       return {
-        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
+        content: [{ type: "text" as const, text: `Session not found: ${sessionId}` }],
         isError: true,
       };
     }
-    session.tasks.push(task);
-    session.updatedAt = new Date().toISOString();
-    sessionStorage.save(session);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Task added`, taskCount: session.tasks.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: remove_session_task ───────────────────────────────────────
-server.tool(
-  "remove_session_task",
-  "Remove a task from a session by its index",
-  {
-    id: z.string().describe("The session ID"),
-    index: z.number().int().min(0).describe("Zero-based task index"),
-  },
-  async ({ id, index }) => {
-    const session = sessionStorage.get(id);
-    if (!session) {
-      return {
-        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
-        isError: true,
-      };
-    }
-    if (index >= session.tasks.length) {
-      return {
-        content: [{ type: "text" as const, text: `Task index out of range: ${index}` }],
-        isError: true,
-      };
-    }
-    session.tasks.splice(index, 1);
-    session.updatedAt = new Date().toISOString();
-    sessionStorage.save(session);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: "Task removed", taskCount: session.tasks.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: add_session_link ──────────────────────────────────────────
-server.tool(
-  "add_session_link",
-  "Add a link to an existing session",
-  {
-    id: z.string().describe("The session ID"),
-    label: z.string().describe("Link label"),
-    url: z.string().url().describe("Link URL"),
-    type: z.enum(["diagram", "gantt", "matrix", "github", "other"]).describe("Link type"),
-  },
-  async ({ id, label, url, type }) => {
-    const session = sessionStorage.get(id);
-    if (!session) {
-      return {
-        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
-        isError: true,
-      };
-    }
-    session.links.push({ label, url, type });
-    session.updatedAt = new Date().toISOString();
-    sessionStorage.save(session);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Link '${label}' added`, linkCount: session.links.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: remove_session_link ───────────────────────────────────────
-server.tool(
-  "remove_session_link",
-  "Remove a link from a session by its index",
-  {
-    id: z.string().describe("The session ID"),
-    index: z.number().int().min(0).describe("Zero-based link index"),
-  },
-  async ({ id, index }) => {
-    const session = sessionStorage.get(id);
-    if (!session) {
-      return {
-        content: [{ type: "text" as const, text: `Session not found: ${id}` }],
-        isError: true,
-      };
-    }
-    if (index >= session.links.length) {
-      return {
-        content: [{ type: "text" as const, text: `Link index out of range: ${index}` }],
-        isError: true,
-      };
-    }
-    session.links.splice(index, 1);
-    session.updatedAt = new Date().toISOString();
-    sessionStorage.save(session);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: "Link removed", linkCount: session.links.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: list_matrix_boards ─────────────────────────────────────────
-server.tool("list_matrix_boards", "List all saved Eisenhower matrix boards", {}, async () => {
-  const boards = matrixStorage.list();
-  const summary = boards.map((b) => ({
-    id: b.id,
-    name: b.name,
-    taskCount: b.tasks.length,
-    updatedAt: b.updatedAt,
-  }));
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
-  };
-});
-
-// ─── Tool: get_matrix_board ───────────────────────────────────────────
-server.tool(
-  "get_matrix_board",
-  "Get an Eisenhower matrix board by ID",
-  { id: z.string().describe("The matrix board ID") },
-  async ({ id }) => {
-    const board = matrixStorage.get(id);
-    if (!board) {
-      return {
-        content: [{ type: "text" as const, text: `Matrix board not found: ${id}` }],
-        isError: true,
-      };
-    }
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(board, null, 2) }],
-    };
-  }
-);
-
-// ─── Tool: create_matrix_board ────────────────────────────────────────
-server.tool(
-  "create_matrix_board",
-  "Create a new Eisenhower matrix board for task prioritization",
-  {
-    name: z.string().describe("Name of the matrix board"),
-    tasks: z
-      .array(
-        z.object({
-          title: z.string(),
-          quadrant: z.enum(["do-first", "schedule", "delegate", "drop"]),
-        })
-      )
-      .optional()
-      .default([]),
-  },
-  async ({ name, tasks }) => {
-    const now = new Date().toISOString();
-    const board: MatrixBoard = {
-      id: uuidv4(),
-      name,
-      createdAt: now,
-      updatedAt: now,
-      tasks: tasks.map((t) => ({
-        id: uuidv4(),
-        title: t.title,
-        quadrant: t.quadrant,
-        createdAt: now,
-        updatedAt: now,
-      })),
-    };
-    matrixStorage.save(board);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            { id: board.id, name: board.name, taskCount: board.tasks.length, message: "Matrix board created" },
-            null,
-            2
-          ),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: update_matrix_board ────────────────────────────────────────
-server.tool(
-  "update_matrix_board",
-  "Update the name of an existing matrix board",
-  {
-    id: z.string().describe("The matrix board ID"),
-    name: z.string().describe("New name for the board"),
-  },
-  async ({ id, name }) => {
-    const board = matrixStorage.get(id);
-    if (!board) {
-      return {
-        content: [{ type: "text" as const, text: `Matrix board not found: ${id}` }],
-        isError: true,
-      };
-    }
-    board.name = name;
-    board.updatedAt = new Date().toISOString();
-    matrixStorage.save(board);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: "Matrix board updated", id: board.id }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: delete_matrix_board ────────────────────────────────────────
-server.tool(
-  "delete_matrix_board",
-  "Delete a matrix board by ID",
-  { id: z.string().describe("The matrix board ID") },
-  async ({ id }) => {
-    const deleted = matrixStorage.delete(id);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: deleted ? `Matrix board ${id} deleted` : `Matrix board not found: ${id}`,
-        },
-      ],
-      isError: !deleted,
-    };
-  }
-);
-
-// ─── Tool: add_matrix_task ────────────────────────────────────────────
-server.tool(
-  "add_matrix_task",
-  "Add a task to an Eisenhower matrix board",
-  {
-    boardId: z.string().describe("The matrix board ID"),
-    title: z.string().describe("Task title"),
-    quadrant: z
-      .enum(["do-first", "schedule", "delegate", "drop"])
-      .describe("Matrix quadrant: do-first (urgent+important), schedule (not urgent+important), delegate (urgent+not important), drop (not urgent+not important)"),
-  },
-  async ({ boardId, title, quadrant }) => {
-    const board = matrixStorage.get(boardId);
-    if (!board) {
-      return {
-        content: [{ type: "text" as const, text: `Matrix board not found: ${boardId}` }],
-        isError: true,
-      };
-    }
-    const now = new Date().toISOString();
-    const task: MatrixTask = { id: uuidv4(), title, quadrant, createdAt: now, updatedAt: now };
-    board.tasks.push(task);
-    board.updatedAt = now;
-    matrixStorage.save(board);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Task '${title}' added`, taskId: task.id, boardId }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: update_matrix_task ─────────────────────────────────────────
-server.tool(
-  "update_matrix_task",
-  "Update a task in a matrix board (title and/or quadrant)",
-  {
-    boardId: z.string().describe("The matrix board ID"),
-    taskId: z.string().describe("The task ID"),
-    title: z.string().optional(),
-    quadrant: z.enum(["do-first", "schedule", "delegate", "drop"]).optional(),
-  },
-  async ({ boardId, taskId, title, quadrant }) => {
-    const board = matrixStorage.get(boardId);
-    if (!board) {
-      return {
-        content: [{ type: "text" as const, text: `Matrix board not found: ${boardId}` }],
-        isError: true,
-      };
-    }
-    const task = board.tasks.find((t) => t.id === taskId);
-    if (!task) {
+    if (!project.tasks.some((t) => t.id === taskId)) {
       return {
         content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
         isError: true,
       };
     }
-    if (title !== undefined) task.title = title;
-    if (quadrant !== undefined) task.quadrant = quadrant;
-    task.updatedAt = new Date().toISOString();
-    board.updatedAt = new Date().toISOString();
-    matrixStorage.save(board);
+    if (!session.taskIds.includes(taskId)) {
+      session.taskIds.push(taskId);
+      session.updatedAt = new Date().toISOString();
+      project.updatedAt = session.updatedAt;
+      projectStorage.save(project);
+    }
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify({ message: `Task '${task.title}' updated`, task }, null, 2),
+          text: JSON.stringify({ message: `Task ${taskId} linked to session`, taskCount: session.taskIds.length }, null, 2),
         },
       ],
     };
   }
 );
 
-// ─── Tool: remove_matrix_task ─────────────────────────────────────────
+// ─── Tool: remove_task_from_project_session ──────────────────────────
 server.tool(
-  "remove_matrix_task",
-  "Remove a task from a matrix board",
+  "remove_task_from_project_session",
+  "Unlink a task from a project session",
   {
-    boardId: z.string().describe("The matrix board ID"),
-    taskId: z.string().describe("The task ID to remove"),
+    projectId: z.string().describe("The project ID"),
+    sessionId: z.string().describe("The session ID"),
+    taskId: z.string().describe("The task ID to unlink"),
   },
-  async ({ boardId, taskId }) => {
-    const board = matrixStorage.get(boardId);
-    if (!board) {
+  async ({ projectId, sessionId, taskId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
       return {
-        content: [{ type: "text" as const, text: `Matrix board not found: ${boardId}` }],
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
         isError: true,
       };
     }
-    const before = board.tasks.length;
-    board.tasks = board.tasks.filter((t) => t.id !== taskId);
-    if (board.tasks.length === before) {
+    const session = project.sessions.find((s) => s.id === sessionId);
+    if (!session) {
       return {
-        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
+        content: [{ type: "text" as const, text: `Session not found: ${sessionId}` }],
         isError: true,
       };
     }
-    board.updatedAt = new Date().toISOString();
-    matrixStorage.save(board);
+    session.taskIds = session.taskIds.filter((tid) => tid !== taskId);
+    session.updatedAt = new Date().toISOString();
+    project.updatedAt = session.updatedAt;
+    projectStorage.save(project);
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify({ message: "Task removed", taskCount: board.tasks.length }, null, 2),
+          text: JSON.stringify({ message: `Task ${taskId} unlinked from session`, taskCount: session.taskIds.length }, null, 2),
         },
       ],
     };
   }
 );
+
+// ═══════════════════════════════════════════════════════════════════════
+// DIAGRAM LINKING TOOLS
+// ═══════════════════════════════════════════════════════════════════════
+
+// ─── Tool: link_diagram_to_project ───────────────────────────────────
+server.tool(
+  "link_diagram_to_project",
+  "Link a diagram to a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    diagramId: z.string().describe("The diagram ID to link"),
+  },
+  async ({ projectId, diagramId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    // Verify diagram exists
+    const diagram = storage.get(diagramId);
+    if (!diagram) {
+      return {
+        content: [{ type: "text" as const, text: `Diagram not found: ${diagramId}` }],
+        isError: true,
+      };
+    }
+    if (!project.diagramIds.includes(diagramId)) {
+      project.diagramIds.push(diagramId);
+      project.updatedAt = new Date().toISOString();
+      projectStorage.save(project);
+    }
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Diagram ${diagramId} linked to project`, diagramCount: project.diagramIds.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ─── Tool: unlink_diagram_from_project ───────────────────────────────
+server.tool(
+  "unlink_diagram_from_project",
+  "Unlink a diagram from a project",
+  {
+    projectId: z.string().describe("The project ID"),
+    diagramId: z.string().describe("The diagram ID to unlink"),
+  },
+  async ({ projectId, diagramId }) => {
+    const project = projectStorage.get(projectId);
+    if (!project) {
+      return {
+        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
+        isError: true,
+      };
+    }
+    project.diagramIds = project.diagramIds.filter((id) => id !== diagramId);
+    project.updatedAt = new Date().toISOString();
+    projectStorage.save(project);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ message: `Diagram ${diagramId} unlinked from project`, diagramCount: project.diagramIds.length }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+// RESOURCES
+// ═══════════════════════════════════════════════════════════════════════
 
 // ─── Resources: diagram listing ──────────────────────────────────────
 server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
@@ -1459,65 +1740,23 @@ server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
   };
 });
 
-// ─── Resources: Gantt chart listing ──────────────────────────────────
-server.resource("gantt-charts", "archdiagram://gantt-charts", async (uri) => {
-  const charts = ganttStorage.list();
+// ─── Resources: project listing ──────────────────────────────────────
+server.resource("projects", "archdiagram://projects", async (uri) => {
+  const projects = projectStorage.list();
   return {
     contents: [
       {
         uri: uri.href,
         mimeType: "application/json",
         text: JSON.stringify(
-          charts.map((c) => ({
-            id: c.id,
-            name: c.name,
-            description: c.description,
-            taskCount: c.tasks.length,
-          })),
-          null,
-          2
-        ),
-      },
-    ],
-  };
-});
-
-// ─── Resources: Sessions listing ─────────────────────────────────────
-server.resource("sessions", "archdiagram://sessions", async (uri) => {
-  const sessions = sessionStorage.list();
-  return {
-    contents: [
-      {
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify(
-          sessions.map((s) => ({
-            id: s.id,
-            title: s.title,
-            taskCount: s.tasks.length,
-            pomodorosCompleted: s.pomodorosCompleted,
-          })),
-          null,
-          2
-        ),
-      },
-    ],
-  };
-});
-
-// ─── Resources: Matrix board listing ─────────────────────────────────
-server.resource("matrix-boards", "archdiagram://matrix-boards", async (uri) => {
-  const boards = matrixStorage.list();
-  return {
-    contents: [
-      {
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify(
-          boards.map((b) => ({
-            id: b.id,
-            name: b.name,
-            taskCount: b.tasks.length,
+          projects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            epicCount: p.epics.length,
+            taskCount: p.tasks.length,
+            sessionCount: p.sessions.length,
+            diagramCount: p.diagramIds.length,
           })),
           null,
           2

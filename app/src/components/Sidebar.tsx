@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Share2, BarChart, Calendar, Moon, Sun, PanelLeftClose, PanelLeftOpen, Timer, ListTree, KanbanSquare } from "lucide-react";
+import { LayoutDashboard, Share2, Moon, Sun, PanelLeftClose, PanelLeftOpen, Layers } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
 
 export function Sidebar() {
@@ -34,13 +34,8 @@ export function Sidebar() {
   const headerPadding = collapsed ? "0 12px" : "0 20px";
 
   const navItems = [
-    { name: "Workspace", href: "/", icon: LayoutDashboard },
-    { name: "Diagrams", href: "/diagrams", icon: Share2 },
-    { name: "Gantt Charts", href: "/gantt", icon: BarChart },
-    { name: "Calendar", href: "/calendar", icon: Calendar },
-    { name: "Sessions", href: "/sessions", icon: Timer },
-    { name: "Matrix", href: "/matrix", icon: ListTree },
-    { name: "Kanban", href: "/kanban", icon: KanbanSquare },
+    { name: "Planview", href: "/", icon: LayoutDashboard },
+    { name: "Projects", href: "/projects", icon: Layers },
   ];
 
   const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
@@ -85,13 +80,13 @@ export function Sidebar() {
               justifyContent: "center",
               flexShrink: 0,
             }}
-            title={collapsed ? "ArchDiagram" : undefined}
+            title={collapsed ? "Planview" : undefined}
           >
             <Share2 size={16} strokeWidth={2.5} />
           </div>
           {!collapsed && (
             <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.01em", color: "var(--foreground)" }}>
-              Workspace
+              Planview
             </span>
           )}
         </div>
