@@ -1,7 +1,7 @@
 "use client";
 
 import type { KanbanProject, KanbanViewMode } from "@/lib/projectTypes";
-import { KanbanSquare, BarChart3, Calendar, Grid3X3, Timer, ArrowRight } from "lucide-react";
+import { KanbanSquare, BarChart3, Calendar, Grid3X3, Timer, ArrowRight, Share2 } from "lucide-react";
 import { useMemo } from "react";
 
 interface ProjectOverviewProps {
@@ -57,6 +57,14 @@ const TOOL_CARDS: {
     color: "#06b6d4",
     gradient: "linear-gradient(135deg, #06b6d420, #06b6d408)",
   },
+  {
+    key: "diagrams",
+    label: "Architecture Diagrams",
+    description: "View and manage technical diagrams linked to this project.",
+    icon: Share2 as any,
+    color: "#ec4899",
+    gradient: "linear-gradient(135deg, #ec489920, #ec489908)",
+  },
 ];
 
 export default function ProjectOverview({ project, onNavigate }: ProjectOverviewProps) {
@@ -83,6 +91,8 @@ export default function ProjectOverview({ project, onNavigate }: ProjectOverview
         return `${stats.total - stats.done} active tasks to prioritize`;
       case "sessions":
         return `${stats.sessions} sessions · ${stats.pomodoros} pomodoros`;
+      case "diagrams":
+        return `${project.diagramIds?.length || 0} linked diagrams`;
       default:
         return "";
     }

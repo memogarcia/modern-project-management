@@ -3,13 +3,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { KanbanProjectMeta } from "@/lib/projectTypes";
-import { loadProjects, deleteProject } from "@/lib/projectStorage";
+import { loadProjects } from "@/lib/projectStorage";
 import { useProjectStore } from "@/store/projectStore";
-import { KanbanSquare, Plus, Trash2, Layers, Calendar, BarChart3, Grid3X3, Timer } from "lucide-react";
+import { Plus, Layers } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function ProjectsListPage() {
   const router = useRouter();
-  const [projects, setProjects] = useState<(KanbanProjectMeta & { epicCount?: number; taskCount?: number; columnCount?: number })[]>([]);
+  const [projects, setProjects] = useState<KanbanProjectMeta[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -25,195 +36,121 @@ export default function ProjectsListPage() {
     setActionError(null);
     try {
       const id = await initNewProject(newName.trim(), newDesc.trim() || undefined);
-      router.push(`/projects/${id}`);
+      setShowCreate(false);
+      router.push(`/projects/${id}?view=kanban`);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to create project");
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this project and all its data?")) return;
-    setActionError(null);
-    try {
-      await deleteProject(id);
-      setProjects(await loadProjects());
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Failed to delete project");
-    }
-  };
-
   return (
-    <div style={{ flex: 1, background: "var(--background)", color: "var(--foreground)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <header style={{ padding: "20px 40px", borderBottom: "1px solid var(--border)", background: "var(--panel-bg)", flexShrink: 0 }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", gap: 10, letterSpacing: "-0.02em" }}>
-              <Layers size={22} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
-              Projects
-            </h1>
-            <p style={{ margin: "4px 0 0", fontSize: 14, color: "var(--text-muted)" }}>
-              Unified task management — Kanban · Gantt · Calendar · Matrix · Sessions
-            </p>
+    <div className="flex h-full flex-col bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-8">
+        <div className="mx-auto w-full max-w-2xl">
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-lg font-bold tracking-tight">Projects</h1>
+            <Button size="sm" onClick={() => {
+              setNewName("");
+              setNewDesc("");
+              setActionError(null);
+              setShowCreate(true);
+            }}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New
+            </Button>
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{
-              padding: "10px 20px", background: "var(--accent)", color: "var(--accent-foreground)",
-              border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer",
-              display: "flex", alignItems: "center", gap: 8,
-            }}
-          >
-            <Plus size={16} />
-            New Project
-          </button>
-        </div>
-      </header>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "32px 40px" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           {actionError && (
-            <div style={{ marginBottom: 16, padding: "10px 16px", background: "#ef444418", border: "1px solid #ef4444", borderRadius: 8, color: "#ef4444", fontSize: 13 }}>
+            <div className="mb-4 rounded-lg border border-[var(--danger)] bg-[var(--danger)]/10 px-4 py-3 text-sm text-[var(--danger)]">
               {actionError}
             </div>
           )}
 
-          {showCreate && (
-            <div style={{ marginBottom: 24, padding: 20, background: "var(--panel-bg)", border: "1px solid var(--border)", borderRadius: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>New project</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Project name…"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void handleCreate();
-                    if (e.key === "Escape") setShowCreate(false);
-                  }}
-                  style={{
-                    padding: "8px 12px", background: "var(--surface)", border: "1px solid var(--border)",
-                    borderRadius: 7, color: "var(--foreground)", fontSize: 14, outline: "none",
-                  }}
-                />
-                <input
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="Description (optional)"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void handleCreate();
-                    if (e.key === "Escape") setShowCreate(false);
-                  }}
-                  style={{
-                    padding: "8px 12px", background: "var(--surface)", border: "1px solid var(--border)",
-                    borderRadius: 7, color: "var(--foreground)", fontSize: 13, outline: "none",
-                  }}
-                />
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button
-                    onClick={() => void handleCreate()}
-                    style={{ padding: "8px 18px", background: "var(--accent)", color: "var(--accent-foreground)", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                  >
-                    Create
-                  </button>
-                  <button
-                    onClick={() => setShowCreate(false)}
-                    style={{ padding: "8px 14px", background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: 7, fontSize: 13, cursor: "pointer" }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {projects.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "80px 0", color: "var(--text-muted)" }}>
-              <Layers size={48} style={{ opacity: 0.3, marginBottom: 16 }} />
-              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No projects yet</div>
-              <div style={{ fontSize: 14, marginBottom: 24 }}>
-                Create a project to start managing tasks across Kanban, Gantt, Calendar, Matrix, and Sessions views.
+            <div className="flex flex-col items-center justify-center py-20 text-center text-[var(--text-muted)]">
+              <Layers className="mb-4 h-10 w-10 opacity-20" />
+              <div className="mb-2 text-sm font-medium">No projects yet</div>
+              <div className="mb-6 max-w-sm text-xs">
+                Create a project to start managing tasks.
               </div>
-              <button
-                onClick={() => setShowCreate(true)}
-                style={{ padding: "10px 24px", background: "var(--accent)", color: "var(--accent-foreground)", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-              >
-                + New Project
-              </button>
+              <Button size="sm" onClick={() => setShowCreate(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                New Project
+              </Button>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+            <div className="flex flex-col gap-2">
               {projects.map((project) => (
-                <div
+                <button
                   key={project.id}
-                  onClick={() => router.push(`/projects/${project.id}`)}
-                  style={{
-                    background: "var(--panel-bg)", border: "1px solid var(--border)", borderRadius: 12,
-                    padding: 20, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.boxShadow = "var(--card-shadow-hover)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.boxShadow = "none"; }}
+                  onClick={() => router.push(`/projects/${project.id}?view=kanban`)}
+                  className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]"
                 >
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                        <Layers size={15} style={{ color: "var(--accent)", flexShrink: 0 }} />
-                        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {project.name}
-                        </span>
-                      </div>
-                      {project.description && (
-                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {project.description}
-                        </div>
-                      )}
-                      <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--text-muted)" }}>
-                        {project.epicCount !== undefined && <span>{project.epicCount} epics</span>}
-                        {project.taskCount !== undefined && <span>· {project.taskCount} tasks</span>}
-                        <span>· Updated {new Date(project.updatedAt).toLocaleDateString()}</span>
-                      </div>
+                  <Layers className="h-4 w-4 text-[var(--accent)] shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-[var(--foreground)] truncate">
+                      {project.name}
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); void handleDelete(project.id); }}
-                      title="Delete project"
-                      style={{
-                        width: 28, height: 28, background: "transparent", border: "none",
-                        color: "var(--text-muted)", cursor: "pointer", borderRadius: 6,
-                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; e.currentTarget.style.color = "#ef4444"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-
-                  {/* View icons */}
-                  <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
-                    {[
-                      { icon: KanbanSquare, label: "Kanban", color: "#3b82f6" },
-                      { icon: BarChart3, label: "Gantt", color: "#f59e0b" },
-                      { icon: Calendar, label: "Calendar", color: "#22c55e" },
-                      { icon: Grid3X3, label: "Matrix", color: "#8b5cf6" },
-                      { icon: Timer, label: "Sessions", color: "#06b6d4" },
-                    ].map(({ icon: Icon, label, color }) => (
-                      <div
-                        key={label}
-                        title={label}
-                        style={{
-                          width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center",
-                          justifyContent: "center", background: `${color}10`, color,
-                        }}
-                      >
-                        <Icon size={13} />
+                    {project.description && (
+                      <div className="text-xs text-[var(--text-muted)] truncate mt-0.5">
+                        {project.description}
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New Project</DialogTitle>
+            <DialogDescription>
+              Create a project to manage tasks across views.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                placeholder="e.g. Q3 Roadmap"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleCreate();
+                }}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description (Optional)</Label>
+              <Input
+                id="description"
+                placeholder="Brief description…"
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleCreate();
+                }}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleCreate()}>
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

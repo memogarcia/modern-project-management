@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 export const metadata: Metadata = {
   title: "Planview — Plan, visualize, and focus",
   description:
-    "Visual architecture diagramming with React Flow and Mermaid, with bidirectional sync.",
+    "Plan, visualize, and focus — unified project management with Kanban, Gantt, Calendar, Matrix, and more.",
 };
 
 export default function RootLayout({

@@ -1,17 +1,60 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { LayoutDashboard, Share2, Moon, Sun, PanelLeftClose, PanelLeftOpen, Layers } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import {
+  Moon,
+  Sun,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Layers,
+  KanbanSquare,
+  BarChart3,
+  Calendar,
+  Grid3X3,
+  Timer,
+  Share2,
+  Terminal,
+  FolderOpen,
+  ChevronRight,
+  Trash2,
+} from "lucide-react";
 import { useTheme } from "./ThemeProvider";
+import { Button } from "./ui/button";
+import { cn } from "@/lib/utils";
+import type { KanbanProjectMeta } from "@/lib/projectTypes";
+import { loadProjects, deleteProject } from "@/lib/projectStorage";
+
+const VIEW_ITEMS = [
+  { key: "kanban", label: "Kanban", icon: KanbanSquare },
+  { key: "gantt", label: "Gantt", icon: BarChart3 },
+  { key: "calendar", label: "Calendar", icon: Calendar },
+  { key: "matrix", label: "Matrix", icon: Grid3X3 },
+  { key: "sessions", label: "Sessions", icon: Timer },
+  { key: "diagrams", label: "Diagrams", icon: Share2 },
+  { key: "mcp", label: "MCP", icon: Terminal },
+] as const;
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
 
-  const storageKey = "archdiagram.sidebar.collapsed";
+  const storageKey = "planview.sidebar.collapsed";
   const [collapsed, setCollapsed] = useState(false);
+  const [projects, setProjects] = useState<KanbanProjectMeta[]>([]);
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+
+  // Derive active project ID from URL
+  const projectMatch = pathname.match(/^\/projects\/([^/]+)/);
+  const activeProjectId = projectMatch ? projectMatch[1] : null;
+  const activeView = (() => {
+    if (!activeProjectId) return null;
+    const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    return searchParams?.get("view") || "kanban";
+  })();
 
   useEffect(() => {
     try {
@@ -30,181 +73,212 @@ export function Sidebar() {
     }
   }, [collapsed]);
 
-  const sidebarWidth = collapsed ? 64 : 260;
-  const headerPadding = collapsed ? "0 12px" : "0 20px";
+  // Load projects
+  const refreshProjects = useCallback(async () => {
+    const list = await loadProjects();
+    setProjects(list);
+  }, []);
 
-  const navItems = [
-    { name: "Planview", href: "/", icon: LayoutDashboard },
-    { name: "Projects", href: "/projects", icon: Layers },
-  ];
+  useEffect(() => {
+    void refreshProjects();
+  }, [refreshProjects]);
+
+  // Auto-expand active project
+  useEffect(() => {
+    if (activeProjectId) {
+      setExpandedProjectId(activeProjectId);
+    }
+  }, [activeProjectId]);
+
+  const handleDeleteProject = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!confirm("Delete this project and all its data?")) return;
+    await deleteProject(id);
+    await refreshProjects();
+    if (activeProjectId === id) {
+      router.push("/projects");
+    }
+  };
 
   const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
-  const toggleLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
 
   return (
     <aside
-      style={{
-        width: sidebarWidth,
-        background: "var(--panel-bg)",
-        borderRight: "1px solid var(--border)",
-        display: "flex",
-        flexDirection: "column",
-        flexShrink: 0,
-        zIndex: 50,
-        transition: "width 0.15s ease",
-      }}
+      className={cn(
+        "flex flex-col shrink-0 z-50 transition-[width] duration-200 ease-in-out border-r border-[var(--border)] bg-[var(--panel-bg)]",
+        collapsed ? "w-12" : "w-56"
+      )}
     >
-      {/* Logo / Header */}
-      <div
-        style={{
-          height: 60,
-          padding: headerPadding,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          borderBottom: "1px solid var(--border)",
-          justifyContent: "flex-start",
-          position: "relative",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 6,
-              background: "var(--accent)",
-              color: "var(--accent-foreground)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-            title={collapsed ? "Planview" : undefined}
-          >
-            <Share2 size={16} strokeWidth={2.5} />
-          </div>
-          {!collapsed && (
-            <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.01em", color: "var(--foreground)" }}>
+      {/* Logo + collapse */}
+      <div className="flex h-12 items-center border-b border-[var(--border)] px-3 justify-between">
+        {!collapsed && (
+          <Link href="/projects" className="flex items-center gap-2 min-w-0">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[var(--accent-foreground)]">
+              <Layers size={13} strokeWidth={2.5} />
+            </div>
+            <span className="text-sm font-bold tracking-tight text-[var(--foreground)] truncate">
               Planview
             </span>
-          )}
-        </div>
-        <button
-          onClick={() => setCollapsed((v) => !v)}
-          aria-label={toggleLabel}
-          title={toggleLabel}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 8,
-            background: "transparent",
-            border: "1px solid var(--border)",
-            color: "var(--text-muted)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            transition: "all 0.15s ease",
-            position: "absolute",
-            right: 12,
-            top: "50%",
-            transform: "translateY(-50%)",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--surface)";
-            e.currentTarget.style.color = "var(--foreground)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "var(--text-muted)";
-          }}
-        >
-          <ToggleIcon size={18} />
-        </button>
+          </Link>
+        )}
+        {collapsed && (
+          <Link href="/projects" className="flex items-center justify-center w-full" title="Planview">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[var(--accent-foreground)]">
+              <Layers size={13} strokeWidth={2.5} />
+            </div>
+          </Link>
+        )}
+        {!collapsed && (
+          <button
+            className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
+            onClick={() => setCollapsed(true)}
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose size={14} />
+          </button>
+        )}
       </div>
 
-      {/* Navigation Links */}
-      <nav style={{ flex: 1, padding: collapsed ? "16px 8px" : "20px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+      {/* Collapsed: expand button */}
+      {collapsed && (
+        <div className="flex items-center justify-center py-2">
+          <button
+            className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
+            onClick={() => setCollapsed(false)}
+            aria-label="Expand sidebar"
+          >
+            <PanelLeftOpen size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Projects list */}
+      <div className="flex-1 overflow-y-auto">
         {!collapsed && (
-          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", padding: "0 8px", marginBottom: 8 }}>
-            Menu
+          <div className="px-3 pt-3 pb-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                Projects
+              </span>
+              <Link
+                href="/projects"
+                className="flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
+                title="New project"
+              >
+                <Plus size={12} />
+              </Link>
+            </div>
           </div>
         )}
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: collapsed ? "10px 10px" : "8px 12px",
-                borderRadius: 8,
-                textDecoration: "none",
-                color: isActive ? "var(--foreground)" : "var(--text-muted)",
-                background: isActive ? "var(--surface-hover)" : "transparent",
-                fontWeight: isActive ? 600 : 500,
-                fontSize: 14,
-                transition: "all 0.15s ease",
-                justifyContent: collapsed ? "center" : "flex-start",
-              }}
-              title={collapsed ? item.name : undefined}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = "var(--surface)";
-                  e.currentTarget.style.color = "var(--foreground)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "var(--text-muted)";
-                }
-              }}
-            >
-              <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} style={{ color: isActive ? "var(--accent)" : "inherit" }} />
-              {!collapsed && item.name}
-            </Link>
-          );
-        })}
-      </nav>
 
-      {/* Footer / Settings */}
-      <div style={{ padding: "16px 12px", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 4 }}>
+        <nav className={cn("flex flex-col gap-px", collapsed ? "px-1 pt-1" : "px-2")}>
+          {projects.map((project) => {
+            const isActive = activeProjectId === project.id;
+            const isExpanded = expandedProjectId === project.id;
+
+            return (
+              <div key={project.id}>
+                {/* Project row */}
+                <div
+                  className={cn(
+                    "group flex items-center gap-1.5 rounded-md text-[13px] transition-colors cursor-pointer",
+                    collapsed ? "justify-center p-1.5" : "px-2 py-1.5",
+                    isActive
+                      ? "bg-[var(--surface-hover)] text-[var(--foreground)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+                  )}
+                  onClick={() => {
+                    if (collapsed) {
+                      router.push(`/projects/${project.id}?view=kanban`);
+                      return;
+                    }
+                    if (isExpanded) {
+                      setExpandedProjectId(null);
+                    } else {
+                      setExpandedProjectId(project.id);
+                      router.push(`/projects/${project.id}?view=kanban`);
+                    }
+                  }}
+                  title={collapsed ? project.name : undefined}
+                >
+                  {!collapsed && (
+                    <ChevronRight
+                      size={12}
+                      className={cn(
+                        "shrink-0 text-[var(--text-muted)] transition-transform duration-150",
+                        isExpanded && "rotate-90"
+                      )}
+                    />
+                  )}
+                  <FolderOpen
+                    size={collapsed ? 16 : 14}
+                    className={cn(
+                      "shrink-0",
+                      isActive ? "text-[var(--accent)]" : ""
+                    )}
+                  />
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1 truncate font-medium">{project.name}</span>
+                      <button
+                        onClick={(e) => void handleDeleteProject(e, project.id)}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-muted)] opacity-0 group-hover:opacity-100 hover:bg-[#ef444418] hover:text-[#ef4444] transition-all"
+                        title="Delete project"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Sub-nav (expanded, not collapsed) */}
+                {!collapsed && isExpanded && (
+                  <div className="ml-4 mt-px mb-1 flex flex-col gap-px border-l border-[var(--border)] pl-2">
+                    {VIEW_ITEMS.map(({ key, label, icon: Icon }) => {
+                      const isViewActive = isActive && activeView === key;
+                      return (
+                        <Link
+                          key={key}
+                          href={`/projects/${project.id}?view=${key}`}
+                          className={cn(
+                            "flex items-center gap-2 rounded-md px-2 py-1 text-[12px] font-medium transition-colors",
+                            isViewActive
+                              ? "bg-[var(--surface-hover)] text-[var(--foreground)]"
+                              : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+                          )}
+                        >
+                          <Icon size={13} strokeWidth={isViewActive ? 2.5 : 2} />
+                          {label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {projects.length === 0 && !collapsed && (
+            <div className="px-2 py-4 text-center text-[11px] text-[var(--text-muted)]">
+              No projects yet
+            </div>
+          )}
+        </nav>
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center border-t border-[var(--border)] p-2 gap-1">
         <button
+          className={cn(
+            "flex items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors",
+            collapsed ? "h-7 w-7 mx-auto" : "h-7 w-7"
+          )}
           onClick={toggleTheme}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "8px 12px",
-            borderRadius: 8,
-            background: "transparent",
-            border: "none",
-            color: "var(--text-muted)",
-            fontWeight: 500,
-            fontSize: 14,
-            cursor: "pointer",
-            textAlign: "left",
-            transition: "all 0.15s ease",
-            justifyContent: collapsed ? "center" : "flex-start",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--surface)";
-            e.currentTarget.style.color = "var(--foreground)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "var(--text-muted)";
-          }}
-          aria-label={collapsed ? (theme === "dark" ? "Light Mode" : "Dark Mode") : undefined}
-          title={collapsed ? (theme === "dark" ? "Light Mode" : "Dark Mode") : undefined}
+          aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
+          title={theme === "dark" ? "Light mode" : "Dark mode"}
         >
-          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-          {!collapsed && (theme === "dark" ? "Light Mode" : "Dark Mode")}
+          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
         </button>
       </div>
     </aside>

@@ -127,7 +127,7 @@ export function deriveQuadrant(priority: KanbanTaskPriority): MatrixQuadrant {
 
 // ─── View Types ──────────────────────────────────────────────────────
 
-export type KanbanViewMode = "overview" | "kanban" | "gantt" | "calendar" | "matrix" | "sessions";
+export type KanbanViewMode = "kanban" | "gantt" | "calendar" | "matrix" | "sessions" | "diagrams";
 
 // ─── Status Derivation (for Gantt-like status from Kanban column) ────
 

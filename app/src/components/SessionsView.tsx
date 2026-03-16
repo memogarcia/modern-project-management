@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { KanbanProject, KanbanTask, ProjectSession } from "@/lib/projectTypes";
 import { useProjectStore } from "@/store/projectStore";
 import { Timer, Plus, Trash2, ChevronDown, ChevronRight, FileText, Play, Pause, RotateCcw, X, CheckSquare } from "lucide-react";
+import { Button } from "./ui/button";
+import { IconButton } from "./ui/icon-button";
+import { EmptyState } from "./ui/empty-state";
+import { cn } from "@/lib/utils";
 
 interface SessionsViewProps {
   project: KanbanProject;
@@ -80,29 +84,24 @@ export default function SessionsView({ project, onSelectTask }: SessionsViewProp
   const sessions = project.sessions ?? [];
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Timer size={18} style={{ color: "var(--accent)" }} />
-          <span style={{ fontSize: 16, fontWeight: 700 }}>Sessions</span>
-          <span style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--surface)", padding: "2px 8px", borderRadius: 10 }}>{sessions.length}</span>
+      <div className="flex items-center justify-between mb-4 shrink-0">
+        <div className="flex items-center gap-2">
+          <Timer className="h-[18px] w-[18px] text-[var(--accent)]" />
+          <span className="text-base font-bold">Sessions</span>
+          <span className="text-xs text-[var(--text-muted)] bg-[var(--surface)] px-2 py-0.5 rounded-full">
+            {sessions.length}
+          </span>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          style={{
-            padding: "7px 14px", background: "var(--accent)", color: "var(--accent-foreground)",
-            border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            display: "flex", alignItems: "center", gap: 6,
-          }}
-        >
-          <Plus size={14} /> New Session
-        </button>
+        <Button onClick={() => setShowCreate(true)} className="gap-1.5">
+          <Plus className="h-3.5 w-3.5" /> New Session
+        </Button>
       </div>
 
       {/* Create form */}
       {showCreate && (
-        <div style={{ marginBottom: 16, padding: 16, background: "var(--panel-bg)", border: "1px solid var(--border)", borderRadius: 10, flexShrink: 0 }}>
+        <div className="mb-4 p-4 bg-[var(--panel-bg)] border border-[var(--border)] rounded-xl shrink-0">
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
@@ -112,32 +111,23 @@ export default function SessionsView({ project, onSelectTask }: SessionsViewProp
               if (e.key === "Enter") handleCreate();
               if (e.key === "Escape") setShowCreate(false);
             }}
-            style={{
-              width: "100%", padding: "8px 12px", background: "var(--surface)", border: "1px solid var(--border)",
-              borderRadius: 7, color: "var(--foreground)", fontSize: 13, outline: "none", marginBottom: 10, boxSizing: "border-box",
-            }}
+            className="w-full px-3 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg text-[var(--foreground)] text-[13px] outline-none mb-2.5 focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)]"
           />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleCreate}
-              style={{ padding: "6px 14px", background: "var(--accent)", color: "var(--accent-foreground)", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              Create
-            </button>
-            <button onClick={() => setShowCreate(false)}
-              style={{ padding: "6px 12px", background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
-              Cancel
-            </button>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleCreate}>Create</Button>
+            <Button variant="outline" size="sm" onClick={() => setShowCreate(false)}>Cancel</Button>
           </div>
         </div>
       )}
 
       {/* Session list */}
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
         {sessions.length === 0 && !showCreate && (
-          <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)" }}>
-            <Timer size={40} style={{ opacity: 0.3, marginBottom: 12 }} />
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No sessions yet</div>
-            <div style={{ fontSize: 13 }}>Create a session to start tracking focused work with Pomodoro timers.</div>
-          </div>
+          <EmptyState
+            icon={<Timer />}
+            title="No sessions yet"
+            description="Create a session to start tracking focused work with Pomodoro timers."
+          />
         )}
 
         {sessions.map((session) => {
@@ -145,23 +135,32 @@ export default function SessionsView({ project, onSelectTask }: SessionsViewProp
           const isTimerActive = activeTimerId === session.id;
 
           return (
-            <div key={session.id} style={{ background: "var(--panel-bg)", border: `1px solid ${isExpanded ? "var(--accent)" : "var(--border)"}`, borderRadius: 10, transition: "border-color 0.15s" }}>
+            <div
+              key={session.id}
+              className={cn(
+                "bg-[var(--panel-bg)] border rounded-xl transition-[border-color] duration-150",
+                isExpanded ? "border-[var(--accent)]" : "border-[var(--border)]"
+              )}
+            >
               {/* Session header */}
               <div
                 onClick={() => setExpandedId(isExpanded ? null : session.id)}
-                style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}
+                className="flex items-center gap-2.5 px-4 py-3 cursor-pointer"
               >
-                {isExpanded ? <ChevronDown size={14} style={{ color: "var(--text-muted)" }} /> : <ChevronRight size={14} style={{ color: "var(--text-muted)" }} />}
-                <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{session.title}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--surface)", padding: "2px 8px", borderRadius: 8 }}>
+                {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-[var(--text-muted)]" /> : <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)]" />}
+                <span className="flex-1 text-sm font-semibold">{session.title}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-[var(--text-muted)] bg-[var(--surface)] px-2 py-0.5 rounded-lg">
                     🍅 {session.pomodorosCompleted}
                   </span>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--surface)", padding: "2px 8px", borderRadius: 8 }}>
+                  <span className="text-[11px] text-[var(--text-muted)] bg-[var(--surface)] px-2 py-0.5 rounded-lg">
                     {session.taskIds.length} tasks
                   </span>
                   {isTimerActive && (
-                    <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 700, color: isRunning ? "var(--accent)" : "var(--text-muted)" }}>
+                    <span className={cn(
+                      "text-xs font-bold tabular-nums tracking-wider",
+                      isRunning ? "text-[var(--accent)]" : "text-[var(--text-muted)]"
+                    )}>
                       {formatTime(timeLeft)}
                     </span>
                   )}
@@ -170,114 +169,111 @@ export default function SessionsView({ project, onSelectTask }: SessionsViewProp
 
               {/* Expanded content */}
               {isExpanded && (
-                <div style={{ padding: "0 16px 16px", borderTop: "1px solid var(--border)" }}>
+                <div className="px-4 pb-4 border-t border-[var(--border)]">
                   {/* Timer controls */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
-                    <span style={{ fontSize: 28, fontFamily: "monospace", fontWeight: 700, color: isTimerActive && isRunning ? "var(--accent)" : "var(--foreground)", letterSpacing: "0.05em" }}>
+                  <div className="flex items-center gap-3 py-3 border-b border-[var(--border)]">
+                    <span className={cn(
+                      "text-3xl font-bold tabular-nums tracking-wider",
+                      isTimerActive && isRunning ? "text-[var(--accent)]" : "text-[var(--foreground)]"
+                    )}>
                       {isTimerActive ? formatTime(timeLeft) : formatTime(POMODORO_DURATION)}
                     </span>
-                    <div style={{ display: "flex", gap: 6 }}>
+                    <div className="flex gap-1.5">
                       {(!isTimerActive || !isRunning) && (
-                        <button onClick={() => handleStartTimer(session.id)} title="Start"
-                          style={{ width: 32, height: 32, borderRadius: 8, background: "var(--accent)", color: "var(--accent-foreground)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <Play size={14} />
-                        </button>
+                        <Button size="icon" className="h-9 w-9" onClick={() => handleStartTimer(session.id)} title="Start">
+                          <Play className="h-4 w-4" />
+                        </Button>
                       )}
                       {isTimerActive && isRunning && (
-                        <button onClick={() => setIsRunning(false)} title="Pause"
-                          style={{ width: 32, height: 32, borderRadius: 8, background: "var(--surface)", color: "var(--foreground)", border: "1px solid var(--border)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <Pause size={14} />
-                        </button>
+                        <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setIsRunning(false)} title="Pause">
+                          <Pause className="h-4 w-4" />
+                        </Button>
                       )}
-                      <button onClick={() => { setTimeLeft(POMODORO_DURATION); setIsRunning(false); }} title="Reset"
-                        style={{ width: 32, height: 32, borderRadius: 8, background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <RotateCcw size={14} />
-                      </button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 text-[var(--text-muted)]"
+                        onClick={() => { setTimeLeft(POMODORO_DURATION); setIsRunning(false); }}
+                        title="Reset"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: "auto" }}>🍅 {session.pomodorosCompleted} completed</span>
+                    <span className="text-xs text-[var(--text-muted)] ml-auto">🍅 {session.pomodorosCompleted} completed</span>
                   </div>
 
                   {/* Notes */}
-                  <div style={{ padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                      <FileText size={13} style={{ color: "var(--text-muted)" }} />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Notes</span>
+                  <div className="py-3 border-b border-[var(--border)]">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <FileText className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                      <span className="text-xs font-semibold text-[var(--text-muted)]">Notes</span>
                     </div>
                     <textarea
                       value={session.notes}
                       onChange={(e) => updateSession(session.id, { notes: e.target.value })}
                       placeholder="Session notes…"
                       rows={3}
-                      style={{
-                        width: "100%", padding: "8px 10px", background: "var(--surface)", border: "1px solid var(--border)",
-                        borderRadius: 7, color: "var(--foreground)", fontSize: 13, outline: "none", resize: "vertical",
-                        fontFamily: "inherit", lineHeight: 1.5, boxSizing: "border-box",
-                      }}
+                      className="w-full px-2.5 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg text-[var(--foreground)] text-[13px] outline-none resize-y font-[inherit] leading-relaxed focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)]"
                     />
                   </div>
 
                   {/* Linked tasks */}
-                  <div style={{ padding: "12px 0" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <CheckSquare size={13} style={{ color: "var(--text-muted)" }} />
-                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Linked Tasks</span>
+                  <div className="py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <CheckSquare className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                        <span className="text-xs font-semibold text-[var(--text-muted)]">Linked Tasks</span>
                       </div>
                       <button
                         onClick={() => setShowTaskPicker(showTaskPicker === session.id ? null : session.id)}
-                        style={{ padding: "3px 10px", background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-[var(--surface)] text-[var(--text-muted)] border border-[var(--border)] rounded-md text-[11px] cursor-pointer hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] transition-colors"
                       >
-                        <Plus size={12} /> Add task
+                        <Plus className="h-3 w-3" /> Add task
                       </button>
                     </div>
 
                     {/* Task picker dropdown */}
                     {showTaskPicker === session.id && (
-                      <div style={{ marginBottom: 8, padding: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, maxHeight: 160, overflowY: "auto" }}>
+                      <div className="mb-2 p-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg max-h-40 overflow-y-auto">
                         {project.tasks
                           .filter((t) => !session.taskIds.includes(t.id))
                           .map((task) => (
                             <div
                               key={task.id}
                               onClick={() => { addTaskToSession(session.id, task.id); setShowTaskPicker(null); }}
-                              style={{ padding: "6px 8px", fontSize: 12, cursor: "pointer", borderRadius: 4, color: "var(--foreground)" }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-hover)"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                              className="px-2 py-1.5 text-xs cursor-pointer rounded text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
                             >
                               {task.name}
                             </div>
                           ))}
                         {project.tasks.filter((t) => !session.taskIds.includes(t.id)).length === 0 && (
-                          <div style={{ padding: "6px 8px", fontSize: 12, color: "var(--text-muted)" }}>All tasks already linked</div>
+                          <div className="px-2 py-1.5 text-xs text-[var(--text-muted)]">All tasks already linked</div>
                         )}
                       </div>
                     )}
 
                     {session.taskIds.length === 0 ? (
-                      <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "4px 0" }}>No tasks linked to this session</div>
+                      <div className="text-xs text-[var(--text-muted)] py-1">No tasks linked to this session</div>
                     ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div className="flex flex-col gap-1">
                         {session.taskIds.map((taskId) => {
                           const task = getTaskById(taskId);
                           if (!task) return null;
                           return (
-                            <div key={taskId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--surface)", borderRadius: 6 }}>
+                            <div key={taskId} className="flex items-center gap-2 px-2 py-1.5 bg-[var(--surface)] rounded-md">
                               <span
                                 onClick={() => onSelectTask(taskId)}
-                                style={{ flex: 1, fontSize: 12, cursor: "pointer", color: "var(--foreground)" }}
-                                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--foreground)"; }}
+                                className="flex-1 text-xs cursor-pointer text-[var(--foreground)] hover:text-[var(--accent)] transition-colors"
                               >
                                 {task.name}
                               </span>
-                              <button
+                              <IconButton
+                                size="sm"
+                                hoverVariant="danger"
                                 onClick={() => removeTaskFromSession(session.id, taskId)}
-                                style={{ width: 20, height: 20, background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 4 }}
-                                onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
                               >
-                                <X size={12} />
-                              </button>
+                                <X className="h-3 w-3" />
+                              </IconButton>
                             </div>
                           );
                         })}
@@ -286,13 +282,15 @@ export default function SessionsView({ project, onSelectTask }: SessionsViewProp
                   </div>
 
                   {/* Delete session */}
-                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, display: "flex", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => { removeSession(session.id); setExpandedId(null); }}
-                      style={{ padding: "5px 12px", background: "transparent", color: "#ef4444", border: "1px solid #ef444440", borderRadius: 6, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+                  <div className="border-t border-[var(--border)] pt-3 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-[var(--danger)] border-[var(--danger)]/40 hover:bg-[var(--danger)]/10 hover:border-[var(--danger)]"
+                      onClick={() => { if (!confirm("Delete this session and all its data?")) return; removeSession(session.id); setExpandedId(null); }}
                     >
-                      <Trash2 size={12} /> Delete Session
-                    </button>
+                      <Trash2 className="h-3 w-3" /> Delete Session
+                    </Button>
                   </div>
                 </div>
               )}

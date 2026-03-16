@@ -3,6 +3,9 @@
 import { useState, useMemo } from "react";
 import type { KanbanProject } from "@/lib/projectTypes";
 import { PRIORITY_CONFIG } from "@/lib/projectTypes";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "./ui/button";
+import { cn } from "@/lib/utils";
 
 interface KanbanCalendarViewProps {
   project: KanbanProject;
@@ -46,38 +49,39 @@ export default function KanbanCalendarView({ project, onSelectTask }: KanbanCale
   while (cells.length % 7 !== 0) cells.push(null);
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div className="flex flex-1 flex-col overflow-hidden">
       {/* Month navigation */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "12px 16px", flexShrink: 0,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={prevMonth} style={navBtnStyle}>←</button>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--foreground)", minWidth: 160, textAlign: "center" }}>
+      <div className="flex items-center justify-between px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={prevMonth}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-base font-bold text-[var(--foreground)] min-w-40 text-center">
             {currentDate.toLocaleDateString("en", { month: "long", year: "numeric" })}
           </span>
-          <button onClick={nextMonth} style={navBtnStyle}>→</button>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextMonth}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
-        <button onClick={goToday} style={{ ...navBtnStyle, padding: "4px 12px", fontSize: 12 }}>
+        <Button variant="outline" size="sm" onClick={goToday}>
           Today
-        </button>
+        </Button>
       </div>
 
       {/* Weekday headers */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+      <div className="grid grid-cols-7 border-b border-[var(--border)] shrink-0">
         {WEEKDAYS.map((day) => (
-          <div key={day} style={{ padding: "6px 8px", fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textAlign: "center" }}>
+          <div key={day} className="px-2 py-1.5 text-[11px] font-bold text-[var(--text-muted)] text-center uppercase tracking-wider">
             {day}
           </div>
         ))}
       </div>
 
       {/* Calendar grid */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gridAutoRows: "1fr", overflow: "auto" }}>
+      <div className="flex-1 grid grid-cols-7 auto-rows-fr overflow-auto">
         {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`empty-${i}`} style={{ borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)", background: "rgba(0,0,0,0.02)" }} />;
+            return <div key={`empty-${i}`} className="border-r border-b border-[var(--border)] bg-[var(--surface-hover)]/20" />;
           }
 
           const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -88,22 +92,19 @@ export default function KanbanCalendarView({ project, onSelectTask }: KanbanCale
           return (
             <div
               key={dateStr}
-              style={{
-                borderRight: "1px solid var(--border)",
-                borderBottom: "1px solid var(--border)",
-                padding: 4,
-                minHeight: 80,
-                background: isToday ? "var(--accent-muted, rgba(59,130,246,0.06))" : isWeekend ? "rgba(0,0,0,0.015)" : undefined,
-              }}
+              className={cn(
+                "border-r border-b border-[var(--border)] p-1.5 min-h-20",
+                isToday && "bg-[var(--accent-soft)] ring-1 ring-inset ring-[var(--accent)]/30",
+                !isToday && isWeekend && "bg-[var(--surface-hover)]/20"
+              )}
             >
-              <div style={{
-                fontSize: 12, fontWeight: isToday ? 800 : 500,
-                color: isToday ? "var(--accent)" : "var(--text-muted)",
-                marginBottom: 4, textAlign: "right", paddingRight: 4,
-              }}>
+              <div className={cn(
+                "text-xs text-right pr-1 mb-1",
+                isToday ? "font-extrabold text-[var(--accent)]" : "font-medium text-[var(--text-muted)]"
+              )}>
                 {day}
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div className="flex flex-col gap-0.5">
                 {dayTasks.slice(0, 3).map((task) => {
                   const epic = getEpic(task.epicId);
                   const priorityCfg = PRIORITY_CONFIG[task.priority];
@@ -111,24 +112,18 @@ export default function KanbanCalendarView({ project, onSelectTask }: KanbanCale
                     <div
                       key={task.id}
                       onClick={() => onSelectTask?.(task.id)}
+                      className="text-[11px] px-1.5 py-0.5 rounded truncate text-[var(--foreground)] cursor-pointer transition-[filter] duration-150 hover:brightness-110"
                       style={{
-                        fontSize: 10, padding: "2px 5px", borderRadius: 4,
                         background: `${epic?.color ?? priorityCfg.color}15`,
                         borderLeft: `2px solid ${epic?.color ?? priorityCfg.color}`,
-                        color: "var(--foreground)", overflow: "hidden",
-                        textOverflow: "ellipsis", whiteSpace: "nowrap",
-                        cursor: onSelectTask ? "pointer" : undefined,
-                        transition: "filter 0.12s",
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.1)"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.filter = "none"; }}
                     >
                       {task.name}
                     </div>
                   );
                 })}
                 {dayTasks.length > 3 && (
-                  <div style={{ fontSize: 9, color: "var(--text-muted)", textAlign: "center" }}>
+                  <div className="text-[10px] text-[var(--text-muted)] text-center">
                     +{dayTasks.length - 3} more
                   </div>
                 )}
@@ -140,14 +135,3 @@ export default function KanbanCalendarView({ project, onSelectTask }: KanbanCale
     </div>
   );
 }
-
-const navBtnStyle: React.CSSProperties = {
-  padding: "4px 10px",
-  background: "transparent",
-  border: "1px solid var(--border)",
-  borderRadius: 6,
-  color: "var(--foreground)",
-  cursor: "pointer",
-  fontSize: 14,
-  fontWeight: 600,
-};

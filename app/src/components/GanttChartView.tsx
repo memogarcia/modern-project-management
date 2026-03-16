@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import type { KanbanProject } from "@/lib/projectTypes";
 import { PRIORITY_CONFIG } from "@/lib/projectTypes";
+import { EmptyState } from "./ui/empty-state";
+import { BarChart3 } from "lucide-react";
 
 interface GanttChartViewProps {
   project: KanbanProject;
@@ -32,15 +34,21 @@ export default function GanttChartView({ project, onSelectTask }: GanttChartView
 
   const dayWidth = 36;
   const rowHeight = 38;
-  const headerHeight = 48;
+
+  // Today marker position
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayOffset = Math.round((today.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
+  const showTodayMarker = todayOffset >= 0 && todayOffset <= totalDays;
 
   if (tasks.length === 0) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, color: "var(--text-muted)", fontSize: 14 }}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 32, marginBottom: 8, opacity: 0.3 }}>📊</div>
-          <div>No tasks with date ranges. Add startDate and dueDate to see the timeline.</div>
-        </div>
+      <div className="flex flex-1 items-center justify-center">
+        <EmptyState
+          icon={<BarChart3 />}
+          title="No tasks with date ranges"
+          description="Add startDate and dueDate to see the timeline."
+        />
       </div>
     );
   }
@@ -58,18 +66,17 @@ export default function GanttChartView({ project, onSelectTask }: GanttChartView
     const current = new Date(minDate);
     for (let i = 0; i < totalDays; i++) {
       const isWeekend = current.getDay() === 0 || current.getDay() === 6;
+      const isToday = current.toDateString() === today.toDateString();
       headers.push(
         <div
           key={i}
-          style={{
-            width: dayWidth, minWidth: dayWidth, textAlign: "center", fontSize: 10,
-            color: isWeekend ? "var(--text-subtle)" : "var(--text-muted)",
-            borderRight: "1px solid var(--border)", padding: "4px 0",
-            background: isWeekend ? "rgba(0,0,0,0.02)" : undefined,
-          }}
+          className={`text-center text-[10px] border-r border-[var(--border)] py-1 ${
+            isToday ? "bg-[var(--accent-soft)] font-bold text-[var(--foreground)]" : isWeekend ? "text-[var(--text-subtle)] bg-[var(--surface-hover)]/30" : "text-[var(--text-muted)]"
+          }`}
+          style={{ width: dayWidth, minWidth: dayWidth }}
         >
-          <div style={{ fontWeight: 600 }}>{current.getDate()}</div>
-          <div style={{ fontSize: 9 }}>{current.toLocaleDateString("en", { month: "short" })}</div>
+          <div className="font-semibold">{current.getDate()}</div>
+          <div className="text-[9px]">{current.toLocaleDateString("en", { month: "short" })}</div>
         </div>
       );
       current.setDate(current.getDate() + 1);
@@ -80,14 +87,24 @@ export default function GanttChartView({ project, onSelectTask }: GanttChartView
   let rowIndex = 0;
 
   return (
-    <div style={{ flex: 1, overflow: "auto", background: "var(--panel-bg)", borderRadius: 12, border: "1px solid var(--border)" }}>
-      <div style={{ minWidth: totalDays * dayWidth + 200, position: "relative" }}>
-        {/* Header */}
-        <div style={{ display: "flex", position: "sticky", top: 0, zIndex: 2, background: "var(--panel-bg)", borderBottom: "2px solid var(--border)" }}>
-          <div style={{ width: 200, minWidth: 200, padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "var(--text-muted)", borderRight: "1px solid var(--border)" }}>
-            TASK
+    <div className="flex-1 overflow-auto rounded-xl border border-[var(--border)] bg-[var(--panel-bg)]">
+      <div className="relative" style={{ minWidth: totalDays * dayWidth + 200 }}>
+        {/* Today marker line */}
+        {showTodayMarker && (
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-[var(--danger)] z-10 pointer-events-none opacity-60"
+            style={{ left: 200 + todayOffset * dayWidth + dayWidth / 2 }}
+          >
+            <div className="absolute -top-0 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-[var(--danger)]" />
           </div>
-          <div style={{ display: "flex" }}>
+        )}
+
+        {/* Header */}
+        <div className="flex sticky top-0 z-20 bg-[var(--panel-bg)] border-b-2 border-[var(--border)]">
+          <div className="w-[200px] min-w-[200px] px-3 py-2 text-[11px] font-bold text-[var(--text-muted)] border-r border-[var(--border)] uppercase tracking-wider">
+            Task
+          </div>
+          <div className="flex">
             {generateDayHeaders()}
           </div>
         </div>
@@ -98,19 +115,12 @@ export default function GanttChartView({ project, onSelectTask }: GanttChartView
           return (
             <div key={epicId}>
               {/* Epic header row */}
-              <div style={{
-                display: "flex", background: `${epic?.color ?? "#6b7280"}08`,
-                borderBottom: "1px solid var(--border)",
-              }}>
-                <div style={{
-                  width: 200, minWidth: 200, padding: "6px 12px", fontSize: 11, fontWeight: 700,
-                  color: epic?.color ?? "var(--text-muted)", borderRight: "1px solid var(--border)",
-                  display: "flex", alignItems: "center", gap: 6,
-                }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: epic?.color ?? "#6b7280" }} />
+              <div className="flex border-b border-[var(--border)]" style={{ background: `${epic?.color ?? "#6b7280"}08` }}>
+                <div className="w-[200px] min-w-[200px] px-3 py-1.5 text-[11px] font-bold border-r border-[var(--border)] flex items-center gap-1.5" style={{ color: epic?.color ?? "var(--text-muted)" }}>
+                  <span className="w-2 h-2 rounded-full" style={{ background: epic?.color ?? "#6b7280" }} />
                   {epic?.name ?? "Unknown Epic"}
                 </div>
-                <div style={{ flex: 1, height: 28 }} />
+                <div className="flex-1 h-7" />
               </div>
 
               {/* Task rows */}
@@ -125,60 +135,39 @@ export default function GanttChartView({ project, onSelectTask }: GanttChartView
                 return (
                   <div
                     key={task.id}
-                    style={{
-                      display: "flex", borderBottom: "1px solid var(--border)",
-                      background: rowIndex % 2 === 0 ? "transparent" : "rgba(0,0,0,0.01)",
-                    }}
+                    className={`flex border-b border-[var(--border)] ${rowIndex % 2 === 0 ? "" : "bg-[var(--surface-hover)]/20"}`}
                   >
                     <div
                       onClick={() => onSelectTask?.(task.id)}
-                      style={{
-                        width: 200, minWidth: 200, padding: "6px 12px", fontSize: 12,
-                        color: "var(--foreground)", borderRight: "1px solid var(--border)",
-                        display: "flex", alignItems: "center", gap: 6, overflow: "hidden",
-                        cursor: onSelectTask ? "pointer" : undefined,
-                      }}
+                      className="w-[200px] min-w-[200px] px-3 py-1.5 text-xs text-[var(--foreground)] border-r border-[var(--border)] flex items-center gap-1.5 overflow-hidden cursor-pointer hover:bg-[var(--surface-hover)]"
                     >
-                      <span style={{ fontSize: 10, color: priorityCfg.color }}>{priorityCfg.icon}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {task.name}
-                      </span>
+                      <span className="text-[10px]" style={{ color: priorityCfg.color }}>{priorityCfg.icon}</span>
+                      <span className="truncate">{task.name}</span>
                     </div>
-                    <div style={{ position: "relative", height: rowHeight, flex: 1 }}>
+                    <div className="relative flex-1" style={{ height: rowHeight }}>
                       {/* Bar */}
                       <div
                         onClick={() => onSelectTask?.(task.id)}
+                        className="absolute rounded-md overflow-hidden cursor-pointer transition-[filter] duration-150 hover:brightness-110"
                         style={{
-                          position: "absolute",
                           left: startOffset * dayWidth + 2,
                           width: duration * dayWidth - 4,
-                          top: 8,
-                          height: rowHeight - 16,
-                          borderRadius: 4,
-                          background: `${epic?.color ?? priorityCfg.color}30`,
-                          border: `1px solid ${epic?.color ?? priorityCfg.color}60`,
-                          overflow: "hidden",
-                          cursor: onSelectTask ? "pointer" : undefined,
-                          transition: "filter 0.12s",
+                          top: 6,
+                          height: rowHeight - 12,
+                          background: `${epic?.color ?? priorityCfg.color}40`,
+                          border: `1px solid ${epic?.color ?? priorityCfg.color}70`,
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.15)"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.filter = "none"; }}
                       >
                         {/* Progress fill */}
-                        <div style={{
-                          height: "100%",
-                          width: `${task.progress}%`,
-                          background: `${epic?.color ?? priorityCfg.color}50`,
-                          borderRadius: 3,
-                          transition: "width 0.3s",
-                        }} />
+                        <div
+                          className="h-full rounded-[5px] transition-[width] duration-300"
+                          style={{
+                            width: `${task.progress}%`,
+                            background: `${epic?.color ?? priorityCfg.color}60`,
+                          }}
+                        />
                         {/* Label */}
-                        <span style={{
-                          position: "absolute", top: "50%", left: 6, transform: "translateY(-50%)",
-                          fontSize: 10, fontWeight: 600, color: "var(--foreground)",
-                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                          maxWidth: "calc(100% - 12px)",
-                        }}>
+                        <span className="absolute top-1/2 left-1.5 -translate-y-1/2 text-[10px] font-semibold text-[var(--foreground)] truncate max-w-[calc(100%-12px)]">
                           {task.progress > 0 && `${task.progress}%`}
                         </span>
                       </div>

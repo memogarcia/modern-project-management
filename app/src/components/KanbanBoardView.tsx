@@ -3,6 +3,9 @@
 import { useState } from "react";
 import type { KanbanProject, KanbanTask, KanbanColumn } from "@/lib/projectTypes";
 import { PRIORITY_CONFIG } from "@/lib/projectTypes";
+import { Badge } from "./ui/badge";
+import { EmptyState } from "./ui/empty-state";
+import { cn } from "@/lib/utils";
 
 interface KanbanBoardViewProps {
   project: KanbanProject;
@@ -54,7 +57,7 @@ export default function KanbanBoardView({
     project.epics.find((e) => e.id === task.epicId);
 
   return (
-    <div style={{ display: "flex", gap: 14, flex: 1, minHeight: 0, overflowX: "auto", padding: "0 2px 2px" }}>
+    <div className="flex flex-1 gap-3.5 min-h-0 overflow-x-auto px-0.5 pb-0.5">
       {columns.map((col) => {
         const tasks = project.tasks
           .filter((t) => t.columnId === col.id)
@@ -65,18 +68,12 @@ export default function KanbanBoardView({
         return (
           <div
             key={col.id}
+            className={cn(
+              "flex flex-1 min-w-60 max-w-[360px] flex-col overflow-hidden rounded-xl border-[1.5px] bg-[var(--panel-bg)] transition-[border-color,box-shadow] duration-150",
+              isDragOver ? "shadow-[0_0_0_2px_var(--accent-soft)]" : ""
+            )}
             style={{
-              flex: "1 1 0",
-              minWidth: 240,
-              maxWidth: 360,
-              background: "var(--panel-bg)",
-              border: `1.5px solid ${isDragOver ? col.color : "var(--border)"}`,
-              borderRadius: 12,
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-              transition: "border-color 0.15s",
-              boxShadow: isDragOver ? `0 0 0 2px ${col.color}30` : undefined,
+              borderColor: isDragOver ? col.color : "var(--border)",
             }}
             onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.id); }}
             onDragLeave={(e) => {
@@ -85,47 +82,36 @@ export default function KanbanBoardView({
             onDrop={() => handleDrop(col.id)}
           >
             {/* Column header */}
-            <div style={{ padding: "14px 14px 10px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: col.color, display: "inline-block", flexShrink: 0 }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", letterSpacing: "0.01em" }}>
-                    {col.name}
+            <div className="flex items-center justify-between px-3.5 pt-3.5 pb-2.5 border-b border-[var(--border)] shrink-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ background: col.color }}
+                />
+                <span className="text-[13px] font-bold text-[var(--foreground)] tracking-[0.01em]">
+                  {col.name}
+                </span>
+                <Badge color={col.color} size="sm">{tasks.length}</Badge>
+                {col.wipLimit !== undefined && (
+                  <span className={cn("text-[10px] font-semibold", isOverWip ? "text-[var(--danger)]" : "text-[var(--text-muted)]")}>
+                    / {col.wipLimit}
                   </span>
-                  <span style={{
-                    fontSize: 11, fontWeight: 600, background: `${col.color}18`, color: col.color,
-                    borderRadius: 20, padding: "1px 7px", minWidth: 18, textAlign: "center",
-                  }}>
-                    {tasks.length}
-                  </span>
-                  {col.wipLimit !== undefined && (
-                    <span style={{
-                      fontSize: 10, color: isOverWip ? "#ef4444" : "var(--text-muted)",
-                      fontWeight: 600,
-                    }}>
-                      / {col.wipLimit}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => { setAddingTo(col.id); setNewTitle(""); }}
-                  title="Add task"
-                  style={{
-                    width: 26, height: 26, borderRadius: 6, background: "transparent",
-                    border: "1px solid var(--border)", color: "var(--text-muted)", cursor: "pointer",
-                    fontSize: 18, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
-                    transition: "background 0.1s, color 0.1s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = col.color; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = col.color; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.borderColor = "var(--border)"; }}
-                >
-                  +
-                </button>
+                )}
               </div>
+              <button
+                onClick={() => { setAddingTo(col.id); setNewTitle(""); }}
+                title="Add task"
+                className="flex items-center justify-center w-7 h-7 rounded-md border border-[var(--border)] bg-transparent text-[var(--text-muted)] text-lg leading-none cursor-pointer transition-all duration-100 hover:text-white hover:border-transparent"
+                style={{ "--hover-bg": col.color } as React.CSSProperties}
+                onMouseEnter={(e) => { e.currentTarget.style.background = col.color; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+              >
+                +
+              </button>
             </div>
 
             {/* Task list */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "10px 10px 4px", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-2.5 pb-1">
               {tasks.map((task) => {
                 const epic = getEpicForTask(task);
                 const priorityCfg = PRIORITY_CONFIG[task.priority];
@@ -138,76 +124,50 @@ export default function KanbanBoardView({
                     onDragStart={() => setDragTaskId(task.id)}
                     onDragEnd={() => { setDragTaskId(null); setDragOverCol(null); }}
                     onClick={() => onSelectTask(task.id)}
+                    className={cn(
+                      "group/task rounded-lg border p-2.5 shadow-sm transition-all duration-150 cursor-grab active:cursor-grabbing",
+                      "hover:shadow-md hover:-translate-y-px",
+                      isSelected ? "bg-[var(--surface-hover)]" : "bg-[var(--surface)]",
+                      dragTaskId === task.id && "opacity-40"
+                    )}
                     style={{
-                      background: isSelected ? `${col.color}0a` : "var(--surface)",
-                      border: `1px solid ${isSelected ? col.color : "var(--border)"}`,
-                      borderRadius: 8, padding: "9px 11px",
-                      cursor: dragTaskId === task.id ? "grabbing" : "grab",
-                      opacity: dragTaskId === task.id ? 0.45 : 1,
-                      transition: "opacity 0.1s, border-color 0.15s",
+                      borderColor: isSelected ? col.color : "var(--border)",
                     }}
                   >
                     {/* Epic badge */}
                     {epic && (
-                      <div style={{
-                        fontSize: 10, fontWeight: 600, color: epic.color ?? "var(--text-muted)",
-                        marginBottom: 4, display: "flex", alignItems: "center", gap: 4,
-                      }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: epic.color ?? "var(--text-muted)", display: "inline-block" }} />
+                      <div className="flex items-center gap-1 mb-1 text-[11px] font-semibold" style={{ color: epic.color ?? "var(--text-muted)" }}>
+                        <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: epic.color ?? "var(--text-muted)" }} />
                         {epic.name}
                       </div>
                     )}
 
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                      <span style={{ flex: 1, fontSize: 13, color: "var(--foreground)", lineHeight: 1.45, wordBreak: "break-word" }}>
+                    <div className="flex items-start gap-1.5">
+                      <span className="flex-1 text-[13px] text-[var(--foreground)] leading-[1.45] break-words">
                         {task.name}
                       </span>
                       <button
-                        onClick={(e) => { e.stopPropagation(); onRemoveTask(task.id); }}
+                        onClick={(e) => { e.stopPropagation(); if (confirm("Delete this task?")) onRemoveTask(task.id); }}
                         title="Delete"
-                        style={{
-                          width: 22, height: 22, padding: 0, background: "transparent", border: "none",
-                          color: "var(--text-muted)", cursor: "pointer", borderRadius: 4, fontSize: 16,
-                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; e.currentTarget.style.color = "#ef4444"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
+                        className="flex items-center justify-center w-5 h-5 shrink-0 rounded bg-transparent border-none text-[var(--text-muted)] cursor-pointer opacity-0 group-hover/task:opacity-100 transition-all duration-150 hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]"
                       >
                         ×
                       </button>
                     </div>
 
                     {/* Badges row */}
-                    <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-                      <span style={{
-                        fontSize: 10, padding: "1px 6px", borderRadius: 4,
-                        background: `${priorityCfg.color}18`, color: priorityCfg.color, fontWeight: 600,
-                      }}>
+                    <div className="flex gap-1 mt-1.5 flex-wrap">
+                      <Badge color={priorityCfg.color} size="sm">
                         {priorityCfg.icon} {priorityCfg.label}
-                      </span>
+                      </Badge>
                       {task.assignee && (
-                        <span style={{
-                          fontSize: 10, padding: "1px 6px", borderRadius: 4,
-                          background: "var(--surface-hover)", color: "var(--text-muted)", fontWeight: 500,
-                        }}>
-                          👤 {task.assignee}
-                        </span>
+                        <Badge size="sm">👤 {task.assignee}</Badge>
                       )}
                       {task.dueDate && (
-                        <span style={{
-                          fontSize: 10, padding: "1px 6px", borderRadius: 4,
-                          background: "var(--surface-hover)", color: "var(--text-muted)", fontWeight: 500,
-                        }}>
-                          📅 {task.dueDate}
-                        </span>
+                        <Badge size="sm">📅 {task.dueDate}</Badge>
                       )}
                       {task.progress > 0 && (
-                        <span style={{
-                          fontSize: 10, padding: "1px 6px", borderRadius: 4,
-                          background: "#22c55e18", color: "#22c55e", fontWeight: 600,
-                        }}>
-                          {task.progress}%
-                        </span>
+                        <Badge color="#22c55e" size="sm">{task.progress}%</Badge>
                       )}
                     </div>
                   </div>
@@ -215,14 +175,12 @@ export default function KanbanBoardView({
               })}
 
               {tasks.length === 0 && addingTo !== col.id && (
-                <div style={{ textAlign: "center", padding: "20px 8px", color: "var(--text-subtle)", fontSize: 12, fontStyle: "italic" }}>
-                  No tasks yet
-                </div>
+                <EmptyState title="No tasks yet" compact className="py-5" />
               )}
             </div>
 
             {/* Add task form */}
-            <div style={{ padding: "8px 10px", flexShrink: 0 }}>
+            <div className="p-2.5 shrink-0">
               {addingTo === col.id ? (
                 <div>
                   <textarea
@@ -235,29 +193,20 @@ export default function KanbanBoardView({
                       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); confirmAdd(col.id); }
                       if (e.key === "Escape") { setAddingTo(null); setNewTitle(""); }
                     }}
-                    style={{
-                      width: "100%", padding: "7px 9px", background: "var(--background)",
-                      border: `1px solid ${col.color}`, borderRadius: 7, color: "var(--foreground)",
-                      fontSize: 13, resize: "none", outline: "none", boxSizing: "border-box",
-                      fontFamily: "inherit", marginBottom: 6,
-                    }}
+                    className="w-full p-2 bg-[var(--background)] rounded-lg text-[var(--foreground)] text-[13px] resize-none outline-none border font-[inherit] mb-1.5 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+                    style={{ borderColor: col.color }}
                   />
-                  <div style={{ display: "flex", gap: 6 }}>
+                  <div className="flex gap-1.5">
                     <button
                       onClick={() => confirmAdd(col.id)}
-                      style={{
-                        flex: 1, padding: "6px", background: col.color, color: "#fff",
-                        border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600,
-                      }}
+                      className="flex-1 py-1.5 text-white border-none rounded-md cursor-pointer text-xs font-semibold"
+                      style={{ background: col.color }}
                     >
                       Add task
                     </button>
                     <button
                       onClick={() => { setAddingTo(null); setNewTitle(""); }}
-                      style={{
-                        flex: 1, padding: "6px", background: "transparent", color: "var(--text-muted)",
-                        border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer", fontSize: 12,
-                      }}
+                      className="flex-1 py-1.5 bg-transparent text-[var(--text-muted)] border border-[var(--border)] rounded-md cursor-pointer text-xs"
                     >
                       Cancel
                     </button>
@@ -266,13 +215,7 @@ export default function KanbanBoardView({
               ) : (
                 <button
                   onClick={() => { setAddingTo(col.id); setNewTitle(""); }}
-                  style={{
-                    width: "100%", padding: "7px", background: "transparent",
-                    border: "1px dashed var(--border)", borderRadius: 7, color: "var(--text-muted)",
-                    cursor: "pointer", fontSize: 12, fontWeight: 500, transition: "border-color 0.15s, color 0.15s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = col.color; e.currentTarget.style.color = col.color; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+                  className="w-full py-2 bg-transparent border border-dashed border-[var(--border)] rounded-lg text-[var(--text-muted)] cursor-pointer text-xs font-medium transition-colors duration-150 hover:border-[var(--accent)] hover:text-[var(--accent)]"
                 >
                   + Add task
                 </button>

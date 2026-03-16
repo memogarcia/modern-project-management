@@ -1,60 +1,75 @@
 import { KanbanProjectMeta } from "@/lib/projectTypes";
-import { MoreVertical, GitBranch, LayoutGrid } from "lucide-react";
+import { Trash2, Layers, KanbanSquare, BarChart3, Calendar, Grid3X3, Timer, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export function ProjectCard({ 
   project, 
   onDelete 
 }: { 
-  project: KanbanProjectMeta & { taskCount?: number; epicCount?: number; color?: string; icon?: string };
+  project: KanbanProjectMeta & { taskCount?: number; epicCount?: number };
   onDelete: (id: string) => void;
 }) {
   const router = useRouter();
   
-  // Deterministic color based on id if not provided
-  const colors = ["#3B82F6", "#8B5CF6", "#EC4899", "#10B981", "#F59E0B", "#06B6D4"];
-  const color = project.color || colors[project.id.charCodeAt(0) % colors.length] || colors[0];
-  const icon = project.icon || "📂";
-
   return (
-    <div 
+    <Card 
       onClick={() => router.push(`/projects/${project.id}`)}
-      className="group relative rounded-xl border border-border/40 bg-card p-4 hover:border-border/70 hover:shadow-sm transition-all cursor-pointer"
+      className="group cursor-pointer hover:border-[var(--accent)]"
     >
-      <div className="flex items-start justify-between">
-        <div
-          className="h-10 w-10 rounded-xl flex items-center justify-center text-lg"
-          style={{ backgroundColor: `${color}15` }}
-        >
-          {icon}
+      <CardHeader className="pb-3 flex flex-row items-start justify-between space-y-0">
+        <div className="flex flex-col gap-1.5 overflow-hidden">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-[var(--accent)] shrink-0" />
+            <CardTitle className="truncate">{project.name}</CardTitle>
+          </div>
+          {project.description && (
+            <CardDescription className="truncate">{project.description}</CardDescription>
+          )}
         </div>
-        <button 
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--danger)]/10"
           onClick={(e) => { e.stopPropagation(); onDelete(project.id); }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-destructive"
           title="Delete project"
         >
-          <MoreVertical className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="mt-3 space-y-1">
-        <h3 className="text-sm font-semibold text-foreground truncate">{project.name}</h3>
-        <p className="text-xs text-muted-foreground line-clamp-2">
-          {project.description || "No description provided."}
-        </p>
-      </div>
-      <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <LayoutGrid className="h-3 w-3" />
-          {project.epicCount || 0}
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </CardHeader>
+
+      <CardContent className="pb-3">
+        <div className="flex gap-3 text-[11px] text-[var(--text-muted)] font-medium">
+          {project.epicCount !== undefined && <span>{project.epicCount} epics</span>}
+          {project.taskCount !== undefined && <span>{project.taskCount} tasks</span>}
+        </div>
+      </CardContent>
+
+      <CardFooter className="pt-0 flex items-center justify-between">
+        <div className="flex gap-1.5">
+          {[
+            { icon: KanbanSquare, label: "Kanban", color: "#3b82f6" },
+            { icon: BarChart3, label: "Gantt", color: "#f59e0b" },
+            { icon: Calendar, label: "Calendar", color: "#22c55e" },
+            { icon: Grid3X3, label: "Matrix", color: "#8b5cf6" },
+            { icon: Timer, label: "Sessions", color: "#06b6d4" },
+            { icon: Share2, label: "Diagrams", color: "#ec4899" },
+          ].map(({ icon: Icon, label, color }) => (
+            <div
+              key={label}
+              title={label}
+              className="flex h-7 w-7 items-center justify-center rounded-md"
+              style={{ backgroundColor: `${color}15`, color }}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </div>
+          ))}
+        </div>
+        <span className="text-[11px] text-[var(--text-muted)]">
+          Updated {new Date(project.updatedAt).toLocaleDateString()}
         </span>
-        <span className="flex items-center gap-1">
-          <GitBranch className="h-3 w-3" />
-          {project.taskCount || 0}
-        </span>
-        <span className="ml-auto">
-          {new Date(project.updatedAt).toLocaleDateString()}
-        </span>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   );
 }

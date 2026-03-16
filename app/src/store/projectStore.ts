@@ -119,7 +119,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
   return {
     project: null,
     selectedTaskId: null,
-    activeView: "overview",
+    activeView: "kanban",
     dirty: false,
     isLoading: false,
     loadError: null,

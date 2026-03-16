@@ -4,12 +4,23 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
-import { DiagramStorage, ProjectStorage } from "./storage.js";
+import {
+  getDb,
+  listDiagrams as dbListDiagrams,
+  getDiagramById as dbGetDiagram,
+  upsertDiagram as dbSaveDiagram,
+  deleteDiagram as dbDeleteDiagram,
+  listProjects as dbListProjects,
+  listProjectsMeta as dbListProjectsMeta,
+  getProjectById as dbGetProject,
+  upsertProject as dbSaveProject,
+  deleteProject as dbDeleteProject,
+} from "./db.js";
 import type { Diagram, KanbanProject, KanbanEpic, KanbanTask, KanbanColumn, KanbanTaskLink, ProjectSession } from "./types.js";
 import { DEFAULT_KANBAN_COLUMNS } from "./types.js";
 
-const storage = new DiagramStorage(process.env.DIAGRAMS_DIR);
-const projectStorage = new ProjectStorage(storage.baseDir);
+// Ensure DB is initialized
+getDb();
 const MERMAID_NODE_ID_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 const server = new McpServer({
@@ -47,7 +58,7 @@ function markDiagramFlowStale(diagram: Diagram): void {
 
 // ─── Tool: list_diagrams ─────────────────────────────────────────────
 server.tool("list_diagrams", "List all saved diagrams", {}, async () => {
-  const diagrams = storage.list();
+  const diagrams = dbListDiagrams();
   const summary = diagrams.map((d) => ({
     id: d.id,
     name: d.name,
@@ -70,7 +81,7 @@ server.tool(
   "Get a diagram by ID, returns full mermaid code and metadata",
   { id: z.string().describe("The diagram ID") },
   async ({ id }) => {
-    const diagram = storage.get(id);
+    const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
         content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
@@ -111,7 +122,7 @@ server.tool(
       nodes: [],
       edges: [],
     };
-    storage.save(diagram);
+    dbSaveDiagram(diagram);
     return {
       content: [
         {
@@ -138,7 +149,7 @@ server.tool(
     mermaidCode: z.string().optional().describe("New mermaid code"),
   },
   async ({ id, name, description, mermaidCode }) => {
-    const existing = storage.get(id);
+    const existing = dbGetDiagram(id);
     if (!existing) {
       return {
         content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
@@ -158,7 +169,7 @@ server.tool(
     if (mermaidChanged) {
       markDiagramFlowStale(updated);
     }
-    storage.save(updated);
+    dbSaveDiagram(updated);
     return {
       content: [
         {
@@ -180,7 +191,7 @@ server.tool(
   "Delete a diagram by ID",
   { id: z.string().describe("The diagram ID") },
   async ({ id }) => {
-    const deleted = storage.delete(id);
+    const deleted = dbDeleteDiagram(id);
     return {
       content: [
         {
@@ -224,7 +235,7 @@ server.tool(
     description: z.string().optional().describe("Optional description"),
   },
   async ({ id, nodeId, label, shapeType, description }) => {
-    const diagram = storage.get(id);
+    const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
         content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
@@ -271,7 +282,7 @@ server.tool(
     diagram.mermaidCode = lines.join("\n");
     markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
-    storage.save(diagram);
+    dbSaveDiagram(diagram);
 
     return {
       content: [
@@ -305,7 +316,7 @@ server.tool(
     label: z.string().optional().describe("Optional edge label (e.g. 'HTTP', 'gRPC')"),
   },
   async ({ id, source, target, label }) => {
-    const diagram = storage.get(id);
+    const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
         content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
@@ -333,7 +344,7 @@ server.tool(
     diagram.mermaidCode = lines.join("\n");
     markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
-    storage.save(diagram);
+    dbSaveDiagram(diagram);
 
     return {
       content: [
@@ -439,7 +450,7 @@ server.tool(
       nodes: [],
       edges: [],
     };
-    storage.save(diagram);
+    dbSaveDiagram(diagram);
     return {
       content: [
         {
@@ -479,7 +490,7 @@ server.tool(
     ),
   },
   async ({ id, tableName, columns }) => {
-    const diagram = storage.get(id);
+    const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
         content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
@@ -534,7 +545,7 @@ server.tool(
     diagram.mermaidCode = lines.join("\n");
     markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
-    storage.save(diagram);
+    dbSaveDiagram(diagram);
 
     return {
       content: [
@@ -570,7 +581,7 @@ server.tool(
       .describe("Relationship cardinality"),
   },
   async ({ id, from, to, label, cardinality }) => {
-    const diagram = storage.get(id);
+    const diagram = dbGetDiagram(id);
     if (!diagram) {
       return {
         content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
@@ -598,7 +609,7 @@ server.tool(
     diagram.mermaidCode = code;
     markDiagramFlowStale(diagram);
     diagram.updatedAt = new Date().toISOString();
-    storage.save(diagram);
+    dbSaveDiagram(diagram);
 
     return {
       content: [
@@ -624,7 +635,7 @@ server.tool(
 
 // ─── Tool: list_projects ─────────────────────────────────────────────
 server.tool("list_projects", "List all projects (summary)", {}, async () => {
-  const projects = projectStorage.list();
+  const projects = dbListProjects();
   const summary = projects.map((p) => ({
     id: p.id,
     name: p.name,
@@ -647,7 +658,7 @@ server.tool(
   "Get a project by ID with all columns, epics, tasks, sessions, and diagram links",
   { id: z.string().describe("The project ID") },
   async ({ id }) => {
-    const project = projectStorage.get(id);
+    const project = dbGetProject(id);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${id}` }],
@@ -694,7 +705,7 @@ server.tool(
       sessions: [],
       diagramIds: [],
     };
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -720,7 +731,7 @@ server.tool(
     description: z.string().optional().describe("New description"),
   },
   async ({ id, name, description }) => {
-    const project = projectStorage.get(id);
+    const project = dbGetProject(id);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${id}` }],
@@ -730,7 +741,7 @@ server.tool(
     if (name !== undefined) project.name = name;
     if (description !== undefined) project.description = description;
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -748,7 +759,7 @@ server.tool(
   "Delete a project and all its data",
   { id: z.string().describe("The project ID") },
   async ({ id }) => {
-    const deleted = projectStorage.delete(id);
+    const deleted = dbDeleteProject(id);
     return {
       content: [
         {
@@ -773,7 +784,7 @@ server.tool(
     wipLimit: z.number().optional().describe("Work-in-progress limit"),
   },
   async ({ projectId, name, color, position, wipLimit }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -791,7 +802,7 @@ server.tool(
     project.columns.sort((a, b) => a.position - b.position);
     project.columns.forEach((c, i) => { c.position = i; });
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -815,7 +826,7 @@ server.tool(
     wipLimit: z.number().optional().describe("New WIP limit"),
   },
   async ({ projectId, columnId, name, color, wipLimit }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -833,7 +844,7 @@ server.tool(
     if (color !== undefined) column.color = color;
     if (wipLimit !== undefined) column.wipLimit = wipLimit;
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -854,7 +865,7 @@ server.tool(
     columnIds: z.array(z.string()).describe("Ordered column IDs"),
   },
   async ({ projectId, columnIds }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -876,7 +887,7 @@ server.tool(
     }
     project.columns = reordered;
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -898,7 +909,7 @@ server.tool(
     targetColumnId: z.string().describe("Column to move orphaned tasks to"),
   },
   async ({ projectId, columnId, targetColumnId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -926,7 +937,7 @@ server.tool(
     project.columns.sort((a, b) => a.position - b.position);
     project.columns.forEach((c, i) => { c.position = i; });
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -944,7 +955,7 @@ server.tool(
   "List all epics in a project",
   { projectId: z.string().describe("The project ID") },
   async ({ projectId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -966,7 +977,7 @@ server.tool(
     epicId: z.string().describe("The epic ID"),
   },
   async ({ projectId, epicId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1003,7 +1014,7 @@ server.tool(
     color: z.string().optional().describe("Badge color (hex)"),
   },
   async ({ projectId, name, description, color }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1021,7 +1032,7 @@ server.tool(
     };
     project.epics.push(epic);
     project.updatedAt = now;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1045,7 +1056,7 @@ server.tool(
     color: z.string().optional().describe("New badge color"),
   },
   async ({ projectId, epicId, name, description, color }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1064,7 +1075,7 @@ server.tool(
     if (color !== undefined) epic.color = color;
     epic.updatedAt = new Date().toISOString();
     project.updatedAt = epic.updatedAt;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1086,7 +1097,7 @@ server.tool(
     targetEpicId: z.string().optional().describe("Epic to move tasks to (tasks deleted if omitted)"),
   },
   async ({ projectId, epicId, targetEpicId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1114,7 +1125,7 @@ server.tool(
     }
     project.epics = project.epics.filter((e) => e.id !== epicId);
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1155,7 +1166,7 @@ server.tool(
     metadata: z.record(z.string()).optional().default({}),
   },
   async ({ projectId, epicId, columnId, name, description, priority, assignee, tags, startDate, dueDate, progress, links, metadata }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1196,7 +1207,7 @@ server.tool(
     };
     project.tasks.push(task);
     project.updatedAt = now;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1226,7 +1237,7 @@ server.tool(
     metadata: z.record(z.string()).optional(),
   },
   async ({ projectId, taskId, ...updates }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1251,7 +1262,7 @@ server.tool(
     if (updates.metadata !== undefined) task.metadata = updates.metadata;
     task.updatedAt = new Date().toISOString();
     project.updatedAt = task.updatedAt;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1274,7 +1285,7 @@ server.tool(
     position: z.number().optional().describe("Target position within column"),
   },
   async ({ projectId, taskId, columnId, position }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1304,7 +1315,7 @@ server.tool(
     colTasks.forEach((t, i) => { t.position = i; });
     task.updatedAt = new Date().toISOString();
     project.updatedAt = task.updatedAt;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1325,7 +1336,7 @@ server.tool(
     taskId: z.string().describe("The task ID"),
   },
   async ({ projectId, taskId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1345,7 +1356,7 @@ server.tool(
       session.taskIds = session.taskIds.filter((tid) => tid !== taskId);
     }
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1370,7 +1381,7 @@ server.tool(
     tag: z.string().optional().describe("Filter by tag"),
   },
   async ({ projectId, epicId, columnId, assignee, priority, tag }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1401,7 +1412,7 @@ server.tool(
     type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]).describe("Link type"),
   },
   async ({ projectId, taskId, label, url, type }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1418,7 +1429,7 @@ server.tool(
     task.links.push({ label, url, type });
     task.updatedAt = new Date().toISOString();
     project.updatedAt = task.updatedAt;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1445,7 +1456,7 @@ server.tool(
     taskIds: z.array(z.string()).optional().describe("Task IDs to link to this session"),
   },
   async ({ projectId, title, notes, taskIds }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1464,7 +1475,7 @@ server.tool(
     };
     project.sessions.push(session);
     project.updatedAt = now;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1487,7 +1498,7 @@ server.tool(
     notes: z.string().optional().describe("New notes"),
   },
   async ({ projectId, sessionId, title, notes }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1505,7 +1516,7 @@ server.tool(
     if (notes !== undefined) session.notes = notes;
     session.updatedAt = new Date().toISOString();
     project.updatedAt = session.updatedAt;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1526,7 +1537,7 @@ server.tool(
     sessionId: z.string().describe("The session ID"),
   },
   async ({ projectId, sessionId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1542,7 +1553,7 @@ server.tool(
       };
     }
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1564,7 +1575,7 @@ server.tool(
     taskId: z.string().describe("The task ID to link"),
   },
   async ({ projectId, sessionId, taskId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1588,7 +1599,7 @@ server.tool(
       session.taskIds.push(taskId);
       session.updatedAt = new Date().toISOString();
       project.updatedAt = session.updatedAt;
-      projectStorage.save(project);
+      dbSaveProject(project);
     }
     return {
       content: [
@@ -1611,7 +1622,7 @@ server.tool(
     taskId: z.string().describe("The task ID to unlink"),
   },
   async ({ projectId, sessionId, taskId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1628,7 +1639,7 @@ server.tool(
     session.taskIds = session.taskIds.filter((tid) => tid !== taskId);
     session.updatedAt = new Date().toISOString();
     project.updatedAt = session.updatedAt;
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1653,7 +1664,7 @@ server.tool(
     diagramId: z.string().describe("The diagram ID to link"),
   },
   async ({ projectId, diagramId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1661,7 +1672,7 @@ server.tool(
       };
     }
     // Verify diagram exists
-    const diagram = storage.get(diagramId);
+    const diagram = dbGetDiagram(diagramId);
     if (!diagram) {
       return {
         content: [{ type: "text" as const, text: `Diagram not found: ${diagramId}` }],
@@ -1671,7 +1682,7 @@ server.tool(
     if (!project.diagramIds.includes(diagramId)) {
       project.diagramIds.push(diagramId);
       project.updatedAt = new Date().toISOString();
-      projectStorage.save(project);
+      dbSaveProject(project);
     }
     return {
       content: [
@@ -1693,7 +1704,7 @@ server.tool(
     diagramId: z.string().describe("The diagram ID to unlink"),
   },
   async ({ projectId, diagramId }) => {
-    const project = projectStorage.get(projectId);
+    const project = dbGetProject(projectId);
     if (!project) {
       return {
         content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
@@ -1702,7 +1713,7 @@ server.tool(
     }
     project.diagramIds = project.diagramIds.filter((id) => id !== diagramId);
     project.updatedAt = new Date().toISOString();
-    projectStorage.save(project);
+    dbSaveProject(project);
     return {
       content: [
         {
@@ -1720,7 +1731,7 @@ server.tool(
 
 // ─── Resources: diagram listing ──────────────────────────────────────
 server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
-  const diagrams = storage.list();
+  const diagrams = dbListDiagrams();
   return {
     contents: [
       {
@@ -1742,7 +1753,7 @@ server.resource("diagrams", "archdiagram://diagrams", async (uri) => {
 
 // ─── Resources: project listing ──────────────────────────────────────
 server.resource("projects", "archdiagram://projects", async (uri) => {
-  const projects = projectStorage.list();
+  const projects = dbListProjects();
   return {
     contents: [
       {

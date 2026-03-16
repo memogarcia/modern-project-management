@@ -1,21 +1,7 @@
 import { NextResponse } from "next/server";
-import fs from "node:fs";
-import path from "node:path";
-import type { Diagram } from "@/lib/types";
-import { ensureDiagramsDir } from "@/lib/diagramsDir.server";
-import { CorruptJsonFileError, readJsonFile } from "@/lib/jsonFiles.server";
+import { getDiagramById, deleteDiagram } from "@/lib/db.server";
 
-const SAFE_DIAGRAM_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
-
-function isSafeDiagramId(id: string): boolean {
-  return SAFE_DIAGRAM_ID_RE.test(id);
-}
-
-function filePath(id: string) {
-  if (!isSafeDiagramId(id)) return null;
-  const dir = ensureDiagramsDir();
-  return path.join(dir, `${id}.json`);
-}
+const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** GET /api/diagrams/:id — get a single diagram */
 export async function GET(
@@ -23,22 +9,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const fp = filePath(id);
-  if (!fp) {
+  if (!SAFE_ID_RE.test(id)) {
     return NextResponse.json({ error: "Invalid diagram id" }, { status: 400 });
   }
-  if (!fs.existsSync(fp)) {
+  const diagram = getDiagramById(id);
+  if (!diagram) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  try {
-    const diagram = readJsonFile<Diagram>(fp);
-    return NextResponse.json(diagram);
-  } catch (error) {
-    if (error instanceof CorruptJsonFileError) {
-      return NextResponse.json({ error: "Corrupt diagram file" }, { status: 500 });
-    }
-    throw error;
-  }
+  return NextResponse.json(diagram);
 }
 
 /** DELETE /api/diagrams/:id — delete a diagram */
@@ -47,12 +25,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const fp = filePath(id);
-  if (!fp) {
+  if (!SAFE_ID_RE.test(id)) {
     return NextResponse.json({ error: "Invalid diagram id" }, { status: 400 });
   }
-  if (fs.existsSync(fp)) {
-    fs.unlinkSync(fp);
-  }
+  deleteDiagram(id);
   return NextResponse.json({ ok: true });
 }

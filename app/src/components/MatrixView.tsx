@@ -3,6 +3,9 @@
 import { useMemo } from "react";
 import type { KanbanProject, KanbanTask, MatrixQuadrant } from "@/lib/projectTypes";
 import { deriveQuadrant, QUADRANT_CONFIG, PRIORITY_CONFIG } from "@/lib/projectTypes";
+import { Badge } from "./ui/badge";
+import { EmptyState } from "./ui/empty-state";
+import { cn } from "@/lib/utils";
 
 interface MatrixViewProps {
   project: KanbanProject;
@@ -49,10 +52,7 @@ export default function MatrixView({ project, onUpdateTask, onSelectTask }: Matr
   const quadrants: MatrixQuadrant[] = ["do-first", "schedule", "delegate", "drop"];
 
   return (
-    <div style={{
-      flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr",
-      gap: 12, overflow: "hidden",
-    }}>
+    <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 overflow-hidden">
       {quadrants.map((q) => {
         const cfg = QUADRANT_CONFIG[q];
         const tasks = tasksByQuadrant[q];
@@ -60,11 +60,8 @@ export default function MatrixView({ project, onUpdateTask, onSelectTask }: Matr
         return (
           <div
             key={q}
-            style={{
-              background: "var(--panel-bg)", border: `1.5px solid var(--border)`,
-              borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden",
-              transition: "border-color 0.15s",
-            }}
+            className="flex flex-col overflow-hidden rounded-xl border-[1.5px] border-[var(--border)] bg-[var(--panel-bg)] transition-[border-color] duration-150"
+            style={{ background: `linear-gradient(135deg, ${cfg.color}06, transparent)` }}
             onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = cfg.color; }}
             onDragLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
             onDrop={(e) => {
@@ -75,25 +72,17 @@ export default function MatrixView({ project, onUpdateTask, onSelectTask }: Matr
             }}
           >
             {/* Quadrant header */}
-            <div style={{
-              padding: "10px 14px", borderBottom: "1px solid var(--border)", flexShrink: 0,
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 16 }}>{cfg.icon}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--foreground)" }}>{cfg.label}</span>
-                <span style={{
-                  fontSize: 11, fontWeight: 600, background: `${cfg.color}18`, color: cfg.color,
-                  borderRadius: 20, padding: "1px 8px",
-                }}>
-                  {tasks.length}
-                </span>
+            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border)] shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-base">{cfg.icon}</span>
+                <span className="text-sm font-bold text-[var(--foreground)]">{cfg.label}</span>
+                <Badge color={cfg.color} size="sm">{tasks.length}</Badge>
               </div>
-              <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{cfg.tag}</span>
+              <span className="text-[11px] text-[var(--text-muted)]">{cfg.tag}</span>
             </div>
 
             {/* Task list */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-2.5">
               {tasks.map((task) => {
                 const epic = getEpic(task.epicId);
                 const priorityCfg = PRIORITY_CONFIG[task.priority];
@@ -104,58 +93,34 @@ export default function MatrixView({ project, onUpdateTask, onSelectTask }: Matr
                     draggable
                     onDragStart={(e) => { e.dataTransfer.setData("text/plain", task.id); }}
                     onClick={() => onSelectTask?.(task.id)}
-                    style={{
-                      background: "var(--surface)", border: "1px solid var(--border)",
-                      borderRadius: 8, padding: "8px 10px", cursor: "pointer",
-                      borderLeft: `3px solid ${cfg.color}`,
-                      transition: "box-shadow 0.12s",
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; }}
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5 cursor-pointer shadow-sm transition-shadow duration-150 hover:shadow-md"
+                    style={{ borderLeft: `3px solid ${cfg.color}` }}
                   >
                     {epic && (
-                      <div style={{
-                        fontSize: 10, fontWeight: 600, color: epic.color ?? "var(--text-muted)",
-                        marginBottom: 3, display: "flex", alignItems: "center", gap: 4,
-                      }}>
-                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: epic.color ?? "var(--text-muted)" }} />
+                      <div className="flex items-center gap-1 mb-1 text-[11px] font-semibold" style={{ color: epic.color ?? "var(--text-muted)" }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: epic.color ?? "var(--text-muted)" }} />
                         {epic.name}
                       </div>
                     )}
-                    <div style={{ fontSize: 13, color: "var(--foreground)", lineHeight: 1.4, wordBreak: "break-word" }}>
+                    <div className="text-[13px] text-[var(--foreground)] leading-[1.4] break-words">
                       {task.name}
                     </div>
-                    <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                      <span style={{
-                        fontSize: 9, padding: "1px 5px", borderRadius: 3,
-                        background: `${priorityCfg.color}15`, color: priorityCfg.color, fontWeight: 600,
-                      }}>
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      <Badge color={priorityCfg.color} size="sm">
                         {priorityCfg.icon} {priorityCfg.label}
-                      </span>
+                      </Badge>
                       {task.assignee && (
-                        <span style={{
-                          fontSize: 9, padding: "1px 5px", borderRadius: 3,
-                          background: "var(--surface-hover)", color: "var(--text-muted)",
-                        }}>
-                          👤 {task.assignee}
-                        </span>
+                        <Badge size="sm">👤 {task.assignee}</Badge>
                       )}
                       {task.dueDate && (
-                        <span style={{
-                          fontSize: 9, padding: "1px 5px", borderRadius: 3,
-                          background: "var(--surface-hover)", color: "var(--text-muted)",
-                        }}>
-                          📅 {task.dueDate}
-                        </span>
+                        <Badge size="sm">📅 {task.dueDate}</Badge>
                       )}
                     </div>
                   </div>
                 );
               })}
               {tasks.length === 0 && (
-                <div style={{ textAlign: "center", padding: "20px 8px", color: "var(--text-subtle)", fontSize: 12, fontStyle: "italic" }}>
-                  No tasks
-                </div>
+                <EmptyState title="No tasks" compact />
               )}
             </div>
           </div>

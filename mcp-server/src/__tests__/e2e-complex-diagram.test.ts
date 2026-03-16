@@ -48,7 +48,7 @@ async function runTest() {
   const transport = new StdioClientTransport({
     command: "npx",
     args: ["tsx", serverEntrypoint],
-    env: { ...process.env, DIAGRAMS_DIR: tmpDir },
+    env: { ...process.env, PLANVIEW_DB: path.join(tmpDir, "test.db") },
   });
 
   const client = new Client({ name: "e2e-test-client", version: "1.0.0" });

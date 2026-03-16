@@ -1,26 +1,22 @@
 "use client";
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useProjectStore } from "@/store/projectStore";
 import KanbanBoardView from "@/components/KanbanBoardView";
 import GanttChartView from "@/components/GanttChartView";
 import KanbanCalendarView from "@/components/KanbanCalendarView";
 import MatrixView from "@/components/MatrixView";
 import SessionsView from "@/components/SessionsView";
-import ProjectOverview from "@/components/ProjectOverview";
+import ProjectDiagramsView from "@/components/ProjectDiagramsView";
+import McpConfigView from "@/components/McpConfigView";
 import type { KanbanViewMode } from "@/lib/projectTypes";
-import { LayoutDashboard, KanbanSquare, BarChart3, Calendar, Grid3X3, Timer, AlertCircle, Layers } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import TaskDetailModal from "@/components/TaskDetailModal";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-const VIEW_TABS: { key: KanbanViewMode; label: string; icon: typeof KanbanSquare }[] = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard },
-  { key: "kanban", label: "Kanban", icon: KanbanSquare },
-  { key: "gantt", label: "Gantt", icon: BarChart3 },
-  { key: "calendar", label: "Calendar", icon: Calendar },
-  { key: "matrix", label: "Matrix", icon: Grid3X3 },
-  { key: "sessions", label: "Sessions", icon: Timer },
-];
+type ExtendedViewMode = KanbanViewMode | "mcp";
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -31,7 +27,6 @@ export default function ProjectDetailPage() {
   const project = useProjectStore((s) => s.project);
   const loadError = useProjectStore((s) => s.loadError);
   const isLoading = useProjectStore((s) => s.isLoading);
-  const persistError = useProjectStore((s) => s.persistError);
   const activeView = useProjectStore((s) => s.activeView);
   const selectedTaskId = useProjectStore((s) => s.selectedTaskId);
   const loadProject = useProjectStore((s) => s.loadProject);
@@ -41,51 +36,50 @@ export default function ProjectDetailPage() {
   const updateTask = useProjectStore((s) => s.updateTask);
   const moveTask = useProjectStore((s) => s.moveTask);
   const removeTask = useProjectStore((s) => s.removeTask);
-  const updateMeta = useProjectStore((s) => s.updateMeta);
 
-  const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState("");
+  // Read the ?view= parameter
+  const viewParam = searchParams.get("view") as ExtendedViewMode | null;
+  const currentView: ExtendedViewMode = viewParam && ["kanban", "gantt", "calendar", "matrix", "sessions", "diagrams", "mcp"].includes(viewParam)
+    ? viewParam
+    : activeView;
 
   useEffect(() => {
     void loadProject(id);
   }, [id, loadProject]);
 
-  // Deep link: ?view=gantt|calendar|matrix|kanban|sessions
+  // Sync the store's activeView with URL
   useEffect(() => {
-    const viewParam = searchParams.get("view");
-    if (viewParam && ["overview", "kanban", "gantt", "calendar", "matrix", "sessions"].includes(viewParam)) {
+    if (viewParam && viewParam !== "mcp" && ["kanban", "gantt", "calendar", "matrix", "sessions", "diagrams"].includes(viewParam)) {
       setActiveView(viewParam as KanbanViewMode);
     }
-  }, [searchParams, setActiveView]);
+  }, [viewParam, setActiveView]);
 
   if (isLoading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, background: "var(--background)", color: "var(--text-muted)" }}>
-        Loading project…
+      <div className="flex flex-1 items-center justify-center bg-[var(--background)] text-[var(--text-muted)]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-[3px] border-[var(--accent)] border-r-transparent" />
+          <span className="text-sm">Loading…</span>
+        </div>
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, background: "var(--background)", color: "var(--text-muted)", gap: 16 }}>
-        <AlertCircle size={48} style={{ opacity: 0.4 }} />
-        <div>{loadError ?? "Project not found"}</div>
-        <button
-          onClick={() => router.push("/projects")}
-          style={{ padding: "8px 16px", background: "var(--accent)", color: "var(--accent-foreground)", border: "none", borderRadius: 6, cursor: "pointer" }}
-        >
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-[var(--background)] text-[var(--text-muted)]">
+        <AlertCircle className="h-10 w-10 opacity-40" />
+        <div className="text-sm">{loadError ?? "Project not found"}</div>
+        <Button size="sm" onClick={() => router.push("/projects")}>
           ← Back to projects
-        </button>
+        </Button>
       </div>
     );
   }
 
   const handleAddTaskFromBoard = (columnId: string, name: string) => {
-    // Use the first epic, or create a default one
     const epicId = project.epics[0]?.id;
     if (!epicId) {
-      // Auto-create a "General" epic
       const store = useProjectStore.getState();
       const newEpicId = store.addEpic("General", "Default epic", "#6b7280");
       addTask({ epicId: newEpicId, columnId, name });
@@ -95,98 +89,13 @@ export default function ProjectDetailPage() {
   };
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "var(--background)", color: "var(--foreground)", overflow: "hidden" }}>
-      {/* Top bar */}
-      <div style={{
-        padding: "10px 20px", borderBottom: "1px solid var(--border)", background: "var(--panel-bg)",
-        display: "flex", alignItems: "center", gap: 12, flexShrink: 0,
-      }}>
-        <button
-          onClick={() => router.push("/projects")}
-          style={{ padding: "6px 10px", background: "transparent", color: "var(--text-muted)", border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
-        >
-          Projects
-        </button>
-        <span style={{ color: "var(--border)", fontSize: 16 }}>/</span>
-
-        {editingName ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-            <input
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { updateMeta(nameInput); setEditingName(false); }
-                if (e.key === "Escape") setEditingName(false);
-              }}
-              style={{
-                padding: "4px 10px", background: "var(--surface)", border: "1px solid var(--border)",
-                borderRadius: 6, color: "var(--foreground)", fontSize: 14, fontWeight: 700,
-                outline: "none", width: 240,
-              }}
-            />
-            <button
-              onClick={() => { updateMeta(nameInput); setEditingName(false); }}
-              style={{ padding: "4px 12px", background: "var(--accent)", color: "var(--accent-foreground)", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer" }}
-            >
-              Save
-            </button>
-          </div>
-        ) : (
-          <div
-            style={{ flex: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
-            onClick={() => { setNameInput(project.name); setEditingName(true); }}
-            title="Click to rename"
-          >
-            <Layers size={16} style={{ color: "var(--accent)" }} />
-            <span style={{ fontSize: 15, fontWeight: 700 }}>{project.name}</span>
-          </div>
-        )}
-
-        {persistError && (
-          <span style={{ fontSize: 11, color: "#ef4444", padding: "3px 8px", background: "#ef444418", borderRadius: 6 }}>
-            Save failed
-          </span>
-        )}
-
-        {/* View tabs */}
-        <div style={{ display: "flex", gap: 2, background: "var(--surface)", borderRadius: 8, padding: 2 }}>
-          {VIEW_TABS.map(({ key, label, icon: Icon }) => {
-            const isActive = activeView === key;
-            return (
-              <button
-                key={key}
-                onClick={() => { setActiveView(key); router.push(`/projects/${id}?view=${key}`, { scroll: false }); }}
-                style={{
-                  padding: "5px 12px", background: isActive ? "var(--panel-bg)" : "transparent",
-                  border: "none", borderRadius: 6, color: isActive ? "var(--foreground)" : "var(--text-muted)",
-                  fontSize: 12, fontWeight: isActive ? 600 : 500, cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 5,
-                  boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.1)" : undefined,
-                  transition: "all 0.15s",
-                }}
-              >
-                <Icon size={13} />
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        <span style={{ fontSize: 12, color: "var(--text-muted)", padding: "3px 10px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 20 }}>
-          {project.tasks.length} {project.tasks.length === 1 ? "task" : "tasks"}
-        </span>
-      </div>
-
-      {/* Active view */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: activeView === "matrix" ? 16 : activeView === "overview" ? 0 : 20 }}>
-        {activeView === "overview" && (
-          <ProjectOverview
-            project={project}
-            onNavigate={(view) => { setActiveView(view); router.push(`/projects/${id}?view=${view}`, { scroll: false }); }}
-          />
-        )}
-        {activeView === "kanban" && (
+    <div className="flex h-full flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+      {/* Full-bleed view area — no top header, sidebar handles navigation */}
+      <div className={cn(
+        "flex flex-1 flex-col overflow-hidden",
+        currentView === "matrix" ? "p-3" : currentView === "mcp" ? "p-0" : "p-4"
+      )}>
+        {currentView === "kanban" && (
           <KanbanBoardView
             project={project}
             onAddTask={handleAddTaskFromBoard}
@@ -197,17 +106,23 @@ export default function ProjectDetailPage() {
             selectedTaskId={selectedTaskId}
           />
         )}
-        {activeView === "gantt" && <GanttChartView project={project} onSelectTask={selectTask} />}
-        {activeView === "calendar" && <KanbanCalendarView project={project} onSelectTask={selectTask} />}
-        {activeView === "matrix" && (
+        {currentView === "gantt" && <GanttChartView project={project} onSelectTask={selectTask} />}
+        {currentView === "calendar" && <KanbanCalendarView project={project} onSelectTask={selectTask} />}
+        {currentView === "matrix" && (
           <MatrixView
             project={project}
             onUpdateTask={(taskId, updates) => updateTask(taskId, updates)}
             onSelectTask={selectTask}
           />
         )}
-        {activeView === "sessions" && (
+        {currentView === "sessions" && (
           <SessionsView project={project} onSelectTask={selectTask} />
+        )}
+        {currentView === "diagrams" && (
+          <ProjectDiagramsView project={project} />
+        )}
+        {currentView === "mcp" && (
+          <McpConfigView project={project} />
         )}
       </div>
 

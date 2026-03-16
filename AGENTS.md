@@ -29,22 +29,22 @@ Default role if unclear: Software Engineer + Troubleshooter.
 - `mcp-server/`
   - TypeScript MCP stdio server using `@modelcontextprotocol/sdk`
   - Tool registrations in `mcp-server/src/index.ts`
-  - File-backed storage in `mcp-server/src/storage.ts`
+  - SQLite-backed storage in `mcp-server/src/db.ts`
   - E2E tests in `mcp-server/src/__tests__`
-- Shared storage directory (runtime/generated)
-  - Default: `mcp-server/diagrams-data/` (gitignored)
-  - Override with `DIAGRAMS_DIR`
+- Shared SQLite database (runtime/generated)
+  - Default: `mcp-server/data/planview.db` (gitignored)
+  - Override with `PLANVIEW_DB`
 
 ## 3. Core Invariants (Do Not Break)
 
 ### 3.1 Shared Storage Contract
 
-The Next.js app and the MCP server must read and write the same JSON files.
+The Next.js app and the MCP server must read and write the same SQLite database.
 
-- App storage resolution: `app/src/lib/diagramsDir.server.ts`
-- MCP storage resolution: `mcp-server/src/storage.ts`
+- App storage: `app/src/lib/db.server.ts`
+- MCP storage: `mcp-server/src/db.ts`
 
-If you change storage path resolution or data layout, update both sides in the same change.
+If you change the database schema or queries, update both sides in the same change.
 
 ### 3.2 Data Model Compatibility
 
@@ -58,12 +58,12 @@ If you add or rename fields, validate:
 - App list/detail pages still load old and new documents
 - MCP tools still create/read/update documents successfully
 
-### 3.3 Safe IDs and File Writes
+### 3.3 Safe IDs and Database Writes
 
-- IDs are intentionally restricted (`[A-Za-z0-9_-]`) before file access
-- Writes are atomic (tmp file + rename) in storage helpers
+- IDs are intentionally restricted (`[A-Za-z0-9_-]`) before database access
+- Writes use SQLite transactions for atomicity
 
-Do not bypass these protections with direct `fs.writeFileSync` on user-controlled paths.
+Do not bypass these protections with direct SQL on user-controlled paths.
 
 ### 3.4 Mermaid <-> Flow Sync
 
@@ -166,12 +166,12 @@ App URL (default): `http://localhost:3000`
 
 Server transport: stdio only.
 
-### 5.4 Shared Data Directory
+### 5.4 Shared SQLite Database
 
-Set `DIAGRAMS_DIR` when you need both processes to use a specific location:
+Set `PLANVIEW_DB` when you need both processes to use a specific database:
 
-- `DIAGRAMS_DIR=/absolute/path npm --prefix app run dev`
-- `DIAGRAMS_DIR=/absolute/path npm --prefix mcp-server run dev`
+- `PLANVIEW_DB=/absolute/path/to/planview.db npm --prefix app run dev`
+- `PLANVIEW_DB=/absolute/path/to/planview.db npm --prefix mcp-server run dev`
 
 ## 6. Change Rules by Area
 

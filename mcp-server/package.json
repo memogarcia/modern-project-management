@@ -11,13 +11,15 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "zod": "^3.25.0",
-    "uuid": "^11.1.0"
+    "better-sqlite3": "^12.8.0",
+    "uuid": "^11.1.0",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
     "@types/uuid": "^10.0.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.3"
   }
 }
