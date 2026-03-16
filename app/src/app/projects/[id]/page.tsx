@@ -8,11 +8,13 @@ import GanttChartView from "@/components/GanttChartView";
 import KanbanCalendarView from "@/components/KanbanCalendarView";
 import MatrixView from "@/components/MatrixView";
 import SessionsView from "@/components/SessionsView";
+import ProjectOverview from "@/components/ProjectOverview";
 import type { KanbanViewMode } from "@/lib/projectTypes";
-import { KanbanSquare, BarChart3, Calendar, Grid3X3, Timer, AlertCircle, Layers } from "lucide-react";
+import { LayoutDashboard, KanbanSquare, BarChart3, Calendar, Grid3X3, Timer, AlertCircle, Layers } from "lucide-react";
 import TaskDetailModal from "@/components/TaskDetailModal";
 
 const VIEW_TABS: { key: KanbanViewMode; label: string; icon: typeof KanbanSquare }[] = [
+  { key: "overview", label: "Overview", icon: LayoutDashboard },
   { key: "kanban", label: "Kanban", icon: KanbanSquare },
   { key: "gantt", label: "Gantt", icon: BarChart3 },
   { key: "calendar", label: "Calendar", icon: Calendar },
@@ -51,7 +53,7 @@ export default function ProjectDetailPage() {
   // Deep link: ?view=gantt|calendar|matrix|kanban|sessions
   useEffect(() => {
     const viewParam = searchParams.get("view");
-    if (viewParam && ["kanban", "gantt", "calendar", "matrix", "sessions"].includes(viewParam)) {
+    if (viewParam && ["overview", "kanban", "gantt", "calendar", "matrix", "sessions"].includes(viewParam)) {
       setActiveView(viewParam as KanbanViewMode);
     }
   }, [searchParams, setActiveView]);
@@ -177,7 +179,13 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Active view */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: activeView === "matrix" ? 16 : 20 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: activeView === "matrix" ? 16 : activeView === "overview" ? 0 : 20 }}>
+        {activeView === "overview" && (
+          <ProjectOverview
+            project={project}
+            onNavigate={(view) => { setActiveView(view); router.push(`/projects/${id}?view=${view}`, { scroll: false }); }}
+          />
+        )}
         {activeView === "kanban" && (
           <KanbanBoardView
             project={project}

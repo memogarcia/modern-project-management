@@ -1,0 +1,24 @@
+{
+  "projects": {
+    "title": "Projects",
+    "meta": "{count} projects · {taskCount} total tasks",
+    "filterPlaceholder": "Filter…",
+    "sortBy": "Sort by",
+    "sortNewest": "Newest first",
+    "sortOldest": "Oldest first",
+    "sortAlpha": "A → Z",
+    "sortUpdated": "Recently updated",
+    "overview": "Overview",
+    "decisions": "Decisions",
+    "tasks": "Tasks",
+    "recentlyActive": "Recently Active",
+    "newProject": "New project",
+    "createProject": "Create project",
+    "projectName": "Project name…",
+    "descriptionOptional": "Description (optional)",
+    "create": "Create",
+    "cancel": "Cancel",
+    "noProjects": "No projects yet",
+    "noProjectsDesc": "Create a project to start managing tasks across Kanban, Gantt, Calendar, Matrix, and Sessions views."
+  }
+}
