@@ -253,11 +253,48 @@ function testUnsupportedMermaidFailsWithoutMutatingExistingGraph() {
   assert(validateMermaidDocument(invalidMermaid).length > 0);
 }
 
+function testDuplicateEdgesPreserveStableIdsAcrossRoundTrip() {
+  const nodes: DiagramNodeRecord[] = [
+    makeArchNode("api", "API", "service"),
+    makeArchNode("worker", "Worker", "service"),
+  ];
+  const edges: DiagramEdgeRecord[] = [
+    {
+      id: "edge-api-worker-http",
+      source: "api",
+      target: "worker",
+      type: "smoothstep",
+      data: {
+        label: "HTTP",
+        metadata: createEmptyEdgeMetadata(NOW),
+      },
+    },
+    {
+      id: "edge-api-worker-async",
+      source: "api",
+      target: "worker",
+      type: "smoothstep",
+      data: {
+        label: "async retry",
+        metadata: createEmptyEdgeMetadata(NOW),
+      },
+    },
+  ];
+
+  const mermaid = flowToMermaid(nodes, edges);
+  const parsed = mermaidToFlow(mermaid, { nodes, edges });
+
+  assert.equal(parsed.edges.length, 2);
+  assert(parsed.edges.some((edge) => edge.id === "edge-api-worker-http"));
+  assert(parsed.edges.some((edge) => edge.id === "edge-api-worker-async"));
+}
+
 try {
   testFlowchartRoundTripIsDeterministic();
   testSubgraphParsingPreservesExistingMetadata();
   testErRoundTripPreservesTableIds();
   testUnsupportedMermaidFailsWithoutMutatingExistingGraph();
+  testDuplicateEdgesPreserveStableIdsAcrossRoundTrip();
   console.log("✅ Mermaid round-trip and failure-safety tests passed");
 } catch (error) {
   console.error("❌ Mermaid round-trip test failed:", error);

@@ -16,20 +16,17 @@ import {
   appendSessionComment as dbAppendSessionComment,
   appendSessionCommand as dbAppendSessionCommand,
   extractKnowledgePattern as dbExtractKnowledgePattern,
+  listArtifacts as dbListArtifacts,
+  getArtifactById as dbGetArtifactById,
   listKnowledgePatterns as dbListKnowledgePatterns,
   searchTroubleshootingMemory as dbSearchTroubleshootingMemory,
   listDiagrams as dbListDiagrams,
   getDiagramById as dbGetDiagram,
   upsertDiagram as dbSaveDiagram,
   deleteDiagram as dbDeleteDiagram,
-  listProjects as dbListProjects,
-  listProjectsMeta as dbListProjectsMeta,
-  getProjectById as dbGetProject,
-  upsertProject as dbSaveProject,
-  deleteProject as dbDeleteProject,
+  saveArtifactFile as dbSaveArtifactFile,
 } from "./db.js";
-import type { Diagram, KanbanProject, KanbanEpic, KanbanTask, KanbanColumn, KanbanTaskLink, ProjectSession } from "./types.js";
-import { DEFAULT_KANBAN_COLUMNS } from "./types.js";
+import type { Diagram } from "./types.js";
 import { mermaidToFlow } from "../../shared/planview/mermaid.js";
 import {
   edgeMetadataSchema,
@@ -168,19 +165,9 @@ server.registerTool("get_diagram", {
 }, async ({ id }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
-      return {
-        content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
-        isError: true,
-      };
+      return toolError("diagram_not_found", `Diagram not found: ${id}`);
     }
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(diagram, null, 2),
-        },
-      ],
-    };
+    return toolSuccess(diagram);
   }
 );
 
@@ -227,25 +214,27 @@ server.registerTool("update_diagram", {
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 }, async ({ id, name, description, mermaidCode }) => {
-    const existing = dbGetDiagram(id);
-    if (!existing) {
-      return {
-        content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
-        isError: true,
-      };
-    }
+    try {
+      const existing = dbGetDiagram(id);
+      if (!existing) {
+        return toolError("diagram_not_found", `Diagram not found: ${id}`);
+      }
 
-    const nextMermaidCode = mermaidCode ?? existing.mermaidCode;
-    const mermaidChanged = mermaidCode !== undefined && mermaidCode !== existing.mermaidCode;
-    const updated: Diagram = {
-      ...existing,
-      name: name ?? existing.name,
-      description: description ?? existing.description,
-      mermaidCode: nextMermaidCode,
-      updatedAt: new Date().toISOString(),
-    };
-    const persisted = mermaidChanged ? dbSaveDiagram(rebuildGraphFromMermaid(updated, nextMermaidCode)) : dbSaveDiagram(updated);
-    return toolSuccess({ id: persisted.id, name: persisted.name, revision: persisted.revision, message: "Diagram updated" });
+      const nextMermaidCode = mermaidCode ?? existing.mermaidCode;
+      const mermaidChanged = mermaidCode !== undefined && mermaidCode !== existing.mermaidCode;
+      const updated: Diagram = {
+        ...existing,
+        name: name ?? existing.name,
+        description: description ?? existing.description,
+        mermaidCode: nextMermaidCode,
+        updatedAt: new Date().toISOString(),
+      };
+      const persisted = mermaidChanged ? dbSaveDiagram(rebuildGraphFromMermaid(updated, nextMermaidCode)) : dbSaveDiagram(updated);
+      return toolSuccess({ id: persisted.id, name: persisted.name, revision: persisted.revision, message: "Diagram updated" });
+    } catch (error) {
+      const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+      return toolError(planViewError.code ?? "diagram_update_failed", planViewError.message ?? "Failed to update diagram", planViewError.details);
+    }
   }
 );
 
@@ -257,17 +246,10 @@ server.registerTool("delete_diagram", {
   annotations: { readOnlyHint: false, destructiveHint: true },
 }, async ({ id }) => {
     const deleted = dbDeleteDiagram(id);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: deleted
-            ? `Diagram ${id} deleted`
-            : `Diagram not found: ${id}`,
-        },
-      ],
-      isError: !deleted,
-    };
+    if (!deleted) {
+      return toolError("diagram_not_found", `Diagram not found: ${id}`);
+    }
+    return toolSuccess({ id, message: "Diagram deleted" });
   }
 );
 
@@ -555,6 +537,96 @@ server.registerTool("search_troubleshooting_memory", {
   annotations: { readOnlyHint: true, destructiveHint: false },
 }, async ({ q, diagramId, nodeId, edgeId, limit }) => {
   return toolSuccess(dbSearchTroubleshootingMemory({ q, diagramId, nodeId, edgeId, limit }));
+});
+
+server.registerTool("list_knowledge_patterns", {
+  title: "List Knowledge Patterns",
+  description: "List extracted troubleshooting patterns",
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async () => {
+  return toolSuccess(dbListKnowledgePatterns());
+});
+
+server.registerTool("list_artifacts", {
+  title: "List Artifacts",
+  description: "List stored evidence artifacts by owner, diagram, or label",
+  inputSchema: {
+    ownerType: z.enum(["node", "edge", "session"]).optional(),
+    ownerId: z.string().optional(),
+    diagramId: z.string().optional(),
+    q: z.string().optional(),
+    limit: z.number().int().positive().max(500).optional(),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ ownerType, ownerId, diagramId, q, limit }) => {
+  return toolSuccess(dbListArtifacts({ ownerType, ownerId, diagramId, q, limit }));
+});
+
+server.registerTool("get_artifact_metadata", {
+  title: "Get Artifact Metadata",
+  description: "Get metadata for a single evidence artifact",
+  inputSchema: {
+    artifactId: z.string().describe("Artifact ID"),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ artifactId }) => {
+  try {
+    const artifact = dbGetArtifactById(artifactId);
+    if (!artifact) {
+      return toolError("artifact_not_found", `Artifact not found: ${artifactId}`);
+    }
+    return toolSuccess({
+      id: artifact.id,
+      artifactId: artifact.artifactId,
+      ownerType: artifact.ownerType,
+      ownerId: artifact.ownerId,
+      diagramId: artifact.diagramId,
+      label: artifact.label,
+      fileName: artifact.fileName,
+      mimeType: artifact.mimeType,
+      sizeBytes: artifact.sizeBytes,
+      checksumSha256: artifact.checksumSha256,
+      createdAt: artifact.createdAt,
+    });
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "artifact_read_failed", planViewError.message ?? "Failed to load artifact metadata", planViewError.details);
+  }
+});
+
+server.registerTool("attach_artifact", {
+  title: "Attach Artifact",
+  description: "Attach a text or binary artifact to a troubleshooting session, node, or edge",
+  inputSchema: {
+    ownerType: z.enum(["node", "edge", "session"]),
+    ownerId: z.string(),
+    diagramId: z.string().optional(),
+    label: z.string().optional(),
+    fileName: z.string().min(1),
+    mimeType: z.string().optional(),
+    contentBase64: z.string().min(1).describe("Base64-encoded artifact bytes"),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ ownerType, ownerId, diagramId, label, fileName, mimeType, contentBase64 }) => {
+  try {
+    const bytes = Buffer.from(contentBase64, "base64");
+    if (bytes.byteLength === 0) {
+      return toolError("artifact_empty", "Artifact content must not be empty.");
+    }
+    const artifact = await dbSaveArtifactFile({
+      ownerType,
+      ownerId,
+      diagramId,
+      label,
+      fileName,
+      mimeType: mimeType ?? "application/octet-stream",
+      bytes,
+    });
+    return toolSuccess(artifact);
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "artifact_attach_failed", planViewError.message ?? "Failed to attach artifact", planViewError.details);
+  }
 });
 
 // ─── Tool: add_node ──────────────────────────────────────────────────
@@ -960,1132 +1032,6 @@ server.registerTool("add_relationship_to_diagram", {
 );
 
 // ═══════════════════════════════════════════════════════════════════════
-// PROJECT TOOLS (Unified Task Management)
-// ═══════════════════════════════════════════════════════════════════════
-
-// ─── Tool: list_projects ─────────────────────────────────────────────
-server.registerTool("list_projects", {
-  title: "List Projects",
-  description: "List all projects (summary)",
-  annotations: { readOnlyHint: true, destructiveHint: false },
-}, async () => {
-  const projects = dbListProjects();
-  const summary = projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    epicCount: p.epics.length,
-    taskCount: p.tasks.length,
-    columnCount: p.columns.length,
-    sessionCount: p.sessions.length,
-    diagramCount: p.diagramIds.length,
-    updatedAt: p.updatedAt,
-  }));
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
-  };
-});
-
-// ─── Tool: get_project ───────────────────────────────────────────────
-server.registerTool("get_project", {
-  title: "Get Project",
-  description: "Get a project by ID with all columns, epics, tasks, sessions, and diagram links",
-  inputSchema: { id: z.string().describe("The project ID") },
-  annotations: { readOnlyHint: true, destructiveHint: false },
-}, async ({ id }) => {
-    const project = dbGetProject(id);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${id}` }],
-        isError: true,
-      };
-    }
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(project, null, 2) }],
-    };
-  }
-);
-
-// ─── Tool: create_project ────────────────────────────────────────────
-server.registerTool("create_project", {
-  title: "Create Project",
-  description: "Create a new project with optional custom columns (defaults to Backlog/To Do/In Progress/Review/Done)",
-  inputSchema: {
-    name: z.string().describe("Project name"),
-    description: z.string().optional().describe("Project description"),
-    columns: z
-      .array(
-        z.object({
-          id: z.string(),
-          name: z.string(),
-          color: z.string(),
-          position: z.number(),
-          wipLimit: z.number().optional(),
-        })
-      )
-      .optional()
-      .describe("Custom columns (defaults to 5 standard columns)"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ name, description, columns }) => {
-    const now = new Date().toISOString();
-    const project: KanbanProject = {
-      id: uuidv4(),
-      name,
-      description: description ?? "",
-      createdAt: now,
-      updatedAt: now,
-      columns: columns ?? [...DEFAULT_KANBAN_COLUMNS],
-      epics: [],
-      tasks: [],
-      sessions: [],
-      diagramIds: [],
-    };
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            { id: project.id, name: project.name, columnCount: project.columns.length, message: "Project created" },
-            null,
-            2
-          ),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: update_project ────────────────────────────────────────────
-server.registerTool("update_project", {
-  title: "Update Project",
-  description: "Update project metadata (name, description)",
-  inputSchema: {
-    id: z.string().describe("The project ID"),
-    name: z.string().optional().describe("New name"),
-    description: z.string().optional().describe("New description"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-}, async ({ id, name, description }) => {
-    const project = dbGetProject(id);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${id}` }],
-        isError: true,
-      };
-    }
-    if (name !== undefined) project.name = name;
-    if (description !== undefined) project.description = description;
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ id: project.id, name: project.name, message: "Project updated" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: delete_project ────────────────────────────────────────────
-server.registerTool("delete_project", {
-  title: "Delete Project",
-  description: "Delete a project and all its data",
-  inputSchema: { id: z.string().describe("The project ID") },
-  annotations: { readOnlyHint: false, destructiveHint: true },
-}, async ({ id }) => {
-    const deleted = dbDeleteProject(id);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: deleted ? `Project ${id} deleted` : `Project not found: ${id}`,
-        },
-      ],
-      isError: !deleted,
-    };
-  }
-);
-
-// ─── Tool: add_kanban_column ─────────────────────────────────────────
-server.registerTool("add_kanban_column", {
-  title: "Add Kanban Column",
-  description: "Add a column to a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    name: z.string().describe("Column name"),
-    color: z.string().describe("Column color (hex)"),
-    position: z.number().optional().describe("Position (appends to end if omitted)"),
-    wipLimit: z.number().optional().describe("Work-in-progress limit"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, name, color, position, wipLimit }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const column: KanbanColumn = {
-      id: uuidv4(),
-      name,
-      color,
-      position: position ?? project.columns.length,
-      wipLimit,
-    };
-    project.columns.push(column);
-    project.columns.sort((a, b) => a.position - b.position);
-    project.columns.forEach((c, i) => { c.position = i; });
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ columnId: column.id, name: column.name, message: "Column added" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: update_kanban_column ──────────────────────────────────────
-server.registerTool("update_kanban_column", {
-  title: "Update Kanban Column",
-  description: "Update a column (name, color, wipLimit)",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    columnId: z.string().describe("The column ID"),
-    name: z.string().optional().describe("New name"),
-    color: z.string().optional().describe("New color (hex)"),
-    wipLimit: z.number().optional().describe("New WIP limit"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-}, async ({ projectId, columnId, name, color, wipLimit }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const column = project.columns.find((c) => c.id === columnId);
-    if (!column) {
-      return {
-        content: [{ type: "text" as const, text: `Column not found: ${columnId}` }],
-        isError: true,
-      };
-    }
-    if (name !== undefined) column.name = name;
-    if (color !== undefined) column.color = color;
-    if (wipLimit !== undefined) column.wipLimit = wipLimit;
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ columnId: column.id, name: column.name, message: "Column updated" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: reorder_kanban_columns ────────────────────────────────────
-server.registerTool("reorder_kanban_columns", {
-  title: "Reorder Kanban Columns",
-  description: "Reorder all columns in a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    columnIds: z.array(z.string()).describe("Ordered column IDs"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-}, async ({ projectId, columnIds }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const columnMap = new Map(project.columns.map((c) => [c.id, c]));
-    const reordered: KanbanColumn[] = [];
-    for (let i = 0; i < columnIds.length; i++) {
-      const col = columnMap.get(columnIds[i]);
-      if (!col) {
-        return {
-          content: [{ type: "text" as const, text: `Column not found: ${columnIds[i]}` }],
-          isError: true,
-        };
-      }
-      col.position = i;
-      reordered.push(col);
-    }
-    project.columns = reordered;
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: "Columns reordered", order: columnIds }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: delete_kanban_column ──────────────────────────────────────
-server.registerTool("delete_kanban_column", {
-  title: "Delete Kanban Column",
-  description: "Delete a column and move orphaned tasks to a target column",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    columnId: z.string().describe("The column to delete"),
-    targetColumnId: z.string().describe("Column to move orphaned tasks to"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: true },
-}, async ({ projectId, columnId, targetColumnId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    if (!project.columns.some((c) => c.id === targetColumnId)) {
-      return {
-        content: [{ type: "text" as const, text: `Target column not found: ${targetColumnId}` }],
-        isError: true,
-      };
-    }
-    if (columnId === targetColumnId) {
-      return {
-        content: [{ type: "text" as const, text: "Cannot delete column into itself" }],
-        isError: true,
-      };
-    }
-    for (const task of project.tasks) {
-      if (task.columnId === columnId) {
-        task.columnId = targetColumnId;
-      }
-    }
-    project.columns = project.columns.filter((c) => c.id !== columnId);
-    project.columns.sort((a, b) => a.position - b.position);
-    project.columns.forEach((c, i) => { c.position = i; });
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Column ${columnId} deleted, tasks moved to ${targetColumnId}` }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: list_kanban_epics ─────────────────────────────────────────
-server.registerTool("list_kanban_epics", {
-  title: "List Kanban Epics",
-  description: "List all epics in a project",
-  inputSchema: { projectId: z.string().describe("The project ID") },
-  annotations: { readOnlyHint: true, destructiveHint: false },
-}, async ({ projectId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(project.epics, null, 2) }],
-    };
-  }
-);
-
-// ─── Tool: get_kanban_epic ───────────────────────────────────────────
-server.registerTool("get_kanban_epic", {
-  title: "Get Kanban Epic",
-  description: "Get an epic and its tasks",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    epicId: z.string().describe("The epic ID"),
-  },
-  annotations: { readOnlyHint: true, destructiveHint: false },
-}, async ({ projectId, epicId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const epic = project.epics.find((e) => e.id === epicId);
-    if (!epic) {
-      return {
-        content: [{ type: "text" as const, text: `Epic not found: ${epicId}` }],
-        isError: true,
-      };
-    }
-    const tasks = project.tasks.filter((t) => t.epicId === epicId);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ ...epic, tasks }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: create_kanban_epic ────────────────────────────────────────
-server.registerTool("create_kanban_epic", {
-  title: "Create Kanban Epic",
-  description: "Create an epic in a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    name: z.string().describe("Epic name"),
-    description: z.string().optional().describe("Epic description"),
-    color: z.string().optional().describe("Badge color (hex)"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, name, description, color }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const now = new Date().toISOString();
-    const epic: KanbanEpic = {
-      id: uuidv4(),
-      name,
-      description,
-      color,
-      createdAt: now,
-      updatedAt: now,
-    };
-    project.epics.push(epic);
-    project.updatedAt = now;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ epicId: epic.id, name: epic.name, message: "Epic created" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: update_kanban_epic ────────────────────────────────────────
-server.registerTool("update_kanban_epic", {
-  title: "Update Kanban Epic",
-  description: "Update an epic in a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    epicId: z.string().describe("The epic ID"),
-    name: z.string().optional().describe("New name"),
-    description: z.string().optional().describe("New description"),
-    color: z.string().optional().describe("New badge color"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-}, async ({ projectId, epicId, name, description, color }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const epic = project.epics.find((e) => e.id === epicId);
-    if (!epic) {
-      return {
-        content: [{ type: "text" as const, text: `Epic not found: ${epicId}` }],
-        isError: true,
-      };
-    }
-    if (name !== undefined) epic.name = name;
-    if (description !== undefined) epic.description = description;
-    if (color !== undefined) epic.color = color;
-    epic.updatedAt = new Date().toISOString();
-    project.updatedAt = epic.updatedAt;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ epicId: epic.id, name: epic.name, message: "Epic updated" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: delete_kanban_epic ────────────────────────────────────────
-server.registerTool("delete_kanban_epic", {
-  title: "Delete Kanban Epic",
-  description: "Delete an epic. Optionally move its tasks to another epic, otherwise tasks are deleted.",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    epicId: z.string().describe("The epic to delete"),
-    targetEpicId: z.string().optional().describe("Epic to move tasks to (tasks deleted if omitted)"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: true },
-}, async ({ projectId, epicId, targetEpicId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    if (!project.epics.some((e) => e.id === epicId)) {
-      return {
-        content: [{ type: "text" as const, text: `Epic not found: ${epicId}` }],
-        isError: true,
-      };
-    }
-    if (targetEpicId) {
-      if (!project.epics.some((e) => e.id === targetEpicId)) {
-        return {
-          content: [{ type: "text" as const, text: `Target epic not found: ${targetEpicId}` }],
-          isError: true,
-        };
-      }
-      for (const task of project.tasks) {
-        if (task.epicId === epicId) task.epicId = targetEpicId;
-      }
-    } else {
-      project.tasks = project.tasks.filter((t) => t.epicId !== epicId);
-    }
-    project.epics = project.epics.filter((e) => e.id !== epicId);
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Epic ${epicId} deleted${targetEpicId ? ", tasks moved" : ", tasks removed"}` }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: create_kanban_task ────────────────────────────────────────
-server.registerTool("create_kanban_task", {
-  title: "Create Kanban Task",
-  description: "Create a task in a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    epicId: z.string().describe("The epic ID this task belongs to"),
-    columnId: z.string().describe("The column ID for Kanban placement"),
-    name: z.string().describe("Task name"),
-    description: z.string().optional(),
-    priority: z.enum(["low", "medium", "high", "critical"]).optional().default("medium"),
-    assignee: z.string().optional(),
-    tags: z.array(z.string()).optional().default([]),
-    startDate: z.string().optional().describe("Start date (YYYY-MM-DD)"),
-    dueDate: z.string().optional().describe("Due date (YYYY-MM-DD)"),
-    progress: z.number().min(0).max(100).optional().default(0),
-    links: z
-      .array(
-        z.object({
-          label: z.string(),
-          url: z.string().url(),
-          type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]),
-        })
-      )
-      .optional()
-      .default([]),
-    metadata: z.record(z.string()).optional().default({}),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, epicId, columnId, name, description, priority, assignee, tags, startDate, dueDate, progress, links, metadata }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    if (!project.epics.some((e) => e.id === epicId)) {
-      return {
-        content: [{ type: "text" as const, text: `Epic not found: ${epicId}` }],
-        isError: true,
-      };
-    }
-    if (!project.columns.some((c) => c.id === columnId)) {
-      return {
-        content: [{ type: "text" as const, text: `Column not found: ${columnId}` }],
-        isError: true,
-      };
-    }
-    const now = new Date().toISOString();
-    const tasksInColumn = project.tasks.filter((t) => t.columnId === columnId);
-    const task: KanbanTask = {
-      id: uuidv4(),
-      epicId,
-      columnId,
-      name,
-      description,
-      priority,
-      assignee,
-      tags,
-      startDate,
-      dueDate,
-      progress,
-      position: tasksInColumn.length,
-      links,
-      metadata,
-      createdAt: now,
-      updatedAt: now,
-    };
-    project.tasks.push(task);
-    project.updatedAt = now;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ taskId: task.id, name: task.name, message: "Task created" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: update_kanban_task ────────────────────────────────────────
-server.registerTool("update_kanban_task", {
-  title: "Update Kanban Task",
-  description: "Update any fields of a task",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    taskId: z.string().describe("The task ID"),
-    name: z.string().optional(),
-    description: z.string().optional(),
-    priority: z.enum(["low", "medium", "high", "critical"]).optional(),
-    assignee: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-    startDate: z.string().optional(),
-    dueDate: z.string().optional(),
-    progress: z.number().min(0).max(100).optional(),
-    metadata: z.record(z.string()).optional(),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-}, async ({ projectId, taskId, ...updates }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const task = project.tasks.find((t) => t.id === taskId);
-    if (!task) {
-      return {
-        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
-        isError: true,
-      };
-    }
-    if (updates.name !== undefined) task.name = updates.name;
-    if (updates.description !== undefined) task.description = updates.description;
-    if (updates.priority !== undefined) task.priority = updates.priority;
-    if (updates.assignee !== undefined) task.assignee = updates.assignee;
-    if (updates.tags !== undefined) task.tags = updates.tags;
-    if (updates.startDate !== undefined) task.startDate = updates.startDate;
-    if (updates.dueDate !== undefined) task.dueDate = updates.dueDate;
-    if (updates.progress !== undefined) task.progress = updates.progress;
-    if (updates.metadata !== undefined) task.metadata = updates.metadata;
-    task.updatedAt = new Date().toISOString();
-    project.updatedAt = task.updatedAt;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ task, message: "Task updated" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: move_kanban_task ──────────────────────────────────────────
-server.registerTool("move_kanban_task", {
-  title: "Move Kanban Task",
-  description: "Move a task to a different column and/or position (drag-and-drop)",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    taskId: z.string().describe("The task ID"),
-    columnId: z.string().optional().describe("Target column ID"),
-    position: z.number().optional().describe("Target position within column"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-}, async ({ projectId, taskId, columnId, position }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const task = project.tasks.find((t) => t.id === taskId);
-    if (!task) {
-      return {
-        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
-        isError: true,
-      };
-    }
-    const targetCol = columnId ?? task.columnId;
-    if (!project.columns.some((c) => c.id === targetCol)) {
-      return {
-        content: [{ type: "text" as const, text: `Column not found: ${targetCol}` }],
-        isError: true,
-      };
-    }
-    task.columnId = targetCol;
-    const colTasks = project.tasks
-      .filter((t) => t.columnId === targetCol && t.id !== taskId)
-      .sort((a, b) => a.position - b.position);
-    const insertAt = position !== undefined ? Math.min(position, colTasks.length) : colTasks.length;
-    colTasks.splice(insertAt, 0, task);
-    colTasks.forEach((t, i) => { t.position = i; });
-    task.updatedAt = new Date().toISOString();
-    project.updatedAt = task.updatedAt;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ taskId: task.id, columnId: task.columnId, position: task.position, message: "Task moved" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: delete_kanban_task ────────────────────────────────────────
-server.registerTool("delete_kanban_task", {
-  title: "Delete Kanban Task",
-  description: "Delete a task from a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    taskId: z.string().describe("The task ID"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: true },
-}, async ({ projectId, taskId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const before = project.tasks.length;
-    project.tasks = project.tasks.filter((t) => t.id !== taskId);
-    if (project.tasks.length === before) {
-      return {
-        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
-        isError: true,
-      };
-    }
-    // Also remove task from any sessions
-    for (const session of project.sessions) {
-      session.taskIds = session.taskIds.filter((tid) => tid !== taskId);
-    }
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Task ${taskId} deleted` }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: list_kanban_tasks ─────────────────────────────────────────
-server.registerTool("list_kanban_tasks", {
-  title: "List Kanban Tasks",
-  description: "List and filter tasks in a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    epicId: z.string().optional().describe("Filter by epic"),
-    columnId: z.string().optional().describe("Filter by column"),
-    assignee: z.string().optional().describe("Filter by assignee"),
-    priority: z.enum(["low", "medium", "high", "critical"]).optional().describe("Filter by priority"),
-    tag: z.string().optional().describe("Filter by tag"),
-  },
-  annotations: { readOnlyHint: true, destructiveHint: false },
-}, async ({ projectId, epicId, columnId, assignee, priority, tag }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    let tasks = project.tasks;
-    if (epicId) tasks = tasks.filter((t) => t.epicId === epicId);
-    if (columnId) tasks = tasks.filter((t) => t.columnId === columnId);
-    if (assignee) tasks = tasks.filter((t) => t.assignee === assignee);
-    if (priority) tasks = tasks.filter((t) => t.priority === priority);
-    if (tag) tasks = tasks.filter((t) => t.tags.includes(tag));
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(tasks, null, 2) }],
-    };
-  }
-);
-
-// ─── Tool: add_link_to_kanban_task ───────────────────────────────────
-server.registerTool("add_link_to_kanban_task", {
-  title: "Add Link to Task",
-  description: "Add a typed link to a task",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    taskId: z.string().describe("The task ID"),
-    label: z.string().describe("Link label"),
-    url: z.string().url().describe("Link URL"),
-    type: z.enum(["jira", "github-pr", "github-issue", "confluence", "slack", "other"]).describe("Link type"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, taskId, label, url, type }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const task = project.tasks.find((t) => t.id === taskId);
-    if (!task) {
-      return {
-        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
-        isError: true,
-      };
-    }
-    task.links.push({ label, url, type });
-    task.updatedAt = new Date().toISOString();
-    project.updatedAt = task.updatedAt;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Link added to task ${taskId}`, linkCount: task.links.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ═══════════════════════════════════════════════════════════════════════
-// PROJECT SESSION TOOLS
-// ═══════════════════════════════════════════════════════════════════════
-
-// ─── Tool: add_project_session ───────────────────────────────────────
-server.registerTool("add_project_session", {
-  title: "Add Project Session",
-  description: "Create a new focus session within a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    title: z.string().describe("Session title"),
-    notes: z.string().optional().describe("Session notes"),
-    taskIds: z.array(z.string()).optional().describe("Task IDs to link to this session"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, title, notes, taskIds }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const now = new Date().toISOString();
-    const session: ProjectSession = {
-      id: uuidv4(),
-      title,
-      notes: notes ?? "",
-      taskIds: taskIds ?? [],
-      pomodorosCompleted: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    project.sessions.push(session);
-    project.updatedAt = now;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ sessionId: session.id, title: session.title, message: "Session created" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: update_project_session ────────────────────────────────────
-server.registerTool("update_project_session", {
-  title: "Update Project Session",
-  description: "Update a session's title or notes",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    sessionId: z.string().describe("The session ID"),
-    title: z.string().optional().describe("New title"),
-    notes: z.string().optional().describe("New notes"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-}, async ({ projectId, sessionId, title, notes }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const session = project.sessions.find((s) => s.id === sessionId);
-    if (!session) {
-      return {
-        content: [{ type: "text" as const, text: `Session not found: ${sessionId}` }],
-        isError: true,
-      };
-    }
-    if (title !== undefined) session.title = title;
-    if (notes !== undefined) session.notes = notes;
-    session.updatedAt = new Date().toISOString();
-    project.updatedAt = session.updatedAt;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ sessionId: session.id, title: session.title, message: "Session updated" }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: remove_project_session ────────────────────────────────────
-server.registerTool("remove_project_session", {
-  title: "Remove Project Session",
-  description: "Remove a session from a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    sessionId: z.string().describe("The session ID"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: true },
-}, async ({ projectId, sessionId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const before = project.sessions.length;
-    project.sessions = project.sessions.filter((s) => s.id !== sessionId);
-    if (project.sessions.length === before) {
-      return {
-        content: [{ type: "text" as const, text: `Session not found: ${sessionId}` }],
-        isError: true,
-      };
-    }
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Session ${sessionId} removed`, sessionCount: project.sessions.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: add_task_to_project_session ───────────────────────────────
-server.registerTool("add_task_to_project_session", {
-  title: "Add Task to Session",
-  description: "Link a task to a project session",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    sessionId: z.string().describe("The session ID"),
-    taskId: z.string().describe("The task ID to link"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, sessionId, taskId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const session = project.sessions.find((s) => s.id === sessionId);
-    if (!session) {
-      return {
-        content: [{ type: "text" as const, text: `Session not found: ${sessionId}` }],
-        isError: true,
-      };
-    }
-    if (!project.tasks.some((t) => t.id === taskId)) {
-      return {
-        content: [{ type: "text" as const, text: `Task not found: ${taskId}` }],
-        isError: true,
-      };
-    }
-    if (!session.taskIds.includes(taskId)) {
-      session.taskIds.push(taskId);
-      session.updatedAt = new Date().toISOString();
-      project.updatedAt = session.updatedAt;
-      dbSaveProject(project);
-    }
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Task ${taskId} linked to session`, taskCount: session.taskIds.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: remove_task_from_project_session ──────────────────────────
-server.registerTool("remove_task_from_project_session", {
-  title: "Remove Task from Session",
-  description: "Unlink a task from a project session",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    sessionId: z.string().describe("The session ID"),
-    taskId: z.string().describe("The task ID to unlink"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, sessionId, taskId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    const session = project.sessions.find((s) => s.id === sessionId);
-    if (!session) {
-      return {
-        content: [{ type: "text" as const, text: `Session not found: ${sessionId}` }],
-        isError: true,
-      };
-    }
-    session.taskIds = session.taskIds.filter((tid) => tid !== taskId);
-    session.updatedAt = new Date().toISOString();
-    project.updatedAt = session.updatedAt;
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Task ${taskId} unlinked from session`, taskCount: session.taskIds.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ═══════════════════════════════════════════════════════════════════════
-// DIAGRAM LINKING TOOLS
-// ═══════════════════════════════════════════════════════════════════════
-
-// ─── Tool: link_diagram_to_project ───────────────────────────────────
-server.registerTool("link_diagram_to_project", {
-  title: "Link Diagram to Project",
-  description: "Link a diagram to a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    diagramId: z.string().describe("The diagram ID to link"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, diagramId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    // Verify diagram exists
-    const diagram = dbGetDiagram(diagramId);
-    if (!diagram) {
-      return {
-        content: [{ type: "text" as const, text: `Diagram not found: ${diagramId}` }],
-        isError: true,
-      };
-    }
-    if (!project.diagramIds.includes(diagramId)) {
-      project.diagramIds.push(diagramId);
-      project.updatedAt = new Date().toISOString();
-      dbSaveProject(project);
-    }
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Diagram ${diagramId} linked to project`, diagramCount: project.diagramIds.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ─── Tool: unlink_diagram_from_project ───────────────────────────────
-server.registerTool("unlink_diagram_from_project", {
-  title: "Unlink Diagram from Project",
-  description: "Unlink a diagram from a project",
-  inputSchema: {
-    projectId: z.string().describe("The project ID"),
-    diagramId: z.string().describe("The diagram ID to unlink"),
-  },
-  annotations: { readOnlyHint: false, destructiveHint: false },
-}, async ({ projectId, diagramId }) => {
-    const project = dbGetProject(projectId);
-    if (!project) {
-      return {
-        content: [{ type: "text" as const, text: `Project not found: ${projectId}` }],
-        isError: true,
-      };
-    }
-    project.diagramIds = project.diagramIds.filter((id) => id !== diagramId);
-    project.updatedAt = new Date().toISOString();
-    dbSaveProject(project);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({ message: `Diagram ${diagramId} unlinked from project`, diagramCount: project.diagramIds.length }, null, 2),
-        },
-      ],
-    };
-  }
-);
-
-// ═══════════════════════════════════════════════════════════════════════
 // RESOURCES
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -2219,133 +1165,119 @@ server.registerResource("patterns", "planview://patterns", {
   };
 });
 
-// ─── Resource: all projects ──────────────────────────────────────────
-server.registerResource("projects", "planview://projects", {
-  title: "All Projects",
-  description: "List of all projects in the workspace",
-  mimeType: "application/json",
-}, async (uri) => {
-  const projects = dbListProjectsMeta();
-  return {
-    contents: [
-      {
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify(projects, null, 2),
-      },
-    ],
-  };
-});
-
-// ─── Resource: single project (dynamic) ──────────────────────────────
 server.registerResource(
-  "project",
-  new ResourceTemplate("planview://projects/{projectId}", {
+  "pattern",
+  new ResourceTemplate("planview://patterns/{patternId}", {
     list: async () => ({
-      resources: dbListProjectsMeta().map((p) => ({
-        uri: `planview://projects/${p.id}`,
-        name: p.name,
+      resources: dbListKnowledgePatterns().map((pattern) => ({
+        uri: `planview://patterns/${pattern.id}`,
+        name: pattern.title,
       })),
     }),
   }),
   {
-    title: "Project Details",
-    description: "Full project with tasks, columns, epics, and sessions",
+    title: "Pattern Details",
+    description: "Full reusable troubleshooting pattern",
     mimeType: "application/json",
   },
-  async (uri, { projectId }) => {
-    const project = dbGetProject(projectId as string);
+  async (uri, { patternId }) => {
+    const pattern = dbListKnowledgePatterns().find((entry) => entry.id === String(patternId));
     return {
       contents: [
         {
           uri: uri.href,
           mimeType: "application/json",
-          text: project
-            ? JSON.stringify(project, null, 2)
-            : JSON.stringify({ error: "Project not found" }),
+          text: pattern
+            ? JSON.stringify(pattern, null, 2)
+            : JSON.stringify({ error: "Knowledge pattern not found" }, null, 2),
         },
       ],
     };
   }
 );
 
-// ═══════════════════════════════════════════════════════════════════════
-// PROMPTS
-// ═══════════════════════════════════════════════════════════════════════
-
-server.registerPrompt("plan-sprint", {
-  title: "Plan Sprint",
-  description: "Generate a sprint plan from backlog tasks",
-  argsSchema: {
-    projectId: z.string().describe("Project to plan"),
-    sprintGoal: z.string().optional().describe("Sprint goal or theme"),
-  },
-}, ({ projectId, sprintGoal }) => {
-  const project = dbGetProject(projectId);
-  if (!project) {
-    return {
-      messages: [{
-        role: "user" as const,
-        content: { type: "text" as const, text: "Project not found" },
-      }],
-    };
-  }
-  const backlog = project.tasks.filter((t) => t.columnId === project.columns[0]?.id);
+server.registerResource("artifacts", "planview://artifacts", {
+  title: "Artifacts",
+  description: "Stored evidence artifact metadata",
+  mimeType: "application/json",
+}, async (uri) => {
   return {
-    messages: [{
-      role: "user" as const,
-      content: {
-        type: "text" as const,
-        text: `Plan a sprint for "${project.name}"${sprintGoal ? ` with goal: ${sprintGoal}` : ""}.
-
-Backlog tasks (${backlog.length}):
-${backlog.map((t) => `- [${t.priority}] ${t.name}${t.dueDate ? ` (due: ${t.dueDate})` : ""}`).join("\n") || "(empty)"}
-
-Suggest which tasks to move to "To Do" and estimate a timeline.`,
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(dbListArtifacts({ limit: 200 }), null, 2),
       },
-    }],
+    ],
   };
 });
 
-server.registerPrompt("project-status", {
-  title: "Project Status Report",
-  description: "Generate a status report for a project",
-  argsSchema: {
-    projectId: z.string().describe("Project to report on"),
+server.registerResource(
+  "artifact",
+  new ResourceTemplate("planview://artifacts/{artifactId}", {
+    list: async () => ({
+      resources: dbListArtifacts({ limit: 200 }).map((artifact) => ({
+        uri: `planview://artifacts/${artifact.id}`,
+        name: artifact.label,
+      })),
+    }),
+  }),
+  {
+    title: "Artifact Metadata",
+    description: "Metadata for a single evidence artifact",
+    mimeType: "application/json",
   },
-}, ({ projectId }) => {
-  const project = dbGetProject(projectId);
-  if (!project) {
-    return {
-      messages: [{
-        role: "user" as const,
-        content: { type: "text" as const, text: "Project not found" },
-      }],
-    };
+  async (uri, { artifactId }) => {
+    try {
+      const artifact = dbGetArtifactById(String(artifactId));
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: artifact
+              ? JSON.stringify(
+                  {
+                    id: artifact.id,
+                    artifactId: artifact.artifactId,
+                    ownerType: artifact.ownerType,
+                    ownerId: artifact.ownerId,
+                    diagramId: artifact.diagramId,
+                    label: artifact.label,
+                    fileName: artifact.fileName,
+                    mimeType: artifact.mimeType,
+                    sizeBytes: artifact.sizeBytes,
+                    checksumSha256: artifact.checksumSha256,
+                    createdAt: artifact.createdAt,
+                  },
+                  null,
+                  2
+                )
+              : JSON.stringify({ error: "Artifact not found" }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      const planViewError = error as { code?: string; message?: string };
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: JSON.stringify(
+              {
+                error: planViewError.message ?? "Failed to load artifact metadata",
+                code: planViewError.code ?? "artifact_read_failed",
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
   }
-  const tasksByColumn = project.columns.map((col) => {
-    const tasks = project.tasks.filter((t) => t.columnId === col.id);
-    return `${col.name}: ${tasks.length} tasks`;
-  });
-  return {
-    messages: [{
-      role: "user" as const,
-      content: {
-        type: "text" as const,
-        text: `Generate a concise status report for project "${project.name}".
-
-Column breakdown:
-${tasksByColumn.join("\n")}
-
-Total tasks: ${project.tasks.length}
-Epics: ${project.epics.length}
-Sessions: ${project.sessions.length}
-
-Highlight blockers, progress, and next steps.`,
-      },
-    }],
-  };
-});
+);
 
 // ─── Start the server ────────────────────────────────────────────────
 async function main() {

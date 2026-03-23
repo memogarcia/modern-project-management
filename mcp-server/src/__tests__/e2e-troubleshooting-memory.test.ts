@@ -69,7 +69,11 @@ async function runTest() {
       "append_session_command",
       "link_session_to_entities",
       "extract_knowledge_pattern",
+      "list_knowledge_patterns",
       "search_troubleshooting_memory",
+      "list_artifacts",
+      "get_artifact_metadata",
+      "attach_artifact",
     ]) {
       assert(toolNames.includes(expectedTool), `Missing tool: ${expectedTool}`);
     }
@@ -203,6 +207,18 @@ async function runTest() {
         status: "ran",
       },
     });
+    const artifactBody = Buffer.from("checkout timeline evidence").toString("base64");
+    const { parsed: attachedArtifact } = await callTool(client, "attach_artifact", {
+      ownerType: "session",
+      ownerId: sessionId,
+      diagramId,
+      label: "incident-log.txt",
+      fileName: "incident-log.txt",
+      mimeType: "text/plain",
+      contentBase64: artifactBody,
+    });
+    const artifactId = (attachedArtifact as { artifactId: string }).artifactId;
+    assert(artifactId);
 
     await callTool(client, "link_session_to_entities", {
       sessionId,
@@ -244,6 +260,7 @@ async function runTest() {
       timelineEntries: unknown[];
       comments: unknown[];
       commands: unknown[];
+      artifacts: unknown[];
       reusablePatternId?: string;
       linkedNodeIds: string[];
     };
@@ -251,8 +268,16 @@ async function runTest() {
     assert.equal(finalSession.timelineEntries.length, 1);
     assert.equal(finalSession.comments.length, 1);
     assert.equal(finalSession.commands.length, 1);
+    assert.equal(finalSession.artifacts.length, 1);
     assert.equal(finalSession.reusablePatternId, patternId);
     assert.deepEqual(finalSession.linkedNodeIds.sort(), ["checkout_api", "orders_db"]);
+
+    const { parsed: listedPatterns } = await callTool(client, "list_knowledge_patterns", {});
+    assert((listedPatterns as Array<{ id: string }>).some((pattern) => pattern.id === patternId));
+    const { parsed: artifactMetadata } = await callTool(client, "get_artifact_metadata", { artifactId });
+    assert.equal((artifactMetadata as { artifactId: string }).artifactId, artifactId);
+    const { parsed: listedArtifacts } = await callTool(client, "list_artifacts", { ownerType: "session", ownerId: sessionId });
+    assert((listedArtifacts as Array<{ artifactId: string }>).some((artifact) => artifact.artifactId === artifactId));
 
     const { parsed: searchResults } = await callTool(client, "search_troubleshooting_memory", {
       q: "503",
@@ -268,6 +293,7 @@ async function runTest() {
     assert(resourceUris.includes("planview://diagrams"));
     assert(resourceUris.includes("planview://investigations"));
     assert(resourceUris.includes("planview://patterns"));
+    assert(resourceUris.includes("planview://artifacts"));
 
     const diagramResource = await readResource(client, `planview://diagrams/${diagramId}`);
     assert.equal((diagramResource as { id: string }).id, diagramId);
@@ -279,6 +305,10 @@ async function runTest() {
     assert(
       (patternsResource as Array<{ id: string }>).some((pattern) => pattern.id === patternId)
     );
+    const patternResource = await readResource(client, `planview://patterns/${patternId}`);
+    assert.equal((patternResource as { id: string }).id, patternId);
+    const artifactResource = await readResource(client, `planview://artifacts/${artifactId}`);
+    assert.equal((artifactResource as { artifactId: string }).artifactId, artifactId);
 
     console.log("✅ Troubleshooting memory MCP E2E test passed");
   } finally {

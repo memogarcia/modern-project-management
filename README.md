@@ -131,13 +131,10 @@ Mermaid is treated as a safe editing surface, not the only source of truth.
 
 The main navigation is now oriented around:
 
-- Systems
 - Diagrams
 - Investigations
 - Patterns
 - MCP
-
-Legacy PM views still exist in the codebase, but they are no longer the main product story.
 
 Key UI surfaces:
 
@@ -173,7 +170,11 @@ The MCP server is production-oriented for troubleshooting workflows.
 - `append_session_command`
 - `link_session_to_entities`
 - `extract_knowledge_pattern`
+- `list_knowledge_patterns`
 - `search_troubleshooting_memory`
+- `list_artifacts`
+- `get_artifact_metadata`
+- `attach_artifact`
 
 ### Resources
 
@@ -182,6 +183,9 @@ The MCP server is production-oriented for troubleshooting workflows.
 - `planview://investigations`
 - `planview://investigations/{sessionId}`
 - `planview://patterns`
+- `planview://patterns/{patternId}`
+- `planview://artifacts`
+- `planview://artifacts/{artifactId}`
 
 ### Local MCP config note
 
@@ -242,7 +246,6 @@ Notes:
   - Mermaid round-trip and parse-failure safety tests
   - storage-level troubleshooting persistence tests
   - MCP E2E tests for the new troubleshooting memory tools
-  - legacy project/task/session E2E coverage
 
 ## Docs
 

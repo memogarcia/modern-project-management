@@ -19,6 +19,11 @@ interface NodeEditModalProps {
   onClose: () => void;
 }
 
+type PendingAttachment = {
+  id: string;
+  file: File;
+};
+
 const PRESET_COLORS_LIGHT = [
   "#e3f2fd", "#e8f5e9", "#fff8e1", "#f3e5f5", "#ffebee",
   "#e0f7fa", "#f9fbe7", "#e8eaf6", "#e1f5fe", "#f5f5f5",
@@ -166,6 +171,7 @@ export default function NodeEditModal({ diagramId, node, onSave, onClose }: Node
   const [traceLinks, setTraceLinks] = useState(initialMetadata.traceLinks);
   const [runbookLinks, setRunbookLinks] = useState(initialMetadata.runbookLinks);
   const [attachments, setAttachments] = useState<ArtifactReference[]>(initialMetadata.attachments);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [bgColor, setBgColor] = useState(node.data.color ?? defaultBg);
@@ -182,33 +188,48 @@ export default function NodeEditModal({ diagramId, node, onSave, onClose }: Node
   }, [onClose]);
 
   const handleUpload = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+      if (files.length === 0) return;
 
+      setUploadError(null);
+      setPendingAttachments((current) => [
+        ...current,
+        ...files.map((file) => ({ id: crypto.randomUUID(), file })),
+      ]);
+      event.target.value = "";
+    },
+    []
+  );
+
+  const handleSave = useCallback(async () => {
+    const now = new Date().toISOString();
+    let nextAttachments = attachments;
+
+    if (pendingAttachments.length > 0) {
       setIsUploading(true);
       setUploadError(null);
       try {
-        const artifact = await uploadArtifact({
-          ownerType: "node",
-          diagramId,
-          ownerId: node.id,
-          label: file.name,
-          file,
-        });
-        setAttachments((current) => [...current, artifact]);
+        const uploaded = await Promise.all(
+          pendingAttachments.map(({ file }) =>
+            uploadArtifact({
+              ownerType: "node",
+              diagramId,
+              ownerId: node.id,
+              label: file.name,
+              file,
+            })
+          )
+        );
+        nextAttachments = [...attachments, ...uploaded];
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "Upload failed");
-      } finally {
         setIsUploading(false);
-        event.target.value = "";
+        return;
       }
-    },
-    [diagramId, node.id]
-  );
+      setIsUploading(false);
+    }
 
-  const handleSave = useCallback(() => {
-    const now = new Date().toISOString();
     const metadata = {
       ...initialMetadata,
       title: label.trim() || node.data.label,
@@ -222,11 +243,13 @@ export default function NodeEditModal({ diagramId, node, onSave, onClose }: Node
       runbookLinks: normalizeLinks(runbookLinks),
       knownFailureModes: splitMultilineList(failureModesText),
       notesMarkdown,
-      attachments,
+      attachments: nextAttachments,
       updatedAt: now,
       lastVerifiedAt: lastVerifiedAt ? new Date(`${lastVerifiedAt}T00:00:00.000Z`).toISOString() : undefined,
     };
 
+    setAttachments(nextAttachments);
+    setPendingAttachments([]);
     onSave(node.id, {
       label: metadata.title,
       description: metadata.description,
@@ -256,10 +279,12 @@ export default function NodeEditModal({ diagramId, node, onSave, onClose }: Node
     onClose,
     onSave,
     owner,
+    pendingAttachments,
     runbookLinks,
     shapeType,
     tagText,
     traceLinks,
+    diagramId,
   ]);
 
   const handleOverlayClick = useCallback(
@@ -340,25 +365,56 @@ export default function NodeEditModal({ diagramId, node, onSave, onClose }: Node
             <div className="flex items-center justify-between gap-3">
               <div>
                 <label className="edit-modal-label">Attachments</label>
-                <div className="text-[11px] text-[var(--text-muted)]">Stored on disk with checksums and metadata.</div>
+                <div className="text-[11px] text-[var(--text-muted)]">Queued files upload only when you save this component.</div>
               </div>
               <label className="edit-modal-btn edit-modal-btn-secondary cursor-pointer">
-                {isUploading ? "Uploading..." : "Upload"}
-                <input hidden type="file" onChange={handleUpload} />
+                {isUploading ? "Uploading..." : "Add files"}
+                <input hidden multiple type="file" onChange={handleUpload} />
               </label>
             </div>
             {uploadError && <div className="mt-2 text-xs text-[var(--danger)]">{uploadError}</div>}
             <div className="mt-2 space-y-2">
               {attachments.length === 0 && (
                 <div className="rounded-md border border-dashed border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
-                  No attachments uploaded yet.
+                  No saved attachments yet.
                 </div>
               )}
               {attachments.map((artifact) => (
                 <div key={artifact.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
-                  <div className="font-medium text-[var(--foreground)]">{artifact.label}</div>
-                  <div className="text-[var(--text-muted)]">
-                    {artifact.fileName} · {artifact.mimeType} · {Math.max(1, Math.round(artifact.sizeBytes / 1024))} KB
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-[var(--foreground)]">{artifact.label}</div>
+                      <div className="text-[var(--text-muted)]">
+                        {artifact.fileName} · {artifact.mimeType} · {Math.max(1, Math.round(artifact.sizeBytes / 1024))} KB
+                      </div>
+                    </div>
+                    <a
+                      className="text-[var(--accent)] hover:underline"
+                      href={`/api/artifacts/${artifact.artifactId}`}
+                    >
+                      Download
+                    </a>
+                  </div>
+                </div>
+              ))}
+              {pendingAttachments.map((artifact) => (
+                <div key={artifact.id} className="rounded-md border border-dashed border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-[var(--foreground)]">{artifact.file.name}</div>
+                      <div className="text-[var(--text-muted)]">Pending upload</div>
+                    </div>
+                    <button
+                      className="text-[var(--danger)]"
+                      type="button"
+                      onClick={() =>
+                        setPendingAttachments((current) =>
+                          current.filter((entry) => entry.id !== artifact.id)
+                        )
+                      }
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
               ))}

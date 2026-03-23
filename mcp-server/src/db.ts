@@ -19,12 +19,14 @@ import {
   listPlanViewDiagrams,
   listPlanViewKnowledgePatterns,
   listPlanViewTroubleshootingSessions,
+  listPlanViewArtifacts,
   savePlanViewArtifactFile,
   savePlanViewDiagram,
   searchPlanViewTroubleshootingMemory,
   updatePlanViewEdgeMetadata,
   updatePlanViewNodeMetadata,
   updatePlanViewTroubleshootingSession,
+  getPlanViewArtifactById,
   appendPlanViewSessionComment,
   appendPlanViewSessionCommand,
   appendPlanViewTimelineEntry,
@@ -338,3 +340,5 @@ export const extractKnowledgePattern = extractPlanViewKnowledgePattern;
 export const listKnowledgePatterns = listPlanViewKnowledgePatterns;
 export const searchTroubleshootingMemory = searchPlanViewTroubleshootingMemory;
 export const saveArtifactFile = savePlanViewArtifactFile;
+export const listArtifacts = listPlanViewArtifacts;
+export const getArtifactById = getPlanViewArtifactById;

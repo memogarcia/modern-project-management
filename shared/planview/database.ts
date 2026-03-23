@@ -1,6 +1,6 @@
-import Database from "better-sqlite3";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import {
   type ArtifactReference,
@@ -23,6 +23,16 @@ import {
 } from "./graph.js";
 import { flowToMermaid, validateMermaidDocument } from "./mermaid.js";
 
+const require = createRequire(import.meta.url);
+const Database = require("better-sqlite3") as typeof import("better-sqlite3");
+const DatabaseConstructor =
+  ((Database as unknown as { default?: typeof Database }).default ?? Database) as typeof Database;
+const betterSqlitePackagePath = require.resolve("better-sqlite3/package.json");
+const betterSqliteNativeBindingPath = path.join(
+  path.dirname(betterSqlitePackagePath),
+  "build/Release/better_sqlite3.node"
+);
+
 export type PlanViewDatabase = Database.Database;
 type BetterSqliteDatabase = PlanViewDatabase;
 
@@ -42,6 +52,32 @@ type SessionRow = {
   created_at: string;
   updated_at: string;
   resolved_at?: string | null;
+};
+
+type ArtifactOwnerType = "node" | "edge" | "session";
+
+type ArtifactRow = {
+  id: string;
+  owner_type: ArtifactOwnerType;
+  diagram_id?: string | null;
+  owner_id: string;
+  label: string;
+  file_name: string;
+  relative_path: string;
+  mime_type: string;
+  size_bytes: number;
+  checksum_sha256: string;
+  created_at: string;
+};
+
+export type PlanViewArtifactRecord = ArtifactReference & {
+  ownerType: ArtifactOwnerType;
+  diagramId?: string | null;
+  ownerId: string;
+};
+
+export type PlanViewArtifactFile = PlanViewArtifactRecord & {
+  absolutePath: string;
 };
 
 let singletonDb: BetterSqliteDatabase | null = null;
@@ -476,7 +512,9 @@ export function getPlanViewDb(): BetterSqliteDatabase {
   ensureDir(path.dirname(dbPath));
   ensureDir(resolvePlanViewArtifactsDir());
 
-  singletonDb = new Database(dbPath);
+  singletonDb = new DatabaseConstructor(dbPath, {
+    nativeBinding: betterSqliteNativeBindingPath,
+  });
   singletonDb.pragma("journal_mode = WAL");
   singletonDb.pragma("foreign_keys = ON");
   singletonDb.pragma("busy_timeout = 5000");
@@ -906,6 +944,36 @@ function parseJsonValue<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
+function hydrateArtifactRow(row: ArtifactRow): PlanViewArtifactRecord {
+  return {
+    id: row.id,
+    artifactId: row.id,
+    ownerType: row.owner_type,
+    diagramId: row.diagram_id ?? null,
+    ownerId: row.owner_id,
+    label: row.label,
+    fileName: row.file_name,
+    relativePath: row.relative_path,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
+    checksumSha256: row.checksum_sha256,
+    createdAt: row.created_at,
+  };
+}
+
+function resolveArtifactAbsolutePath(relativePath: string): string {
+  const root = path.resolve(resolvePlanViewArtifactsDir());
+  const absolutePath = path.resolve(root, relativePath);
+  const safePrefix = `${root}${path.sep}`;
+  if (absolutePath !== root && !absolutePath.startsWith(safePrefix)) {
+    throw new PlanViewError("artifact_path_invalid", "Artifact path resolves outside the configured artifact directory.", {
+      status: 500,
+      details: { relativePath },
+    });
+  }
+  return absolutePath;
+}
+
 function listSessionTimelineEntries(sessionId: string, db: BetterSqliteDatabase): SessionTimelineEntry[] {
   const rows = db
     .prepare(`
@@ -1017,6 +1085,79 @@ function listSessionArtifacts(sessionId: string, db: BetterSqliteDatabase): Arti
     checksumSha256: row.checksum_sha256,
     createdAt: row.created_at,
   }));
+}
+
+export function listPlanViewArtifacts(
+  filters?: {
+    ownerType?: ArtifactOwnerType;
+    ownerId?: string;
+    diagramId?: string;
+    q?: string;
+    limit?: number;
+  },
+  db = getPlanViewDb()
+): PlanViewArtifactRecord[] {
+  const conditions: string[] = [];
+  const values: Array<string | number> = [];
+
+  if (filters?.ownerType) {
+    conditions.push("owner_type = ?");
+    values.push(filters.ownerType);
+  }
+  if (filters?.ownerId) {
+    conditions.push("owner_id = ?");
+    values.push(filters.ownerId);
+  }
+  if (filters?.diagramId) {
+    conditions.push("diagram_id = ?");
+    values.push(filters.diagramId);
+  }
+  if (filters?.q) {
+    const needle = `%${filters.q.toLowerCase()}%`;
+    conditions.push("(LOWER(label) LIKE ? OR LOWER(file_name) LIKE ?)");
+    values.push(needle, needle);
+  }
+
+  const limit = Math.min(Math.max(filters?.limit ?? 100, 1), 500);
+  values.push(limit);
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const rows = db.prepare(`
+    SELECT id, owner_type, diagram_id, owner_id, label, file_name, relative_path, mime_type, size_bytes, checksum_sha256, created_at
+    FROM artifacts
+    ${whereClause}
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(...values) as ArtifactRow[];
+
+  return rows.map(hydrateArtifactRow);
+}
+
+export function getPlanViewArtifactById(
+  artifactId: string,
+  db = getPlanViewDb()
+): PlanViewArtifactFile | null {
+  const row = db.prepare(`
+    SELECT id, owner_type, diagram_id, owner_id, label, file_name, relative_path, mime_type, size_bytes, checksum_sha256, created_at
+    FROM artifacts
+    WHERE id = ?
+  `).get(artifactId) as ArtifactRow | undefined;
+
+  if (!row) {
+    return null;
+  }
+
+  const absolutePath = resolveArtifactAbsolutePath(row.relative_path);
+  if (!fs.existsSync(absolutePath)) {
+    throw new PlanViewError("artifact_missing", `Artifact file not found for ${artifactId}.`, {
+      status: 404,
+      details: { artifactId, relativePath: row.relative_path },
+    });
+  }
+
+  return {
+    ...hydrateArtifactRow(row),
+    absolutePath,
+  };
 }
 
 function hydrateTroubleshootingSession(row: SessionRow, db: BetterSqliteDatabase): TroubleshootingSession {
@@ -1473,38 +1614,106 @@ export function searchPlanViewTroubleshootingMemory(
   filters: { q: string; diagramId?: string; nodeId?: string; edgeId?: string; limit?: number },
   db = getPlanViewDb()
 ): TroubleshootingSearchHit[] {
-  const limit = filters.limit ?? 20;
-  const sessionMatches = listPlanViewTroubleshootingSessions(filters, db)
-    .slice(0, limit)
-    .map<TroubleshootingSearchHit>((session, index) => ({
-      type: "session",
-      id: session.id,
-      title: session.title,
-      summary: session.summary,
-      diagramId: session.diagramId,
-      sessionId: session.id,
-      score: 100 - index,
-      updatedAt: session.updatedAt,
-    }));
+  const limit = Math.min(Math.max(filters.limit ?? 20, 1), 100);
+  const normalizedQuery = filters.q.trim().toLowerCase();
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return [];
+  }
 
-  const lowerNeedle = filters.q.toLowerCase();
-  const patternMatches = listPlanViewKnowledgePatterns(db)
-    .filter((pattern) => {
-      if (filters.nodeId && !pattern.linkedNodeIds.includes(filters.nodeId)) return false;
-      if (filters.edgeId && !pattern.linkedEdgeIds.includes(filters.edgeId)) return false;
-      const haystack = `${pattern.title}\n${pattern.summary}\n${pattern.symptom}\n${pattern.resolution}`.toLowerCase();
-      return haystack.includes(lowerNeedle);
+  const scoreTokenMatches = (
+    fields: Array<{ value: string; weight: number }>
+  ): number => {
+    let score = 0;
+    for (const token of tokens) {
+      for (const field of fields) {
+        const haystack = field.value.toLowerCase();
+        if (haystack.includes(token)) {
+          score += field.weight;
+        }
+      }
+    }
+    return score;
+  };
+
+  const sessionMatches = listPlanViewTroubleshootingSessions(
+    {
+      diagramId: filters.diagramId,
+      nodeId: filters.nodeId,
+      edgeId: filters.edgeId,
+    },
+    db
+  )
+    .map<TroubleshootingSearchHit | null>((session) => {
+      const score = scoreTokenMatches([
+        { value: session.title, weight: 30 },
+        { value: session.summary, weight: 26 },
+        { value: session.systemScope ?? "", weight: 18 },
+        { value: session.notesMarkdown, weight: 16 },
+        { value: session.resolutionSummary, weight: 20 },
+        { value: session.hypotheses.join("\n"), weight: 14 },
+        { value: session.timelineEntries.map((entry) => `${entry.title}\n${entry.body}`).join("\n"), weight: 10 },
+        { value: session.comments.map((comment) => comment.body).join("\n"), weight: 9 },
+        { value: session.commands.map((command) => `${command.command}\n${command.summary}\n${command.outputExcerpt}`).join("\n"), weight: 9 },
+        { value: session.artifacts.map((artifact) => `${artifact.label}\n${artifact.fileName}`).join("\n"), weight: 8 },
+      ]);
+
+      const linkedEntityBoost =
+        (filters.nodeId && session.linkedNodeIds.includes(filters.nodeId) ? 20 : 0) +
+        (filters.edgeId && session.linkedEdgeIds.includes(filters.edgeId) ? 20 : 0) +
+        (filters.diagramId && session.diagramId === filters.diagramId ? 8 : 0);
+
+      const finalScore = score + linkedEntityBoost;
+      if (finalScore <= 0) {
+        return null;
+      }
+
+      return {
+        type: "session",
+        id: session.id,
+        title: session.title,
+        summary: session.summary,
+        diagramId: session.diagramId,
+        sessionId: session.id,
+        score: finalScore,
+        updatedAt: session.updatedAt,
+      };
     })
-    .slice(0, limit)
-    .map<TroubleshootingSearchHit>((pattern, index) => ({
-      type: "pattern",
-      id: pattern.id,
-      title: pattern.title,
-      summary: pattern.summary,
-      sessionId: pattern.sourceSessionId,
-      score: 80 - index,
-      updatedAt: pattern.updatedAt,
-    }));
+    .filter((hit): hit is TroubleshootingSearchHit => Boolean(hit));
+
+  const patternMatches = listPlanViewKnowledgePatterns(db)
+    .map<TroubleshootingSearchHit | null>((pattern) => {
+      if (filters.nodeId && !pattern.linkedNodeIds.includes(filters.nodeId)) return null;
+      if (filters.edgeId && !pattern.linkedEdgeIds.includes(filters.edgeId)) return null;
+
+      const score = scoreTokenMatches([
+        { value: pattern.title, weight: 28 },
+        { value: pattern.summary, weight: 24 },
+        { value: pattern.symptom, weight: 24 },
+        { value: pattern.resolution, weight: 20 },
+        { value: pattern.tags.join("\n"), weight: 12 },
+      ]);
+
+      const linkedEntityBoost =
+        (filters.nodeId && pattern.linkedNodeIds.includes(filters.nodeId) ? 18 : 0) +
+        (filters.edgeId && pattern.linkedEdgeIds.includes(filters.edgeId) ? 18 : 0);
+
+      const finalScore = score + linkedEntityBoost;
+      if (finalScore <= 0) {
+        return null;
+      }
+
+      return {
+        type: "pattern",
+        id: pattern.id,
+        title: pattern.title,
+        summary: pattern.summary,
+        sessionId: pattern.sourceSessionId,
+        score: finalScore,
+        updatedAt: pattern.updatedAt,
+      };
+    })
+    .filter((hit): hit is TroubleshootingSearchHit => Boolean(hit));
 
   return [...sessionMatches, ...patternMatches]
     .sort((left, right) => right.score - left.score || right.updatedAt.localeCompare(left.updatedAt))

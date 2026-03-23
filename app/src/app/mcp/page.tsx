@@ -49,8 +49,9 @@ npm --prefix mcp-server run dev`}
             <div className="grid gap-2 text-sm text-[var(--text-muted)]">
               <div>`get_diagram`, `update_diagram_node_metadata`, `update_diagram_edge_metadata`</div>
               <div>`create_troubleshooting_session`, `list_troubleshooting_sessions`, `get_troubleshooting_session`, `update_troubleshooting_session`</div>
-              <div>`append_session_timeline_entry`, `append_session_comment`, `append_session_command`, `extract_knowledge_pattern`</div>
-              <div>`search_troubleshooting_memory` plus resources for diagrams, investigations, and patterns</div>
+              <div>`append_session_timeline_entry`, `append_session_comment`, `append_session_command`, `extract_knowledge_pattern`, `list_knowledge_patterns`</div>
+              <div>`search_troubleshooting_memory`, `list_artifacts`, `get_artifact_metadata`, `attach_artifact`</div>
+              <div>Resources for diagrams, investigations, patterns, and artifact metadata</div>
             </div>
           </section>
         </div>

@@ -8,8 +8,10 @@ import {
   extractPlanViewKnowledgePattern,
   getPlanViewTroubleshootingSessionById,
   listPlanViewDiagrams,
+  listPlanViewArtifacts,
   listPlanViewKnowledgePatterns,
   listPlanViewTroubleshootingSessions,
+  getPlanViewArtifactById,
   savePlanViewArtifactFile,
   savePlanViewDiagram,
   searchPlanViewTroubleshootingMemory,
@@ -222,6 +224,12 @@ async function run() {
     bytes: new TextEncoder().encode("too many clients already"),
   });
   assert(fs.existsSync(path.join(process.env.PLANVIEW_ARTIFACTS_DIR!, artifact.relativePath)));
+  assert.equal(listPlanViewArtifacts({ ownerType: "session", ownerId: "incident_503_checkout" }).length, 1);
+  const hydratedArtifact = getPlanViewArtifactById(artifact.artifactId);
+  assert(hydratedArtifact);
+  assert.equal(hydratedArtifact?.ownerType, "session");
+  assert.equal(hydratedArtifact?.ownerId, "incident_503_checkout");
+  assert(fs.existsSync(hydratedArtifact!.absolutePath));
 
   const resolvedSession = updatePlanViewTroubleshootingSession("incident_503_checkout", {
     status: "resolved",
@@ -262,6 +270,12 @@ async function run() {
   });
   assert(searchHits.some((hit) => hit.type === "session" && hit.id === "incident_503_checkout"));
   assert(searchHits.some((hit) => hit.type === "pattern" && hit.id === pattern.id));
+
+  const commandSearchHits = searchPlanViewTroubleshootingMemory({
+    q: "too many clients already",
+    diagramId: "checkout_system",
+  });
+  assert(commandSearchHits.some((hit) => hit.type === "session" && hit.id === "incident_503_checkout"));
 }
 
 run()

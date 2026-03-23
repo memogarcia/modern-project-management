@@ -556,8 +556,18 @@ export default function TroubleshootingPanel(props: {
                 <div className="space-y-2">
                   {selectedSession.artifacts.map((artifact: ArtifactReference) => (
                     <div key={artifact.id} className="rounded-md border border-[var(--border)] px-3 py-2 text-xs">
-                      <div className="font-medium text-[var(--foreground)]">{artifact.label}</div>
-                      <div className="text-[var(--text-muted)]">{artifact.fileName}</div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-[var(--foreground)]">{artifact.label}</div>
+                          <div className="text-[var(--text-muted)]">{artifact.fileName}</div>
+                        </div>
+                        <a
+                          className="font-medium text-[var(--accent)] hover:underline"
+                          href={`/api/artifacts/${artifact.artifactId}`}
+                        >
+                          Download
+                        </a>
+                      </div>
                     </div>
                   ))}
                   {selectedSession.artifacts.length === 0 && (
@@ -574,7 +584,10 @@ export default function TroubleshootingPanel(props: {
                   ) : (
                     searchHits.map((hit) => (
                       <div key={`${hit.type}:${hit.id}`} className="rounded-md border border-[var(--border)] px-3 py-2 text-xs">
-                        <div className="font-medium text-[var(--foreground)]">{hit.title}</div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-medium text-[var(--foreground)]">{hit.title}</div>
+                          <div className="uppercase tracking-[0.12em] text-[var(--text-muted)]">{hit.type}</div>
+                        </div>
                         <div className="text-[var(--text-muted)]">{hit.summary}</div>
                       </div>
                     ))

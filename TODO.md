@@ -3,8 +3,8 @@
 ## Product Cutover
 
 - Remove the remaining PM-oriented surfaces from the main product story.
-- Remove or hide Kanban, Calendar, Matrix, and any other non-core workflow views.
-- Remove or hide legacy Sessions/Focus Sessions if they are not part of the new core business.
+- Remove Kanban, Calendar, Matrix, and any other non-core workflow views.
+- Remove legacy Sessions/Focus Sessions if they are not part of the new core business.
 - Keep the navigation and copy centered on diagrams, investigations, patterns, and MCP only.
 
 ## Core Product Work
