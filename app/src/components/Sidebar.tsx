@@ -54,10 +54,10 @@ export function Sidebar() {
     <aside
       className={cn(
         "workspace-sidebar z-50 flex shrink-0 flex-col transition-[width] duration-200 ease-in-out",
-        collapsed ? "w-[56px] md:w-[64px]" : "w-[210px] md:w-[240px]"
+        collapsed ? "w-[56px] md:w-[64px]" : "w-[190px] md:w-[220px]"
       )}
     >
-      <div className="flex items-start justify-between gap-1.5 px-1 pb-4 pt-1">
+      <div className="flex items-start justify-between gap-1.5 px-1 pb-2 pt-1">
         {!collapsed ? (
           <Link href="/diagrams" className="flex min-w-0 items-center gap-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)]">

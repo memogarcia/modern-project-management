@@ -1,6 +1,20 @@
 {
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.3.10",
+  "workspaces": [
+    "app",
+    "mcp-server"
+  ],
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint app/src mcp-server/src --ext .ts,.tsx,.js,.jsx",
+    "typecheck": "tsc --noEmit --project app/tsconfig.json && tsc --noEmit --project mcp-server/tsconfig.json",
+    "check:console": "bun run scripts/check-console.ts",
+    "check:size": "bun run scripts/check-size.ts",
+    "prepare": "husky"
+  },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
     "clsx": "^2.1.1",
@@ -8,6 +22,17 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
+    "@types/better-sqlite3": "^7.6.13",
+    "@typescript-eslint/eslint-plugin": "^8.23.0",
+    "@typescript-eslint/parser": "^8.23.0",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.1.3",
+    "eslint-plugin-tailwindcss": "^3.17.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.4.2",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

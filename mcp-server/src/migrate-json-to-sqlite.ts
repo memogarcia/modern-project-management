@@ -112,7 +112,7 @@ const insertMatrix = db.prepare(
   "INSERT OR REPLACE INTO matrix_boards (id, name, updated_at, data) VALUES (?, ?, ?, ?)"
 );
 
-let counts = { diagrams: 0, gantt: 0, sessions: 0, matrix: 0 };
+const counts = { diagrams: 0, gantt: 0, sessions: 0, matrix: 0 };
 
 // Diagrams (root JSON files, skip subdirectory files)
 for (const fp of collectJsonFiles(dir)) {

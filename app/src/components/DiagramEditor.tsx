@@ -459,7 +459,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
 
   return (
     <div className="workspace-page bg-transparent">
-      <div className="flex min-h-[60px] shrink-0 items-center justify-between border-b border-[var(--panel-border)] px-4 py-3 md:min-h-[72px] md:px-6">
+      <div className="flex min-h-[44px] shrink-0 items-center justify-between border-b border-[var(--panel-border)] px-3 py-2 md:min-h-[52px] md:px-4">
         <div className="min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
             Canvas workspace
@@ -555,13 +555,11 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             </div>
           </div>
 
-          <div className="planview-scroll-panel absolute bottom-3 left-3 top-[64px] z-[100] overflow-y-auto pr-1 md:bottom-5 md:left-5 md:top-[84px]">
-            <div className="flex flex-col gap-2 md:gap-3">
+          <div className="absolute bottom-3 left-3 top-[54px] z-[100] flex flex-col gap-2 md:bottom-5 md:left-5 md:top-[68px] md:gap-3">
               <ShapePalette />
               <div className="floating-panel hidden max-w-[180px] rounded-[18px] px-2.5 py-2 text-[10px] text-[var(--text-muted)] md:block md:max-w-[220px] md:rounded-[24px] md:px-4 md:py-3 md:text-xs">
                 Drag shapes onto the board. Double-click nodes or edges to edit details.
               </div>
-            </div>
           </div>
         </div>
 

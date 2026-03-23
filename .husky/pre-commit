@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+
+##############################################################################
+# PRE-COMMIT HOOK
+#
+# Runs quality checks before each commit.
+#
+# What runs here:
+#   - Console statement check
+#   - File size check
+#   - TypeScript typecheck
+#   - ESLint
+##############################################################################
+
+set -eu
+
+echo ""
+echo "Pre-commit checks..."
+
+# Console check
+echo "  Checking for console statements..."
+bun run check:console || exit 1
+
+# Size check
+echo "  Checking file sizes..."
+bun run check:size || exit 1
+
+# Typecheck — catches type errors before they're committed
+echo "  Running typecheck..."
+bun run typecheck || exit 1
+
+# Lint — catches code quality issues
+echo "  Running lint..."
+bun run lint || exit 1
+
+echo ""
+echo "Pre-commit checks passed"

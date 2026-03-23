@@ -34,7 +34,7 @@ export default function ShapePalette() {
   const shapeTypes = getAllShapeTypes();
 
   return (
-    <div className="floating-panel flex w-[54px] flex-col items-center gap-1.5 rounded-[20px] px-1.5 py-2.5 md:w-[68px] md:gap-2 md:rounded-[26px] md:px-2.5 md:py-3.5">
+    <div className="floating-panel planview-scroll-panel flex max-h-[calc(100vh-200px)] w-[54px] flex-col items-center gap-1.5 overflow-y-auto rounded-[20px] px-1.5 py-2.5 md:w-[68px] md:gap-2 md:rounded-[26px] md:px-2.5 md:py-3.5">
       <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
         Insert
       </div>
