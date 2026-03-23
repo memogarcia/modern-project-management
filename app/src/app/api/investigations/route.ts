@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createTroubleshootingSession, listTroubleshootingSessions } from "@/lib/db.server";
-import { jsonErrorResponse, parseJsonBody } from "@/lib/api";
+import { parseJsonBody, withApiErrorHandling } from "@/lib/api";
 import { troubleshootingSessionCreateSchema } from "@planview/validation";
 
 export async function GET(request: Request) {
-  try {
+  return withApiErrorHandling(async () => {
     const { searchParams } = new URL(request.url);
     const sessions = listTroubleshootingSessions({
       diagramId: searchParams.get("diagramId") ?? undefined,
@@ -13,13 +13,11 @@ export async function GET(request: Request) {
       q: searchParams.get("q") ?? undefined,
     });
     return NextResponse.json(sessions);
-  } catch (error) {
-    return jsonErrorResponse(error);
-  }
+  });
 }
 
 export async function POST(request: Request) {
-  try {
+  return withApiErrorHandling(async () => {
     const body = await parseJsonBody(request, troubleshootingSessionCreateSchema);
     const session = createTroubleshootingSession({
       id: body.id,
@@ -43,8 +41,5 @@ export async function POST(request: Request) {
       updatedAt: body.updatedAt ?? new Date().toISOString(),
     } as never);
     return NextResponse.json(session, { status: 201 });
-  } catch (error) {
-    return jsonErrorResponse(error);
-  }
+  });
 }
-

@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Grid2x2Plus, Layers3, Plus, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-import type { DiagramMeta } from "@/lib/types";
+import type { Diagram, DiagramMeta } from "@/lib/types";
 import { deleteDiagram, loadDiagrams, saveDiagram } from "@/lib/storage";
+import { createEmptyDiagramDocument } from "@planview/domain";
 
 function formatUpdatedAt(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
@@ -35,22 +36,15 @@ export default function DiagramsListPage() {
     try {
       const id = uuidv4();
       const now = new Date().toISOString();
-      await saveDiagram({
-        id,
-        name: newName.trim(),
-        description: newDesc.trim(),
-        projectId: null,
-        createdAt: now,
-        updatedAt: now,
-        revision: 1,
-        nodeCount: 0,
-        edgeCount: 0,
-        sessionCount: 0,
-        openSessionCount: 0,
-        nodes: [],
-        edges: [],
-        mermaidCode: "graph TD\n",
-      });
+      await saveDiagram(
+        createEmptyDiagramDocument({
+          id,
+          name: newName.trim(),
+          description: newDesc.trim(),
+          mermaidCode: "graph TD\n",
+          createdAt: now,
+        }) as Diagram
+      );
       router.push(`/diagrams/${id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create diagram";

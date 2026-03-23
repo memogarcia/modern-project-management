@@ -28,11 +28,6 @@ const require = createRequire(import.meta.url);
 const Database = require("better-sqlite3") as typeof import("better-sqlite3");
 const DatabaseConstructor =
   ((Database as unknown as { default?: typeof Database }).default ?? Database) as typeof Database;
-const betterSqlitePackagePath = require.resolve("better-sqlite3/package.json");
-const betterSqliteNativeBindingPath = path.join(
-  path.dirname(betterSqlitePackagePath),
-  "build/Release/better_sqlite3.node"
-);
 
 export type PlanViewDatabase = BetterSqlite3.Database;
 type BetterSqliteDatabase = PlanViewDatabase;
@@ -513,9 +508,7 @@ export function getPlanViewDb(): BetterSqliteDatabase {
   ensureDir(path.dirname(dbPath));
   ensureDir(resolvePlanViewArtifactsDir());
 
-  singletonDb = new DatabaseConstructor(dbPath, {
-    nativeBinding: betterSqliteNativeBindingPath,
-  });
+  singletonDb = new DatabaseConstructor(dbPath);
   singletonDb.pragma("journal_mode = WAL");
   singletonDb.pragma("foreign_keys = ON");
   singletonDb.pragma("busy_timeout = 5000");
@@ -722,21 +715,16 @@ export function getPlanViewDiagramById(id: string, db = getPlanViewDb()): Diagra
   return hydrateDiagramDocument(row, `diagram ${id}`);
 }
 
-type DiagramWriteInput = {
-  id: string;
-  projectId?: string | null;
-  name: string;
-  description: string;
-  mermaidCode: string;
-  nodes: DiagramDocument["nodes"];
-  edges: DiagramDocument["edges"];
-  createdAt: string;
+export type DiagramSaveInput = Pick<
+  DiagramDocument,
+  "id" | "projectId" | "name" | "description" | "mermaidCode" | "nodes" | "edges" | "createdAt"
+> & {
   expectedRevision?: number;
 };
 
 function persistDiagramDocument(
   db: BetterSqliteDatabase,
-  input: DiagramWriteInput
+  input: DiagramSaveInput
 ): DiagramDocument {
   assertMermaidIsSupported(input.mermaidCode);
 
@@ -804,7 +792,7 @@ function persistDiagramDocument(
 }
 
 export function savePlanViewDiagram(
-  input: DiagramWriteInput,
+  input: DiagramSaveInput,
   db = getPlanViewDb()
 ): DiagramDocument {
   try {

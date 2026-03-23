@@ -35,30 +35,11 @@ export function getDiagramById(id: string): Diagram | null {
 export function upsertDiagram(
   diagram: Diagram & { expectedRevision?: number }
 ): Diagram {
-  return savePlanViewDiagram(
-    {
-      id: diagram.id,
-      projectId: diagram.projectId,
-      name: diagram.name,
-      description: diagram.description ?? "",
-      mermaidCode: diagram.mermaidCode ?? "graph TD\n",
-      nodes: diagram.nodes as never[],
-      edges: diagram.edges as never[],
-      createdAt: diagram.createdAt,
-      expectedRevision: diagram.expectedRevision ?? diagram.revision,
-    },
-    getDb()
-  ) as Diagram;
+  return savePlanViewDiagram(diagram as never, getDb()) as Diagram;
 }
 
 export function deleteDiagram(id: string): boolean {
   return deletePlanViewDiagram(id, getDb());
-}
-
-export function listDiagramsFull(): Diagram[] {
-  return listPlanViewDiagrams(getDb())
-    .map((diagram) => getPlanViewDiagramById(diagram.id, getDb()))
-    .filter((diagram): diagram is NonNullable<typeof diagram> => Boolean(diagram)) as Diagram[];
 }
 
 export const updateDiagramNodeDetails = updatePlanViewNodeMetadata;

@@ -1,8 +1,7 @@
 import fs from "node:fs/promises";
 import { NextResponse } from "next/server";
 import { getArtifactById } from "@/lib/db.server";
-import { jsonErrorResponse } from "@/lib/api";
-import { SAFE_ENTITY_ID_RE } from "@planview/validation";
+import { assertSafeEntityId, withApiErrorHandling } from "@/lib/api";
 
 function buildContentDisposition(fileName: string): string {
   const safeFileName = fileName.replace(/["\r\n]/g, "_");
@@ -13,11 +12,9 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
+  return withApiErrorHandling(async () => {
     const { id } = await params;
-    if (!SAFE_ENTITY_ID_RE.test(id)) {
-      return NextResponse.json({ error: "Invalid artifact id" }, { status: 400 });
-    }
+    assertSafeEntityId(id, "artifact id");
 
     const artifact = getArtifactById(id);
     if (!artifact) {
@@ -34,7 +31,5 @@ export async function GET(
         "Cache-Control": "private, max-age=60",
       },
     });
-  } catch (error) {
-    return jsonErrorResponse(error);
-  }
+  });
 }

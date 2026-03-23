@@ -9,18 +9,7 @@ import type {
   TroubleshootingSearchHit,
   TroubleshootingSession,
 } from "@/lib/types";
-
-async function readErrorMessage(response: Response): Promise<string> {
-  try {
-    const data = (await response.json()) as { error?: string };
-    if (typeof data?.error === "string" && data.error) {
-      return data.error;
-    }
-  } catch {
-    // ignore
-  }
-  return `${response.status} ${response.statusText}`.trim();
-}
+import { buildQueryString, requestJson, requestOptionalJson, requestVoid } from "@/lib/request";
 
 export async function updateNodeMetadata(
   diagramId: string,
@@ -28,14 +17,11 @@ export async function updateNodeMetadata(
   metadata: DiagramNodeMetadata,
   expectedRevision?: number
 ): Promise<void> {
-  const response = await fetch(`/api/diagrams/${diagramId}/nodes/${nodeId}`, {
+  return requestVoid(`/api/diagrams/${diagramId}/nodes/${nodeId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ metadata, expectedRevision }),
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
 }
 
 export async function updateEdgeMetadata(
@@ -44,14 +30,11 @@ export async function updateEdgeMetadata(
   metadata: DiagramEdgeMetadata,
   expectedRevision?: number
 ): Promise<void> {
-  const response = await fetch(`/api/diagrams/${diagramId}/edges/${edgeId}`, {
+  return requestVoid(`/api/diagrams/${diagramId}/edges/${edgeId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ metadata, expectedRevision }),
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
 }
 
 export async function listInvestigations(filters?: {
@@ -60,26 +43,18 @@ export async function listInvestigations(filters?: {
   edgeId?: string;
   q?: string;
 }): Promise<TroubleshootingSession[]> {
-  const searchParams = new URLSearchParams();
-  if (filters?.diagramId) searchParams.set("diagramId", filters.diagramId);
-  if (filters?.nodeId) searchParams.set("nodeId", filters.nodeId);
-  if (filters?.edgeId) searchParams.set("edgeId", filters.edgeId);
-  if (filters?.q) searchParams.set("q", filters.q);
-
-  const response = await fetch(`/api/investigations?${searchParams.toString()}`);
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as TroubleshootingSession[];
+  return requestJson<TroubleshootingSession[]>(
+    `/api/investigations${buildQueryString({
+      diagramId: filters?.diagramId,
+      nodeId: filters?.nodeId,
+      edgeId: filters?.edgeId,
+      q: filters?.q,
+    })}`
+  );
 }
 
 export async function getInvestigation(id: string): Promise<TroubleshootingSession | null> {
-  const response = await fetch(`/api/investigations/${id}`);
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as TroubleshootingSession;
+  return requestOptionalJson<TroubleshootingSession>(`/api/investigations/${id}`);
 }
 
 export async function createInvestigation(
@@ -92,15 +67,11 @@ export async function createInvestigation(
     updatedAt?: string;
   }
 ): Promise<TroubleshootingSession> {
-  const response = await fetch("/api/investigations", {
+  return requestJson<TroubleshootingSession>("/api/investigations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as TroubleshootingSession;
 }
 
 export async function patchInvestigation(
@@ -120,15 +91,11 @@ export async function patchInvestigation(
     >
   >
 ): Promise<TroubleshootingSession> {
-  const response = await fetch(`/api/investigations/${id}`, {
+  return requestJson<TroubleshootingSession>(`/api/investigations/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as TroubleshootingSession;
 }
 
 export async function appendInvestigationTimelineEntry(
@@ -138,15 +105,11 @@ export async function appendInvestigationTimelineEntry(
     createdAt?: string;
   }
 ): Promise<SessionTimelineEntry> {
-  const response = await fetch(`/api/investigations/${id}/timeline`, {
+  return requestJson<SessionTimelineEntry>(`/api/investigations/${id}/timeline`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(entry),
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as SessionTimelineEntry;
 }
 
 export async function appendInvestigationComment(
@@ -157,15 +120,11 @@ export async function appendInvestigationComment(
     updatedAt?: string;
   }
 ): Promise<SessionComment> {
-  const response = await fetch(`/api/investigations/${id}/comments`, {
+  return requestJson<SessionComment>(`/api/investigations/${id}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(comment),
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as SessionComment;
 }
 
 export async function appendInvestigationCommand(
@@ -175,41 +134,32 @@ export async function appendInvestigationCommand(
     createdAt?: string;
   }
 ): Promise<SessionCommand> {
-  const response = await fetch(`/api/investigations/${id}/commands`, {
+  return requestJson<SessionCommand>(`/api/investigations/${id}/commands`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(command),
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as SessionCommand;
 }
 
-export async function extractPattern(id: string, payload: {
-  title: string;
-  summary: string;
-  symptom: string;
-  resolution: string;
-  tags: string[];
-}): Promise<KnowledgePattern> {
-  const response = await fetch(`/api/investigations/${id}/pattern`, {
+export async function extractPattern(
+  id: string,
+  payload: {
+    title: string;
+    summary: string;
+    symptom: string;
+    resolution: string;
+    tags: string[];
+  }
+): Promise<KnowledgePattern> {
+  return requestJson<KnowledgePattern>(`/api/investigations/${id}/pattern`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as KnowledgePattern;
 }
 
 export async function listPatterns(): Promise<KnowledgePattern[]> {
-  const response = await fetch("/api/patterns");
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as KnowledgePattern[];
+  return requestJson<KnowledgePattern[]>("/api/patterns");
 }
 
 export async function searchTroubleshootingMemory(query: {
@@ -219,16 +169,15 @@ export async function searchTroubleshootingMemory(query: {
   edgeId?: string;
   limit?: number;
 }): Promise<TroubleshootingSearchHit[]> {
-  const searchParams = new URLSearchParams({ q: query.q });
-  if (query.diagramId) searchParams.set("diagramId", query.diagramId);
-  if (query.nodeId) searchParams.set("nodeId", query.nodeId);
-  if (query.edgeId) searchParams.set("edgeId", query.edgeId);
-  if (query.limit) searchParams.set("limit", String(query.limit));
-  const response = await fetch(`/api/search?${searchParams.toString()}`);
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as TroubleshootingSearchHit[];
+  return requestJson<TroubleshootingSearchHit[]>(
+    `/api/search${buildQueryString({
+      q: query.q,
+      diagramId: query.diagramId,
+      nodeId: query.nodeId,
+      edgeId: query.edgeId,
+      limit: query.limit,
+    })}`
+  );
 }
 
 export async function uploadArtifact(payload: {
@@ -245,12 +194,8 @@ export async function uploadArtifact(payload: {
   if (payload.label) formData.set("label", payload.label);
   formData.set("file", payload.file);
 
-  const response = await fetch("/api/artifacts", {
+  return requestJson<ArtifactReference>("/api/artifacts", {
     method: "POST",
     body: formData,
   });
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
-  }
-  return (await response.json()) as ArtifactReference;
 }

@@ -297,8 +297,9 @@ export function deleteProject(id: string): boolean {
 // ─── Diagram CRUD ────────────────────────────────────────────────────
 
 export function listDiagrams(): Diagram[] {
-  return listPlanViewDiagrams(getDb())
-    .map((diagram) => getPlanViewDiagramById(diagram.id, getDb()))
+  const db = getDb();
+  return listPlanViewDiagrams(db)
+    .map((diagram) => getPlanViewDiagramById(diagram.id, db))
     .filter((diagram): diagram is Diagram => Boolean(diagram));
 }
 
@@ -307,20 +308,7 @@ export function getDiagramById(id: string): Diagram | null {
 }
 
 export function upsertDiagram(diagram: Diagram & { expectedRevision?: number }): Diagram {
-  return savePlanViewDiagram(
-    {
-      id: diagram.id,
-      projectId: diagram.projectId,
-      name: diagram.name,
-      description: diagram.description ?? "",
-      mermaidCode: diagram.mermaidCode ?? "graph TD\n",
-      nodes: diagram.nodes as never[],
-      edges: diagram.edges as never[],
-      createdAt: diagram.createdAt,
-      expectedRevision: diagram.expectedRevision ?? diagram.revision,
-    },
-    getDb()
-  ) as Diagram;
+  return savePlanViewDiagram(diagram, getDb()) as Diagram;
 }
 
 export function deleteDiagram(id: string): boolean {

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { saveArtifactFile } from "@/lib/db.server";
-import { jsonErrorResponse } from "@/lib/api";
+import { withApiErrorHandling } from "@/lib/api";
 import { artifactOwnerSchema } from "@planview/validation";
 
 const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  try {
+  return withApiErrorHandling(async () => {
     const formData = await request.formData();
     const rawOwner = {
       ownerType: formData.get("ownerType"),
@@ -50,7 +50,5 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(artifact, { status: 201 });
-  } catch (error) {
-    return jsonErrorResponse(error);
-  }
+  });
 }

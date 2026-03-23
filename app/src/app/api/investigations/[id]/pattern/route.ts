@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
 import { extractKnowledgePattern, getTroubleshootingSessionById } from "@/lib/db.server";
-import { jsonErrorResponse, parseJsonBody } from "@/lib/api";
-import { SAFE_ENTITY_ID_RE, patternExtractionSchema } from "@planview/validation";
+import { assertSafeEntityId, parseJsonBody, withApiErrorHandling } from "@/lib/api";
+import { patternExtractionSchema } from "@planview/validation";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
+  return withApiErrorHandling(async () => {
     const { id } = await params;
-    if (!SAFE_ENTITY_ID_RE.test(id)) {
-      return NextResponse.json({ error: "Invalid investigation id" }, { status: 400 });
-    }
+    assertSafeEntityId(id, "investigation id");
     const session = getTroubleshootingSessionById(id);
     if (!session) {
       return NextResponse.json({ error: "Investigation not found" }, { status: 404 });
@@ -27,7 +25,5 @@ export async function POST(
       linkedEdgeIds: session.linkedEdgeIds,
     });
     return NextResponse.json(pattern, { status: 201 });
-  } catch (error) {
-    return jsonErrorResponse(error);
-  }
+  });
 }

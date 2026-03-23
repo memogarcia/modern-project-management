@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError, type ZodTypeAny, type output as ZodOutput } from "zod";
 import { asPlanViewError, PlanViewError } from "@planview/errors";
+import { SAFE_ENTITY_ID_RE } from "@planview/validation";
 
 export async function parseJsonBody<TSchema extends ZodTypeAny>(
   request: Request,
@@ -16,6 +17,26 @@ export async function parseJsonBody<TSchema extends ZodTypeAny>(
   }
 
   return schema.parse(body);
+}
+
+export function assertSafeEntityId(id: string, label: string): void {
+  if (!SAFE_ENTITY_ID_RE.test(id)) {
+    throw new PlanViewError("invalid_entity_id", `Invalid ${label}`, { status: 400 });
+  }
+}
+
+export function assertSafeEntityIds(entries: Array<{ id: string; label: string }>): void {
+  for (const entry of entries) {
+    assertSafeEntityId(entry.id, entry.label);
+  }
+}
+
+export async function withApiErrorHandling(handler: () => Promise<Response>): Promise<Response> {
+  try {
+    return await handler();
+  } catch (error) {
+    return jsonErrorResponse(error);
+  }
 }
 
 export function jsonErrorResponse(error: unknown): NextResponse {

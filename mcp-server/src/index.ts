@@ -27,6 +27,7 @@ import {
   saveArtifactFile as dbSaveArtifactFile,
 } from "./db.js";
 import type { Diagram } from "./types.js";
+import { createEmptyDiagramDocument } from "../../shared/planview/domain.js";
 import { mermaidToFlow } from "../../shared/planview/mermaid.js";
 import {
   edgeMetadataSchema,
@@ -47,31 +48,6 @@ const server = new McpServer({
   name: "planview",
   version: "2.0.0",
 });
-
-function createEmptyDiagram(
-  id: string,
-  name: string,
-  description: string,
-  mermaidCode: string,
-  createdAt: string
-): Diagram {
-  return {
-    id,
-    projectId: null,
-    name,
-    description,
-    revision: 1,
-    createdAt,
-    updatedAt: createdAt,
-    nodeCount: 0,
-    edgeCount: 0,
-    sessionCount: 0,
-    openSessionCount: 0,
-    mermaidCode,
-    nodes: [],
-    edges: [],
-  };
-}
 
 function escapeMermaidQuotedText(value: string): string {
   return value
@@ -185,7 +161,13 @@ server.registerTool("create_diagram", {
   annotations: { readOnlyHint: false, destructiveHint: false },
 }, async ({ name, description, mermaidCode }) => {
     const now = new Date().toISOString();
-    const diagram = createEmptyDiagram(uuidv4(), name, description ?? "", mermaidCode, now);
+    const diagram = createEmptyDiagramDocument({
+      id: uuidv4(),
+      name,
+      description: description ?? "",
+      mermaidCode,
+      createdAt: now,
+    });
     dbSaveDiagram(diagram);
     return {
       content: [
@@ -849,7 +831,13 @@ server.registerTool("create_database_schema", {
 
     const mermaidCode = lines.join("\n") + "\n";
 
-    const diagram = createEmptyDiagram(uuidv4(), name, description ?? "", mermaidCode, now);
+    const diagram = createEmptyDiagramDocument({
+      id: uuidv4(),
+      name,
+      description: description ?? "",
+      mermaidCode,
+      createdAt: now,
+    });
     dbSaveDiagram(diagram);
     return {
       content: [

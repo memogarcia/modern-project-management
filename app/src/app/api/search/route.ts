@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { searchTroubleshootingMemory } from "@/lib/db.server";
-import { jsonErrorResponse } from "@/lib/api";
+import { withApiErrorHandling } from "@/lib/api";
 import { searchQuerySchema } from "@planview/validation";
 
 export async function GET(request: Request) {
-  try {
+  return withApiErrorHandling(async () => {
     const { searchParams } = new URL(request.url);
     const query = searchQuerySchema.parse({
       q: searchParams.get("q") ?? "",
@@ -15,7 +15,5 @@ export async function GET(request: Request) {
     });
     const results = searchTroubleshootingMemory(query);
     return NextResponse.json(results);
-  } catch (error) {
-    return jsonErrorResponse(error);
-  }
+  });
 }

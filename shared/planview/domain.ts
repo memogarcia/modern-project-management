@@ -162,6 +162,31 @@ export interface DiagramDocument extends DiagramSummary {
   warnings?: string[];
 }
 
+export function createEmptyDiagramDocument(input: {
+  id: string;
+  name: string;
+  description: string;
+  mermaidCode: string;
+  createdAt: string;
+}): DiagramDocument {
+  return {
+    id: input.id,
+    projectId: null,
+    name: input.name,
+    description: input.description,
+    revision: 1,
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    nodeCount: 0,
+    edgeCount: 0,
+    sessionCount: 0,
+    openSessionCount: 0,
+    mermaidCode: input.mermaidCode,
+    nodes: [],
+    edges: [],
+  };
+}
+
 export interface SessionTimelineEntry {
   id: string;
   kind: TimelineEntryKind;
