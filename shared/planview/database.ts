@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import type BetterSqlite3 from "better-sqlite3";
 import {
   type ArtifactReference,
   type DiagramDocument,
@@ -33,7 +34,7 @@ const betterSqliteNativeBindingPath = path.join(
   "build/Release/better_sqlite3.node"
 );
 
-export type PlanViewDatabase = Database.Database;
+export type PlanViewDatabase = BetterSqlite3.Database;
 type BetterSqliteDatabase = PlanViewDatabase;
 
 type SessionRow = {

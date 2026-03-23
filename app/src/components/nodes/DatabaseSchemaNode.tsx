@@ -1,16 +1,16 @@
 "use client";
 
-import { memo, useState, useRef, useEffect, useCallback, type CSSProperties } from "react";
-import { Handle, Position, type NodeProps, type Node, useReactFlow } from "@xyflow/react";
-import type { DatabaseSchemaNodeData, SchemaColumn } from "@/lib/types";
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { Handle, Position, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import ShapeIcon from "@/components/ShapeIcon";
+import type { DatabaseSchemaNodeData, SchemaColumn } from "@/lib/types";
 
 type DatabaseSchemaNodeType = Node<DatabaseSchemaNodeData, "databaseSchemaNode">;
 
 const constraintBadge: Record<string, { label: string; color: string }> = {
-  primary: { label: "PK", color: "#f59e0b" },
-  foreign: { label: "FK", color: "#3b82f6" },
-  unique: { label: "UQ", color: "#8b5cf6" },
+  primary: { label: "PK", color: "#e58f12" },
+  foreign: { label: "FK", color: "#4262ff" },
+  unique: { label: "UQ", color: "#8a63ff" },
   nullable: { label: "N", color: "#6b7280" },
 };
 
@@ -33,60 +33,56 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
       updateNodeData(id, { label: trimmed });
     }
     setEditing(false);
-  }, [editValue, data.label, id, updateNodeData]);
+  }, [data.label, editValue, id, updateNodeData]);
 
   const handleDoubleClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
+    (event: React.MouseEvent) => {
+      event.stopPropagation();
       setEditValue(data.label);
       setEditing(true);
     },
-    [data.label],
+    [data.label]
   );
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") commitRename();
-      else if (e.key === "Escape") setEditing(false);
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Enter") commitRename();
+      else if (event.key === "Escape") setEditing(false);
     },
-    [commitRename],
+    [commitRename]
   );
 
   const columns: SchemaColumn[] = data.schema ?? [];
 
   const containerStyle: CSSProperties = {
-    minWidth: 220,
-    background: "var(--panel-bg, #ffffff)",
-    border: `2px solid ${selected ? "var(--accent, #4262ff)" : "rgba(79, 70, 229, 0.3)"}`,
-    borderRadius: "10px",
+    minWidth: 240,
     overflow: "hidden",
-    boxShadow: selected
-      ? "var(--node-shadow-selected)"
-      : "var(--node-shadow)",
-    transition: "box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease",
-    fontSize: "12px",
-    color: "var(--foreground, #1e293b)",
+    borderRadius: 22,
+    border: `1.5px solid ${selected ? "var(--accent)" : "color-mix(in srgb, var(--accent) 18%, var(--border))"}`,
+    background: "var(--surface-raised)",
+    boxShadow: selected ? "var(--node-shadow-selected)" : "var(--node-shadow)",
   };
 
   const headerStyle: CSSProperties = {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
-    padding: "8px 12px",
-    background: "#4f46e5",
+    gap: 10,
+    padding: "14px 16px",
+    background: "linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white) 0%, var(--accent) 100%)",
     color: "#ffffff",
     fontWeight: 700,
-    fontSize: "13px",
+    fontSize: 14,
+    letterSpacing: "-0.02em",
     cursor: editing ? "text" : "grab",
   };
 
-  const rowStyle = (idx: number): CSSProperties => ({
+  const rowStyle = (index: number): CSSProperties => ({
     display: "flex",
     alignItems: "center",
-    padding: "4px 12px",
-    gap: "8px",
-    background: idx % 2 === 0 ? "var(--surface, rgba(0,0,0,0.02))" : "transparent",
-    borderTop: idx === 0 ? "1px solid var(--border, rgba(0,0,0,0.05))" : "none",
+    gap: 10,
+    padding: "8px 14px",
+    background: index % 2 === 0 ? "color-mix(in srgb, var(--accent) 3%, var(--surface-raised))" : "transparent",
+    borderTop: index === 0 ? "1px solid color-mix(in srgb, var(--accent) 12%, var(--border))" : "none",
   });
 
   const targetHandleStyle: CSSProperties = {
@@ -106,26 +102,38 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
       <Handle type="source" id="top" position={Position.Top} style={{ width: 8, height: 8 }} />
       <Handle type="source" id="left" position={Position.Left} style={{ width: 8, height: 8 }} />
 
-      {/* Header */}
       <div style={headerStyle} onDoubleClick={handleDoubleClick}>
-        <ShapeIcon type="database" size={16} color="#fff" strokeWidth={1.5} />
+        <div
+          style={{
+            display: "flex",
+            width: 28,
+            height: 28,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.16)",
+          }}
+        >
+          <ShapeIcon type="database" size={16} color="#fff" strokeWidth={1.5} />
+        </div>
+
         {editing ? (
           <input
             ref={inputRef}
             value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
+            onChange={(event) => setEditValue(event.target.value)}
             onBlur={commitRename}
             onKeyDown={handleKeyDown}
             style={{
-              fontWeight: 700,
-              fontSize: "13px",
-              color: "#fff",
-              background: "rgba(255,255,255,0.15)",
-              border: "1px solid rgba(255,255,255,0.3)",
-              borderRadius: "4px",
-              padding: "1px 6px",
-              outline: "none",
               width: "100%",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.28)",
+              background: "rgba(255,255,255,0.14)",
+              padding: "6px 8px",
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 700,
+              outline: "none",
             }}
           />
         ) : (
@@ -133,44 +141,45 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
         )}
       </div>
 
-      {/* Columns */}
       {columns.length > 0 ? (
-        <div style={{ padding: "4px 0" }}>
-          {columns.map((col, idx) => (
-            <div key={col.name} style={rowStyle(idx)}>
-              {col.constraint && constraintBadge[col.constraint] && (
+        <div style={{ padding: "6px 0" }}>
+          {columns.map((column, index) => (
+            <div key={column.name} style={rowStyle(index)}>
+              {column.constraint && constraintBadge[column.constraint] && (
                 <span
                   style={{
-                    fontSize: "9px",
-                    fontWeight: 700,
-                    padding: "1px 4px",
-                    borderRadius: "3px",
-                    background: constraintBadge[col.constraint].color,
-                    color: "#fff",
                     flexShrink: 0,
+                    borderRadius: 999,
+                    background: constraintBadge[column.constraint].color,
+                    color: "#fff",
+                    padding: "2px 6px",
+                    fontSize: 9,
+                    fontWeight: 800,
+                    letterSpacing: "0.08em",
                   }}
                 >
-                  {constraintBadge[col.constraint].label}
+                  {constraintBadge[column.constraint].label}
                 </span>
               )}
               <span
                 style={{
                   flex: 1,
-                  fontWeight: col.constraint === "primary" ? 600 : 400,
-                  color: "var(--foreground, #1e293b)",
+                  color: "var(--foreground)",
+                  fontWeight: column.constraint === "primary" ? 700 : 500,
+                  fontSize: 12,
                 }}
               >
-                {col.name}
+                {column.name}
               </span>
               <span
                 style={{
-                  color: "var(--text-muted, #64748b)",
-                  fontSize: "11px",
-                  fontFamily: "monospace",
                   flexShrink: 0,
+                  color: "var(--text-muted)",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  fontSize: 11,
                 }}
               >
-                {col.type}
+                {column.type}
               </span>
             </div>
           ))}
@@ -178,10 +187,10 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
       ) : (
         <div
           style={{
-            padding: "12px",
-            color: "var(--text-muted, #64748b)",
+            padding: "16px",
             textAlign: "center",
-            fontStyle: "italic",
+            fontSize: 12,
+            color: "var(--text-muted)",
           }}
         >
           No columns defined

@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Sidebar } from "@/components/Sidebar";
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-ui",
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "PlanView — Diagram-First Troubleshooting Memory",
@@ -17,13 +24,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased">
+      <body className={`${plusJakartaSans.variable} antialiased`}>
         <ThemeProvider>
-          <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+          <div className="planview-shell">
             <Suspense>
               <Sidebar />
             </Suspense>
-            <main style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", background: "var(--background)" }}>
+            <main className="planview-main">
               {children}
             </main>
           </div>

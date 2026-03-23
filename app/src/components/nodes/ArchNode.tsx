@@ -1,11 +1,10 @@
 "use client";
 
-import { memo, useState, useRef, useEffect, useCallback, type CSSProperties } from "react";
-import { Handle, Position, type NodeProps, type Node, useReactFlow } from "@xyflow/react";
-import type { ArchNodeData } from "@/lib/types";
-import { getShapeDef, getContrastTextColor } from "@/lib/types";
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { Handle, Position, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import ShapeIcon from "@/components/ShapeIcon";
 import { useTheme } from "@/components/ThemeProvider";
+import { getContrastTextColor, getShapeDef, type ArchNodeData } from "@/lib/types";
 
 type ArchNodeType = Node<ArchNodeData, "archNode">;
 
@@ -21,13 +20,11 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
   const [editValue, setEditValue] = useState(data.label);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Use custom colors from data if set, otherwise fall back to shape defaults
   const defaultBg = theme === "dark" ? shape.darkColor : shape.color;
   const nodeBg = data.color ?? defaultBg;
   const nodeBorder = data.borderColor ?? shape.borderColor;
   const isAnimated = data.animated ?? false;
-  const textColor = getContrastTextColor(nodeBg);
-  const textMutedColor = textColor === "#ffffff" ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.45)";
+  const badgeTextColor = getContrastTextColor(nodeBg);
   const displayLabel = formatDisplayText(data.label);
   const displayDescription = data.description ? formatDisplayText(data.description) : "";
 
@@ -44,57 +41,62 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
       updateNodeData(id, { label: trimmed });
     }
     setEditing(false);
-  }, [editValue, data.label, id, updateNodeData]);
+  }, [data.label, editValue, id, updateNodeData]);
 
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditValue(data.label);
-    setEditing(true);
-  }, [data.label]);
+  const handleDoubleClick = useCallback(
+    (event: React.MouseEvent) => {
+      event.stopPropagation();
+      setEditValue(data.label);
+      setEditing(true);
+    },
+    [data.label]
+  );
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      commitRename();
-    } else if (e.key === "Escape") {
-      setEditing(false);
-    }
-  }, [commitRename]);
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Enter") {
+        commitRename();
+      } else if (event.key === "Escape") {
+        setEditing(false);
+      }
+    },
+    [commitRename]
+  );
 
-  const borderRadius = shape.mermaidShape === "cylinder" ? "12px 12px 24px 24px" :
-    shape.mermaidShape === "stadium" ? "35px" :
-      shape.mermaidShape === "diamond" ? "8px" :
-        shape.mermaidShape === "hexagon" ? "4px" : "10px";
+  const borderRadius =
+    shape.mermaidShape === "cylinder"
+      ? "16px 16px 28px 28px"
+      : shape.mermaidShape === "stadium"
+        ? "999px"
+        : shape.mermaidShape === "diamond"
+          ? "22px"
+          : shape.mermaidShape === "hexagon"
+            ? "18px"
+            : "18px";
 
-  const innerHighlight = textColor === "#ffffff"
-    ? "inset 0 1px 0 0 rgba(255,255,255,0.08)"
-    : "inset 0 1px 0 0 rgba(255,255,255,0.5)";
-
-  const style: CSSProperties = {
-    background: `linear-gradient(180deg, ${nodeBg} 0%, color-mix(in srgb, ${nodeBg} 92%, black) 100%)`,
-    border: `1.5px solid ${selected ? "var(--accent, #3b82f6)" : nodeBorder}`,
-    borderRadius,
-    padding: "14px 20px",
+  const containerStyle: CSSProperties = {
     minWidth: shape.defaultWidth,
     minHeight: shape.defaultHeight,
     display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    boxShadow: selected
-      ? `var(--node-shadow-selected)`
-      : `var(--node-shadow), ${innerHighlight}`,
-    transition: "box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease",
+    alignItems: "stretch",
+    gap: 12,
+    padding: "14px",
+    borderRadius,
+    border: `1.5px solid ${selected ? "var(--accent)" : nodeBorder}`,
+    background:
+      theme === "dark"
+        ? `linear-gradient(180deg, color-mix(in srgb, ${nodeBg} 16%, #17253b) 0%, color-mix(in srgb, ${nodeBg} 8%, #101a2b) 100%)`
+        : `linear-gradient(180deg, color-mix(in srgb, ${nodeBg} 14%, white 86%) 0%, color-mix(in srgb, ${nodeBg} 8%, white 92%) 100%)`,
+    boxShadow: selected ? "var(--node-shadow-selected)" : "var(--node-shadow)",
     cursor: editing ? "text" : "grab",
-    transform: shape.mermaidShape === "diamond" ? "rotate(0deg)" : undefined,
-    backdropFilter: "blur(8px)",
+    transition: "box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease",
+    backdropFilter: "blur(10px)",
   };
 
   const handleStyle: CSSProperties = {
     width: 10,
     height: 10,
-    opacity: 0.4,
-    transition: "opacity 0.15s ease, width 0.15s ease, height 0.15s ease",
+    opacity: 0.42,
   };
 
   const targetHandleStyle: CSSProperties = {
@@ -104,7 +106,7 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
   };
 
   return (
-    <div style={style} onDoubleClick={handleDoubleClick} className={isAnimated ? "node-pulse-animation" : ""}>
+    <div style={containerStyle} onDoubleClick={handleDoubleClick} className={isAnimated ? "node-pulse-animation" : ""}>
       <Handle type="target" id="t-top" position={Position.Top} style={targetHandleStyle} />
       <Handle type="target" id="t-left" position={Position.Left} style={targetHandleStyle} />
       <Handle type="target" id="t-bottom" position={Position.Bottom} style={targetHandleStyle} />
@@ -112,79 +114,77 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
 
       <Handle type="source" id="top" position={Position.Top} style={handleStyle} />
       <Handle type="source" id="left" position={Position.Left} style={handleStyle} />
+
       <div
         style={{
-          lineHeight: 1,
-          filter: textColor === "#ffffff" ? "drop-shadow(0 1px 2px rgba(0,0,0,0.3))" : "none",
-          background: textColor === "#ffffff" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
-          borderRadius: "50%",
-          padding: "5px",
+          flexShrink: 0,
+          width: 40,
+          height: 40,
+          borderRadius: 14,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          background: nodeBg,
+          color: badgeTextColor,
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16)",
         }}
       >
-        <ShapeIcon
-          type={data.shapeType}
-          size={18}
-          color={textColor}
-          strokeWidth={1.5}
-        />
+        <ShapeIcon type={data.shapeType} size={18} color={badgeTextColor} strokeWidth={1.7} />
       </div>
-      {editing ? (
-        <input
-          ref={inputRef}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={commitRename}
-          onKeyDown={handleKeyDown}
-          style={{
-            fontWeight: 600,
-            fontSize: "13px",
-            color: textColor,
-            textAlign: "center",
-            background: textColor === "#ffffff" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.08)",
-            border: textColor === "#ffffff" ? "1px solid rgba(255,255,255,0.3)" : "1px solid rgba(0,0,0,0.15)",
-            borderRadius: "4px",
-            padding: "2px 6px",
-            outline: "none",
-            width: Math.max(60, shape.defaultWidth - 40),
-          }}
-        />
-      ) : (
-        <div
-          style={{
-            fontWeight: 600,
-            fontSize: "13px",
-            letterSpacing: "-0.01em",
-            color: textColor,
-            textAlign: "center",
-            lineHeight: 1.3,
-            maxWidth: shape.defaultWidth - 32,
-            whiteSpace: "pre-line",
-            overflowWrap: "anywhere",
-            wordBreak: "break-word",
-          }}
-        >
-          {displayLabel}
-        </div>
-      )}
-      {data.description && (
-        <div
-          style={{
-            fontSize: "10px",
-            color: textMutedColor,
-            textAlign: "center",
-            maxWidth: shape.defaultWidth - 32,
-            whiteSpace: "pre-line",
-            overflowWrap: "anywhere",
-            wordBreak: "break-word",
-            lineHeight: 1.25,
-          }}
-        >
-          {displayDescription}
-        </div>
-      )}
+
+      <div style={{ minWidth: 0, display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", gap: 4 }}>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={editValue}
+            onChange={(event) => setEditValue(event.target.value)}
+            onBlur={commitRename}
+            onKeyDown={handleKeyDown}
+            style={{
+              width: "100%",
+              borderRadius: 10,
+              border: "1px solid var(--border)",
+              background: "rgba(255,255,255,0.8)",
+              padding: "8px 10px",
+              fontSize: 14,
+              fontWeight: 700,
+              color: "var(--foreground)",
+              outline: "none",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              color: "var(--foreground)",
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.35,
+              letterSpacing: "-0.02em",
+              whiteSpace: "pre-line",
+              overflowWrap: "anywhere",
+              wordBreak: "break-word",
+            }}
+          >
+            {displayLabel}
+          </div>
+        )}
+
+        {data.description && (
+          <div
+            style={{
+              color: "var(--text-muted)",
+              fontSize: 11,
+              lineHeight: 1.45,
+              whiteSpace: "pre-line",
+              overflowWrap: "anywhere",
+              wordBreak: "break-word",
+            }}
+          >
+            {displayDescription}
+          </div>
+        )}
+      </div>
+
       <Handle type="source" id="bottom" position={Position.Bottom} style={handleStyle} />
       <Handle type="source" id="right" position={Position.Right} style={handleStyle} />
     </div>

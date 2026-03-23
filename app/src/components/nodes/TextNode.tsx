@@ -63,12 +63,12 @@ function TextNodeComponent({ id, data, selected }: NodeProps<TextNodeType>) {
   }, [cancel, commit]);
 
   const style: CSSProperties = {
-    padding: "6px 8px",
-    borderRadius: 6,
-    border: selected ? "1px solid var(--accent)" : "1px dashed transparent",
-    background: data.backgroundColor ?? "transparent",
+    padding: "10px 12px",
+    borderRadius: 18,
+    border: selected ? "1.5px solid var(--accent)" : "1px solid transparent",
+    background: data.backgroundColor ?? "rgba(255, 241, 184, 0.88)",
     color: data.color ?? "var(--foreground)",
-    boxShadow: selected ? "var(--node-shadow-selected)" : "none",
+    boxShadow: selected ? "var(--node-shadow-selected)" : "var(--node-shadow)",
     cursor: editing ? "text" : "grab",
     minWidth: 80,
     maxWidth: 420,
@@ -120,4 +120,3 @@ function TextNodeComponent({ id, data, selected }: NodeProps<TextNodeType>) {
 }
 
 export default memo(TextNodeComponent);
-

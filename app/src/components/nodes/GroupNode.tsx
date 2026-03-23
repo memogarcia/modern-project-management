@@ -1,16 +1,16 @@
 "use client";
 
-import { memo, useState, useRef, useEffect, useCallback, type CSSProperties } from "react";
-import { type NodeProps, type Node, useReactFlow, NodeResizer } from "@xyflow/react";
-import type { GroupNodeData } from "@/lib/types";
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { NodeResizer, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import { useTheme } from "@/components/ThemeProvider";
+import type { GroupNodeData } from "@/lib/types";
 
 type GroupNodeType = Node<GroupNodeData, "groupNode">;
 
-const LIGHT_DEFAULT_COLOR = "rgba(241, 245, 249, 0.5)"; // Slate 100 with opacity
-const DARK_DEFAULT_COLOR = "rgba(30, 41, 59, 0.5)"; // Slate 800 with opacity
-const LIGHT_DEFAULT_BORDER = "#94a3b8"; // Slate 400
-const DARK_DEFAULT_BORDER = "#64748b"; // Slate 500
+const LIGHT_DEFAULT_COLOR = "rgba(66, 98, 255, 0.08)";
+const DARK_DEFAULT_COLOR = "rgba(107, 132, 255, 0.1)";
+const LIGHT_DEFAULT_BORDER = "rgba(66, 98, 255, 0.42)";
+const DARK_DEFAULT_BORDER = "rgba(144, 163, 255, 0.46)";
 
 function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
   const { updateNodeData } = useReactFlow();
@@ -35,87 +35,95 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
       updateNodeData(id, { label: trimmed });
     }
     setEditing(false);
-  }, [editValue, data.label, id, updateNodeData]);
+  }, [data.label, editValue, id, updateNodeData]);
 
   const handleDoubleClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
+    (event: React.MouseEvent) => {
+      event.stopPropagation();
       setEditValue(data.label);
       setEditing(true);
     },
-    [data.label],
+    [data.label]
   );
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") commitRename();
-      else if (e.key === "Escape") setEditing(false);
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Enter") commitRename();
+      if (event.key === "Escape") setEditing(false);
     },
-    [commitRename],
+    [commitRename]
   );
 
   const containerStyle: CSSProperties = {
-    background: bgColor,
-    border: `1.5px dashed ${selected ? "var(--accent, #3b82f6)" : borderColor}`,
-    borderRadius: "16px",
     width: "100%",
     height: "100%",
-    minWidth: 200,
-    minHeight: 120,
+    minWidth: 220,
+    minHeight: 140,
     position: "relative",
-    boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.04), 0 1px 4px 0 rgba(0,0,0,0.06)`,
+    borderRadius: 28,
+    border: `1.5px dashed ${selected ? "var(--accent)" : borderColor}`,
+    background: `linear-gradient(180deg, ${bgColor} 0%, color-mix(in srgb, ${bgColor} 72%, transparent) 100%)`,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.28)",
+    backdropFilter: "blur(8px)",
   };
 
   const labelStyle: CSSProperties = {
     position: "absolute",
-    top: "8px",
-    left: "12px",
-    fontSize: "11px",
-    fontWeight: 600,
-    color: borderColor,
-    letterSpacing: "0.5px",
-    textTransform: "uppercase",
+    top: 14,
+    left: 16,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    border: `1px solid color-mix(in srgb, ${borderColor} 32%, transparent)`,
+    background: "var(--surface-raised)",
+    color: "var(--foreground)",
+    padding: "8px 14px",
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1.2,
+    letterSpacing: "-0.02em",
     pointerEvents: "auto",
-    background: `color-mix(in srgb, ${borderColor} 10%, transparent)`,
-    padding: "3px 10px",
-    borderRadius: "6px",
-    lineHeight: 1.4,
+    boxShadow: "0 10px 20px rgba(15, 23, 42, 0.08)",
   };
 
   return (
     <>
       <NodeResizer
         isVisible={selected}
-        minWidth={200}
-        minHeight={120}
+        minWidth={220}
+        minHeight={140}
         lineStyle={{ borderColor }}
-        handleStyle={{ width: 8, height: 8, borderColor }}
+        handleStyle={{ width: 10, height: 10, borderColor, background: "var(--surface-raised)" }}
       />
       <div style={containerStyle}>
-        <div
-          style={labelStyle}
-          onDoubleClick={handleDoubleClick}
-          className="drag-handle"
-        >
+        <div style={labelStyle} onDoubleClick={handleDoubleClick} className="drag-handle">
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 999,
+              background: borderColor,
+              flexShrink: 0,
+            }}
+          />
           {editing ? (
             <input
               ref={inputRef}
               value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
+              onChange={(event) => setEditValue(event.target.value)}
               onBlur={commitRename}
               onKeyDown={handleKeyDown}
               style={{
-                background: "transparent",
+                width: 140,
                 border: "none",
+                outline: "1px solid var(--accent)",
+                borderRadius: 8,
+                padding: "2px 6px",
+                background: "transparent",
                 color: "inherit",
                 fontSize: "inherit",
                 fontWeight: "inherit",
-                letterSpacing: "inherit",
-                textTransform: "inherit" as CSSProperties["textTransform"],
-                outline: "1px solid " + borderColor,
-                borderRadius: "3px",
-                padding: "1px 4px",
-                width: "120px",
               }}
             />
           ) : (

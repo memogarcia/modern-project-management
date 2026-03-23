@@ -2,10 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DiagramMeta } from "@/lib/types";
-import { loadDiagrams, deleteDiagram, saveDiagram } from "@/lib/storage";
+import { Grid2x2Plus, Layers3, Plus, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-import { Plus, Trash2, ArrowLeft, FileText } from "lucide-react";
+import type { DiagramMeta } from "@/lib/types";
+import { deleteDiagram, loadDiagrams, saveDiagram } from "@/lib/storage";
+
+function formatUpdatedAt(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export default function DiagramsListPage() {
   const router = useRouter();
@@ -16,12 +24,14 @@ export default function DiagramsListPage() {
   const [newDesc, setNewDesc] = useState("");
 
   useEffect(() => {
-    loadDiagrams().then(setDiagrams);
+    void loadDiagrams().then(setDiagrams);
   }, []);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
+
     setActionError(null);
+
     try {
       const id = uuidv4();
       const now = new Date().toISOString();
@@ -51,11 +61,11 @@ export default function DiagramsListPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this diagram?")) return;
+
     setActionError(null);
     try {
       await deleteDiagram(id);
-      const updated = await loadDiagrams();
-      setDiagrams(updated);
+      setDiagrams(await loadDiagrams());
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to delete diagram";
       setActionError(message);
@@ -64,91 +74,244 @@ export default function DiagramsListPage() {
   };
 
   return (
-    <div
-      style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        background: "var(--background)",
-        color: "var(--foreground)",
-        overflow: "hidden",
-      }}
-    >
-      {/* Top header bar — aligned with sidebar header */}
-      <div className="flex h-10 items-center border-b border-[var(--border)] px-4 shrink-0">
-        <span className="text-sm font-semibold text-[var(--foreground)]">Diagrams</span>
+    <div className="workspace-page">
+      <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-[var(--panel-border)] px-6">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
+            Workspace
+          </div>
+          <div className="mt-1 text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+            Diagrams
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-foreground)] shadow-[0_16px_30px_rgba(66,98,255,0.2)] transition-colors hover:bg-[var(--accent-hover)]"
+        >
+          <Plus size={18} />
+          New board
+        </button>
       </div>
 
-      {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div className="flex-1 overflow-y-auto px-6 pb-6 pt-5">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5">
+          {actionError && (
+            <div
+              role="alert"
+              className="rounded-2xl border px-4 py-3 text-sm font-medium"
+              style={{
+                borderColor: "color-mix(in srgb, var(--danger) 24%, var(--border))",
+                background: "color-mix(in srgb, var(--danger) 10%, var(--surface-raised))",
+                color: "var(--danger)",
+              }}
+            >
+              {actionError}
+            </div>
+          )}
 
-      {actionError && (
-        <div
-          role="alert"
-          style={{
-            padding: "10px 40px",
-            borderBottom: "1px solid var(--border)",
-            background: "color-mix(in srgb, var(--danger) 10%, var(--panel-bg))",
-            color: "var(--danger)",
-            fontSize: "13px",
-            fontWeight: 600,
-          }}
-        >
-          {actionError}
+          <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_360px]">
+            <div className="floating-panel rounded-[32px] px-6 py-6">
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                  <Layers3 size={14} className="text-[var(--accent)]" />
+                  Canvas-first flow
+                </div>
+                <h1 className="mt-4 text-[clamp(2rem,3vw,3rem)] font-semibold tracking-[-0.05em] text-[var(--foreground)]">
+                  Organize architecture work like a collaborative board, not a form.
+                </h1>
+                <p className="mt-3 max-w-xl text-sm leading-7 text-[var(--text-muted)]">
+                  Create boards, map systems visually, and keep Mermaid plus investigations beside the canvas instead of buried in separate tools.
+                </p>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3 text-sm text-[var(--text-muted)]">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
+                    Boards
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+                    {diagrams.length}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
+                    Right panel
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-[var(--foreground)]">
+                    Mermaid + investigations
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
+                    Shortcuts
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-[var(--foreground)]">
+                    Save, layout, group, export
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="floating-panel rounded-[32px] px-5 py-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
+                Quickstart
+              </div>
+              <div className="mt-3 text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+                Start a fresh board in three moves
+              </div>
+              <div className="mt-4 space-y-3">
+                {[
+                  "Create a board and name the system or incident you are mapping.",
+                  "Drop shapes from the left rail directly onto the canvas.",
+                  "Use the right dock to sync Mermaid text or attach an investigation.",
+                ].map((step, index) => (
+                  <div key={step} className="flex gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-xs font-semibold text-[var(--accent)]">
+                      {index + 1}
+                    </div>
+                    <div className="text-sm leading-6 text-[var(--text-muted)]">{step}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {diagrams.length === 0 ? (
+            <section className="floating-panel flex flex-col items-center rounded-[36px] px-8 py-16 text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-[var(--accent-soft)] text-[var(--accent)]">
+                <Grid2x2Plus size={34} />
+              </div>
+              <h2 className="mt-5 text-2xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">
+                No boards yet
+              </h2>
+              <p className="mt-2 max-w-md text-sm leading-7 text-[var(--text-muted)]">
+                Create your first board to start working with the new canvas layout and docked documentation workflow.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="mt-6 inline-flex h-11 items-center gap-2 rounded-2xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-foreground)] shadow-[0_16px_30px_rgba(66,98,255,0.2)] transition-colors hover:bg-[var(--accent-hover)]"
+              >
+                <Plus size={18} />
+                Create board
+              </button>
+            </section>
+          ) : (
+            <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {diagrams.map((diagram) => (
+                <article
+                  key={diagram.id}
+                  className="group floating-panel cursor-pointer rounded-[30px] p-4 transition-transform duration-150 hover:-translate-y-1"
+                  onClick={() => router.push(`/diagrams/${diagram.id}`)}
+                >
+                  <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <div className="rounded-[18px] border border-dashed border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[linear-gradient(180deg,rgba(66,98,255,0.05),transparent_55%),var(--canvas-bg)] p-4">
+                      <div className="grid gap-3">
+                        <div className="flex gap-3">
+                          <div className="h-14 flex-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]" />
+                          <div className="h-14 w-20 rounded-2xl border border-[var(--border)] bg-[var(--surface)]" />
+                        </div>
+                        <div className="flex gap-3">
+                          <div className="h-12 w-20 rounded-2xl border border-[var(--border)] bg-[var(--surface)]" />
+                          <div className="h-12 flex-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-2 pb-2 pt-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+                          {diagram.name}
+                        </h2>
+                        <p className="mt-1 line-clamp-2 min-h-[42px] text-sm leading-6 text-[var(--text-muted)]">
+                          {diagram.description || "Open the board to add Mermaid, investigations, and architecture notes."}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        title="Delete board"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-transparent text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[color:color-mix(in_srgb,var(--danger)_10%,var(--surface))] hover:text-[var(--danger)]"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDelete(diagram.id);
+                        }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                        Updated {formatUpdatedAt(diagram.updatedAt)}
+                      </span>
+                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                        {diagram.nodeCount} nodes
+                      </span>
+                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                        {diagram.edgeCount} edges
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Modern Create modal */}
       {showCreate && (
-        <div
-          className="edit-modal-overlay"
-          onClick={() => setShowCreate(false)}
-        >
+        <div className="edit-modal-overlay" onClick={() => setShowCreate(false)}>
           <div
             className="edit-modal"
-            style={{ width: "480px", maxWidth: "90vw" }}
-            onClick={(e) => e.stopPropagation()}
+            style={{ width: "520px", maxWidth: "92vw" }}
+            onClick={(event) => event.stopPropagation()}
           >
             <div className="edit-modal-header">
-              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600, letterSpacing: "-0.01em" }}>
-                Create New Diagram
-              </h2>
-              <button
-                className="edit-modal-close"
-                onClick={() => setShowCreate(false)}
-                aria-label="Close"
-              >
+              <div>
+                <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 700, letterSpacing: "-0.03em" }}>
+                  Create a new board
+                </h2>
+                <p style={{ margin: "6px 0 0", fontSize: "13px", color: "var(--text-muted)" }}>
+                  Start with an empty canvas and add structure as you go.
+                </p>
+              </div>
+              <button className="edit-modal-close" onClick={() => setShowCreate(false)} aria-label="Close">
                 ×
               </button>
             </div>
+
             <div className="edit-modal-body">
               <div className="edit-modal-field">
-                <label className="edit-modal-label">Name</label>
+                <label className="edit-modal-label">Board name</label>
                 <input
                   className="edit-modal-input"
                   value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Microservices Architecture"
+                  onChange={(event) => setNewName(event.target.value)}
+                  placeholder="e.g. Payment service incident map"
                   autoFocus
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  onKeyDown={(event) => event.key === "Enter" && handleCreate()}
                 />
               </div>
+
               <div className="edit-modal-field">
-                <label className="edit-modal-label">Description (optional)</label>
+                <label className="edit-modal-label">Description</label>
                 <input
                   className="edit-modal-input"
                   value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="Brief description of your diagram..."
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  onChange={(event) => setNewDesc(event.target.value)}
+                  placeholder="Optional context for the board"
+                  onKeyDown={(event) => event.key === "Enter" && handleCreate()}
                 />
               </div>
             </div>
+
             <div className="edit-modal-footer">
-              <button
-                className="edit-modal-btn edit-modal-btn-secondary"
-                onClick={() => setShowCreate(false)}
-              >
+              <button className="edit-modal-btn edit-modal-btn-secondary" onClick={() => setShowCreate(false)}>
                 Cancel
               </button>
               <button
@@ -156,223 +319,12 @@ export default function DiagramsListPage() {
                 onClick={handleCreate}
                 disabled={!newName.trim()}
               >
-                Create Diagram
+                Create board
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Diagram content */}
-      <main style={{ padding: "32px 40px", maxWidth: 1400, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}>
-              <FileText size={20} strokeWidth={2.5} style={{ color: "var(--accent)" }} />
-              All Diagrams
-            </h2>
-            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--text-muted)" }}>
-              Architecture diagrams with React Flow & Mermaid
-            </p>
-          </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{
-              padding: "8px 16px",
-              background: "var(--accent)",
-              color: "var(--accent-foreground)",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              transition: "all 0.15s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--accent-hover)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--accent)";
-            }}
-          >
-            <Plus size={16} strokeWidth={2.5} />
-            New Diagram
-          </button>
-        </div>
-        {diagrams.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "120px 20px",
-              color: "var(--text-muted)",
-            }}
-          >
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                margin: "0 auto 20px",
-                background: "var(--surface)",
-                borderRadius: 16,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 32,
-              }}
-            >
-              <FileText size={32} strokeWidth={1.5} style={{ color: "var(--text-subtle)" }} />
-            </div>
-            <h3 style={{ fontSize: "18px", marginBottom: "8px", fontWeight: 600, color: "var(--foreground)" }}>
-              No diagrams yet
-            </h3>
-            <p style={{ fontSize: "14px", color: "var(--text-muted)", marginBottom: 24 }}>
-              Create your first architecture diagram to get started
-            </p>
-            <button
-              onClick={() => setShowCreate(true)}
-              style={{
-                padding: "10px 20px",
-                background: "var(--accent)",
-                color: "var(--accent-foreground)",
-                border: "none",
-                borderRadius: "8px",
-                fontSize: "14px",
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <Plus size={18} strokeWidth={2.5} />
-              Create Diagram
-            </button>
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-              gap: "20px",
-            }}
-          >
-            {diagrams.map((d) => (
-              <div
-                key={d.id}
-                style={{
-                  background: "var(--panel-bg)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "12px",
-                  padding: "24px",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                  boxShadow: "var(--card-shadow)",
-                  position: "relative",
-                }}
-                onClick={() => router.push(`/diagrams/${d.id}`)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--accent)";
-                  e.currentTarget.style.boxShadow = "var(--card-shadow-hover)";
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)";
-                  e.currentTarget.style.boxShadow = "var(--card-shadow)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    marginBottom: "12px",
-                  }}
-                >
-                  <h3
-                    style={{
-                      margin: 0,
-                      fontSize: "16px",
-                      fontWeight: 600,
-                      letterSpacing: "-0.01em",
-                      color: "var(--foreground)",
-                      flex: 1,
-                    }}
-                  >
-                    {d.name}
-                  </h3>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(d.id);
-                    }}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "var(--text-subtle)",
-                      cursor: "pointer",
-                      padding: "6px",
-                      borderRadius: "6px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transition: "all 0.15s ease",
-                      marginLeft: 8,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "var(--danger)" + "15";
-                      e.currentTarget.style.color = "var(--danger)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "transparent";
-                      e.currentTarget.style.color = "var(--text-subtle)";
-                    }}
-                    title="Delete diagram"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-                {d.description && (
-                  <p
-                    style={{
-                      margin: "0 0 16px",
-                      fontSize: "13px",
-                      color: "var(--text-muted)",
-                      lineHeight: 1.5,
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {d.description}
-                  </p>
-                )}
-                <div
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--text-subtle)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  Updated{" "}
-                  {new Date(d.updatedAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </main>
-      </div>
     </div>
   );
 }

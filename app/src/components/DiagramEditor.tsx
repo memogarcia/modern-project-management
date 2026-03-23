@@ -1,31 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ReactFlow,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+import {
   Background,
-  Controls,
-  ConnectionMode,
-  MarkerType,
-  type ReactFlowInstance,
-  type NodeMouseHandler,
-  type EdgeMouseHandler,
-  type OnNodeDrag,
   BackgroundVariant,
-  useReactFlow,
+  ConnectionMode,
+  Controls,
+  MarkerType,
+  ReactFlow,
+  type EdgeMouseHandler,
   type InternalNode,
+  type NodeMouseHandler,
+  type OnNodeDrag,
+  useReactFlow,
 } from "@xyflow/react";
 import { PanelRightOpen } from "lucide-react";
-import { useDiagramStore } from "@/store/diagramStore";
-import { useTheme } from "@/components/ThemeProvider";
-import { nodeTypes } from "@/components/nodes";
-import ShapePalette from "@/components/ShapePalette";
 import MermaidPanel from "@/components/MermaidPanel";
-import TroubleshootingPanel from "@/components/TroubleshootingPanel";
-import Toolbar from "@/components/Toolbar";
 import NodeEditModal from "@/components/NodeEditModal";
 import EdgeEditModal from "@/components/EdgeEditModal";
-import type { ShapeType, ArchNode, ArchEdge } from "@/lib/types";
+import ShapePalette from "@/components/ShapePalette";
+import Toolbar from "@/components/Toolbar";
+import TroubleshootingPanel from "@/components/TroubleshootingPanel";
+import { useTheme } from "@/components/ThemeProvider";
+import { nodeTypes } from "@/components/nodes";
+import type { ArchEdge, ArchNode, ShapeType } from "@/lib/types";
+import { useDiagramStore } from "@/store/diagramStore";
 
 interface DiagramEditorProps {
   diagramId: string;
@@ -68,12 +75,10 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const sendBackward = useDiagramStore((s) => s.sendBackward);
   const { getInternalNode, getNodes, screenToFlowPosition, fitView } = useReactFlow();
 
-  // Modal state for editing nodes and edges
   const [editingNode, setEditingNode] = useState<ArchNode | null>(null);
   const [editingEdge, setEditingEdge] = useState<ArchEdge | null>(null);
   const [hasRequestedLoad, setHasRequestedLoad] = useState(false);
 
-  // ─── Resizable Mermaid panel ──────────────────────────────────────
   const widthStorageKey = "archdiagram.mermaid.width";
   const collapsedStorageKey = "archdiagram.mermaid.collapsed";
 
@@ -96,16 +101,18 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   useEffect(() => {
     try {
       const storedWidth = localStorage.getItem(widthStorageKey);
-      const parsed = storedWidth ? Number(storedWidth) : NaN;
-      if (Number.isFinite(parsed) && parsed >= 200 && parsed <= window.innerWidth * 0.8) {
+      const parsed = storedWidth ? Number(storedWidth) : Number.NaN;
+      if (Number.isFinite(parsed) && parsed >= 240 && parsed <= window.innerWidth * 0.8) {
         setPanelWidth(parsed);
         startWidthRef.current = parsed;
         lastExpandedWidthRef.current = parsed;
       }
-      const storedCollapsed = localStorage.getItem(collapsedStorageKey);
-      if (storedCollapsed === "1") setIsMermaidCollapsed(true);
+
+      if (localStorage.getItem(collapsedStorageKey) === "1") {
+        setIsMermaidCollapsed(true);
+      }
     } catch {
-      // ignore
+      // ignore localStorage failures in restricted environments.
     }
   }, []);
 
@@ -114,51 +121,49 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
     try {
       localStorage.setItem(collapsedStorageKey, collapsed ? "1" : "0");
     } catch {
-      // ignore
+      // ignore localStorage failures in restricted environments.
     }
     if (!collapsed) {
       setPanelWidth(lastExpandedWidthRef.current || 380);
     }
   }, []);
 
-  const onResizeStart = useCallback((e: React.MouseEvent) => {
-    if (isMermaidCollapsed) return;
-    e.preventDefault();
-    setIsDragging(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = panelWidth;
+  const onResizeStart = useCallback(
+    (event: ReactMouseEvent) => {
+      if (isMermaidCollapsed) return;
+      event.preventDefault();
+      setIsDragging(true);
+      startXRef.current = event.clientX;
+      startWidthRef.current = panelWidth;
 
-    const onMouseMove = (ev: MouseEvent) => {
-      const delta = startXRef.current - ev.clientX;
-      const newWidth = Math.min(
-        Math.max(startWidthRef.current + delta, 200),
-        window.innerWidth * 0.6,
-      );
-      setPanelWidth(newWidth);
-    };
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        const delta = startXRef.current - moveEvent.clientX;
+        const newWidth = Math.min(Math.max(startWidthRef.current + delta, 260), window.innerWidth * 0.56);
+        setPanelWidth(newWidth);
+      };
 
-    const onMouseUp = () => {
-      setIsDragging(false);
-      try {
-        localStorage.setItem(widthStorageKey, String(panelWidthRef.current));
-      } catch {
-        // ignore
-      }
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
+      const onMouseUp = () => {
+        setIsDragging(false);
+        try {
+          localStorage.setItem(widthStorageKey, String(panelWidthRef.current));
+        } catch {
+          // ignore localStorage failures in restricted environments.
+        }
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      };
 
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  }, [isMermaidCollapsed, panelWidth, widthStorageKey]);
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    [isMermaidCollapsed, panelWidth]
+  );
 
   useEffect(() => {
     setHasRequestedLoad(true);
     void loadDiagramFn(diagramId);
   }, [diagramId, loadDiagramFn]);
 
-  // Auto-parse mermaid → flow nodes when diagram has mermaid code but no nodes
-  // (e.g. diagrams created by the MCP server that only have mermaid code)
   useEffect(() => {
     if (isDiagramLoading || diagramLoadError) return;
     if (nodes.length === 0 && mermaidCode && mermaidCode.trim() !== "graph TD\n" && mermaidCode.trim() !== "graph TD") {
@@ -168,15 +173,13 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         });
       });
     }
-  }, [nodes.length, mermaidCode, syncMermaidToFlow, fitView, isDiagramLoading, diagramLoadError]);
+  }, [diagramLoadError, fitView, isDiagramLoading, mermaidCode, nodes.length, syncMermaidToFlow]);
 
-  // Auto-save on changes (debounced)
   useEffect(() => {
     const timer = setTimeout(() => persist(), 1000);
     return () => clearTimeout(timer);
-  }, [nodes, edges, mermaidCode, persist]);
+  }, [edges, mermaidCode, nodes, persist]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const isTextInput = (target: EventTarget | null) => {
       if (!target || !(target instanceof HTMLElement)) return false;
@@ -189,39 +192,36 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
 
     const isValidClipboardPayload = (value: unknown): value is { version: 1; nodes: unknown[]; edges: unknown[] } => {
       if (!value || typeof value !== "object") return false;
-      const v = value as { version?: unknown; nodes?: unknown; edges?: unknown };
-      return v.version === 1 && Array.isArray(v.nodes) && Array.isArray(v.edges);
+      const payload = value as { version?: unknown; nodes?: unknown; edges?: unknown };
+      return payload.version === 1 && Array.isArray(payload.nodes) && Array.isArray(payload.edges);
     };
 
-    const handler = (e: KeyboardEvent) => {
-      if (isTextInput(e.target)) return;
+    const handler = (event: KeyboardEvent) => {
+      if (isTextInput(event.target)) return;
 
-      // CMD+S / Ctrl+S → save diagram
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
+      if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+        event.preventDefault();
         persist();
         return;
       }
 
-      // CMD+Z / Ctrl+Z → undo (Shift → redo)
-      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
-        e.preventDefault();
-        if (e.shiftKey) redo();
+      if ((event.metaKey || event.ctrlKey) && event.key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
         else undo();
         return;
       }
-      // Ctrl+Y → redo (Windows/Linux)
-      if (e.ctrlKey && !e.metaKey && (e.key === "y" || e.key === "Y")) {
-        e.preventDefault();
+
+      if (event.ctrlKey && !event.metaKey && (event.key === "y" || event.key === "Y")) {
+        event.preventDefault();
         redo();
         return;
       }
 
-      // CMD+L / Ctrl+L → auto-layout (Shift → top-to-bottom)
-      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
-        e.preventDefault();
-        const direction = e.shiftKey ? "DOWN" : "RIGHT";
-        const closest = e.altKey;
+      if ((event.metaKey || event.ctrlKey) && event.key === "l") {
+        event.preventDefault();
+        const direction = event.shiftKey ? "DOWN" : "RIGHT";
+        const closest = event.altKey;
         void runAutoLayout(direction, closest ? "CLOSEST" : "ORIENTED").then(() => {
           requestAnimationFrame(() => {
             void fitView({ padding: 0.18, duration: 250 });
@@ -230,35 +230,32 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         return;
       }
 
-      // CMD+C / Ctrl+C → copy selected
-      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
-        e.preventDefault();
+      if ((event.metaKey || event.ctrlKey) && event.key === "c") {
+        event.preventDefault();
         const payload = copySelected();
         if (!payload) return;
         try {
           void navigator.clipboard?.writeText(JSON.stringify(payload));
         } catch {
-          // ignore
+          // ignore clipboard failures.
         }
         return;
       }
 
-      // CMD+X / Ctrl+X → cut selected
-      if ((e.metaKey || e.ctrlKey) && e.key === "x") {
-        e.preventDefault();
+      if ((event.metaKey || event.ctrlKey) && event.key === "x") {
+        event.preventDefault();
         const payload = cutSelected();
         if (!payload) return;
         try {
           void navigator.clipboard?.writeText(JSON.stringify(payload));
         } catch {
-          // ignore
+          // ignore clipboard failures.
         }
         return;
       }
 
-      // CMD+V / Ctrl+V → paste
-      if ((e.metaKey || e.ctrlKey) && e.key === "v") {
-        e.preventDefault();
+      if ((event.metaKey || event.ctrlKey) && event.key === "v") {
+        event.preventDefault();
         const fallbackPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
         const pos = lastPointerFlowPosRef.current ?? fallbackPos;
 
@@ -275,7 +272,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
               return;
             }
           } catch {
-            // ignore
+            // ignore clipboard failures.
           }
           pasteClipboard(pos);
         };
@@ -284,129 +281,139 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         return;
       }
 
-      // CMD+G / Ctrl+G → group selected nodes
-      if ((e.metaKey || e.ctrlKey) && e.key === "g" && !e.shiftKey) {
-        e.preventDefault();
+      if ((event.metaKey || event.ctrlKey) && event.key === "g" && !event.shiftKey) {
+        event.preventDefault();
         groupSelectedNodes();
         return;
       }
-      // CMD+Shift+G / Ctrl+Shift+G → ungroup selected group
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "G") {
-        e.preventDefault();
+
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === "G") {
+        event.preventDefault();
         ungroupSelectedNodes();
         return;
       }
-      // CMD+] / Ctrl+] → send to front; CMD+Shift+] → send forward one step
-      if ((e.metaKey || e.ctrlKey) && e.key === "]") {
-        e.preventDefault();
-        if (e.shiftKey) sendForward();
+
+      if ((event.metaKey || event.ctrlKey) && event.key === "]") {
+        event.preventDefault();
+        if (event.shiftKey) sendForward();
         else sendToFront();
         return;
       }
-      // CMD+[ / Ctrl+[ → send to back; CMD+Shift+[ → send backward one step
-      if ((e.metaKey || e.ctrlKey) && e.key === "[") {
-        e.preventDefault();
-        if (e.shiftKey) sendBackward();
+
+      if ((event.metaKey || event.ctrlKey) && event.key === "[") {
+        event.preventDefault();
+        if (event.shiftKey) sendBackward();
         else sendToBack();
         return;
       }
-      if (e.key === "Delete" || e.key === "Backspace") {
+
+      if (event.key === "Delete" || event.key === "Backspace") {
         deleteSelected();
       }
     };
+
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [deleteSelected, persist, undo, redo, runAutoLayout, fitView, groupSelectedNodes, ungroupSelectedNodes, sendToFront, sendToBack, sendForward, sendBackward, copySelected, cutSelected, pasteClipboard, screenToFlowPosition]);
+  }, [
+    copySelected,
+    cutSelected,
+    deleteSelected,
+    fitView,
+    groupSelectedNodes,
+    pasteClipboard,
+    persist,
+    redo,
+    runAutoLayout,
+    screenToFlowPosition,
+    sendBackward,
+    sendForward,
+    sendToBack,
+    sendToFront,
+    undo,
+    ungroupSelectedNodes,
+  ]);
 
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
   }, []);
 
   const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const type = e.dataTransfer.getData("application/archdiagram-shape") as ShapeType;
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const type = event.dataTransfer.getData("application/archdiagram-shape") as ShapeType;
       if (!type) return;
-      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      addNode(type, {
-        x: position.x,
-        y: position.y,
-      });
+
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      addNode(type, position);
     },
     [addNode, screenToFlowPosition]
   );
 
-  // Double-click on a node → open edit modal
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_event, node) => {
     setEditingNode(node as ArchNode);
   }, []);
 
-  // Double-click on an edge → open edit modal
   const onEdgeDoubleClick: EdgeMouseHandler = useCallback((_event, edge) => {
     setEditingEdge(edge as ArchEdge);
   }, []);
 
-  const handleNodeSave = useCallback((nodeId: string, data: Partial<ArchNode["data"]>) => {
-    updateNodeData(nodeId, data);
-  }, [updateNodeData]);
-
-  const handleEdgeSave = useCallback((edgeId: string, updates: Partial<ArchEdge>) => {
-    updateEdge(edgeId, updates);
-  }, [updateEdge]);
-
-  const selectedNodeIds = useMemo(
-    () => nodes.filter((node) => node.selected).map((node) => node.id),
-    [nodes]
-  );
-  const selectedEdgeIds = useMemo(
-    () => edges.filter((edge) => edge.selected).map((edge) => edge.id),
-    [edges]
+  const handleNodeSave = useCallback(
+    (nodeId: string, data: Partial<ArchNode["data"]>) => {
+      updateNodeData(nodeId, data);
+    },
+    [updateNodeData]
   );
 
-  // Drag-to-reparent: when a node is dropped onto a group, make it a child
+  const handleEdgeSave = useCallback(
+    (edgeId: string, updates: Partial<ArchEdge>) => {
+      updateEdge(edgeId, updates);
+    },
+    [updateEdge]
+  );
+
+  const selectedNodeIds = useMemo(() => nodes.filter((node) => node.selected).map((node) => node.id), [nodes]);
+  const selectedEdgeIds = useMemo(() => edges.filter((edge) => edge.selected).map((edge) => edge.id), [edges]);
+
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_event, draggedNode) => {
-      // Don't reparent group nodes themselves
       if (draggedNode.type === "groupNode") return;
 
       const allNodes = getNodes();
-      const groupNodes = allNodes.filter((n) => n.type === "groupNode" && n.id !== draggedNode.id);
+      const groupNodes = allNodes.filter((node) => node.type === "groupNode" && node.id !== draggedNode.id);
 
-      // Compute absolute position of the dragged node
       let absX = draggedNode.position.x;
       let absY = draggedNode.position.y;
       if (draggedNode.parentId) {
-        const parent = allNodes.find((n) => n.id === draggedNode.parentId);
+        const parent = allNodes.find((node) => node.id === draggedNode.parentId);
         if (parent) {
           absX += parent.position.x;
           absY += parent.position.y;
         }
       }
 
-      // Get measured dimensions
       const internal = getInternalNode(draggedNode.id) as (InternalNode & { measured?: { width?: number; height?: number } }) | undefined;
       const nodeW = internal?.measured?.width ?? draggedNode.width ?? 180;
       const nodeH = internal?.measured?.height ?? draggedNode.height ?? 70;
       const nodeCenterX = absX + nodeW / 2;
       const nodeCenterY = absY + nodeH / 2;
 
-      // Find the smallest group that contains the node center
-      let bestGroup: typeof groupNodes[0] | null = null;
-      let bestArea = Infinity;
+      let bestGroup: (typeof groupNodes)[number] | null = null;
+      let bestArea = Number.POSITIVE_INFINITY;
 
       for (const group of groupNodes) {
-        const gInternal = getInternalNode(group.id) as (InternalNode & { measured?: { width?: number; height?: number } }) | undefined;
-        const gW = gInternal?.measured?.width ?? (group.style as React.CSSProperties | undefined)?.width as number ?? 400;
-        const gH = gInternal?.measured?.height ?? (group.style as React.CSSProperties | undefined)?.height as number ?? 300;
+        const groupInternal = getInternalNode(group.id) as (InternalNode & { measured?: { width?: number; height?: number } }) | undefined;
+        const groupStyle = group.style as CSSProperties | undefined;
+        const groupWidth = groupInternal?.measured?.width ?? (groupStyle?.width as number | undefined) ?? 400;
+        const groupHeight = groupInternal?.measured?.height ?? (groupStyle?.height as number | undefined) ?? 300;
 
         if (
           nodeCenterX >= group.position.x &&
-          nodeCenterX <= group.position.x + gW &&
+          nodeCenterX <= group.position.x + groupWidth &&
           nodeCenterY >= group.position.y &&
-          nodeCenterY <= group.position.y + gH
+          nodeCenterY <= group.position.y + groupHeight
         ) {
-          const area = gW * gH;
+          const area = groupWidth * groupHeight;
           if (area < bestArea) {
             bestArea = area;
             bestGroup = group;
@@ -415,31 +422,19 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
       }
 
       if (bestGroup && draggedNode.parentId !== bestGroup.id) {
-        // Reparent into a group
         reparentNode(draggedNode.id, bestGroup.id);
       } else if (!bestGroup && draggedNode.parentId) {
-        // Dragged out of all groups → remove from parent
         reparentNode(draggedNode.id, null);
       }
 
-      // Prevent node-on-node overlaps (groups are excluded).
       resolveOverlapsForNode(draggedNode.id);
     },
-    [getNodes, getInternalNode, reparentNode, resolveOverlapsForNode],
+    [getInternalNode, getNodes, reparentNode, resolveOverlapsForNode]
   );
 
   if (!hasRequestedLoad || isDiagramLoading) {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          background: "var(--background)",
-          color: "var(--text-muted)",
-        }}
-      >
+      <div className="workspace-page items-center justify-center text-sm text-[var(--text-muted)]">
         Loading diagram...
       </div>
     );
@@ -447,27 +442,9 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
 
   if (!currentDiagramId) {
     return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          gap: 12,
-          background: "var(--background)",
-          color: "var(--text-muted)",
-        }}
-      >
+      <div className="workspace-page items-center justify-center gap-4 text-center text-sm text-[var(--text-muted)]">
         <div>{diagramLoadError ?? "Diagram not found"}</div>
-        <a
-          href="/diagrams"
-          style={{
-            color: "var(--accent)",
-            textDecoration: "none",
-            fontWeight: 600,
-          }}
-        >
+        <a href="/diagrams" className="rounded-full bg-[var(--accent)] px-4 py-2 font-semibold text-[var(--accent-foreground)] no-underline">
           Back to diagrams
         </a>
       </div>
@@ -475,34 +452,42 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--background)" }}>
-      {/* Header */}
-      <div className="flex h-10 items-center justify-between border-b border-[var(--border)] px-4 shrink-0 z-10 bg-[var(--panel-bg)]">
-        <div className="flex items-center gap-2">
-          <a
-            href="/diagrams"
-            className="text-[13px] text-[var(--text-muted)] font-medium no-underline hover:text-[var(--foreground)] transition-colors"
-          >
-            Diagrams
-          </a>
-          <span className="text-[var(--border)] text-base font-light">/</span>
-          <span className="text-sm font-semibold text-[var(--foreground)]">{diagramName}</span>
+    <div className="workspace-page bg-transparent">
+      <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-[var(--panel-border)] px-6">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
+            Canvas workspace
+          </div>
+          <div className="mt-1 flex min-w-0 items-center gap-3">
+            <a
+              href="/diagrams"
+              className="rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-1 text-xs font-medium text-[var(--text-muted)] no-underline transition-colors hover:text-[var(--foreground)]"
+            >
+              Diagrams
+            </a>
+            <span className="truncate text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+              {diagramName}
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Additional header actions could go here */}
+        <div className="hidden items-center gap-2 md:flex">
+          <span className="rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)]">
+            Grid snap enabled
+          </span>
+          <span className="rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)]">
+            {theme === "dark" ? "Dark workspace" : "Light workspace"}
+          </span>
         </div>
       </div>
 
       {diagramPersistError && (
         <div
+          className="mx-4 mt-4 rounded-2xl border px-4 py-3 text-sm font-medium"
           style={{
-            padding: "8px 20px",
-            background: "color-mix(in srgb, var(--danger) 12%, var(--panel-bg))",
+            borderColor: "color-mix(in srgb, var(--danger) 24%, var(--border))",
+            background: "color-mix(in srgb, var(--danger) 10%, var(--surface-raised))",
             color: "var(--danger)",
-            borderBottom: "1px solid color-mix(in srgb, var(--danger) 28%, var(--border))",
-            fontSize: 12,
-            fontWeight: 600,
           }}
           role="alert"
         >
@@ -510,11 +495,10 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         </div>
       )}
 
-      {/* Main content */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
+      <div className="flex min-h-0 flex-1 gap-3 px-4 pb-4 pt-4">
+        <div className="relative flex min-w-0 flex-1 overflow-hidden rounded-[34px] border border-[var(--panel-border)] bg-[var(--canvas-bg)] shadow-[var(--card-shadow)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(66,98,255,0.12),transparent_22%),radial-gradient(circle_at_bottom_right,rgba(90,180,255,0.12),transparent_26%)]" />
 
-        {/* Diagram canvas area */}
-        <div style={{ flex: 1, position: "relative", background: "var(--background)" }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -522,11 +506,11 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
-            onPaneMouseMove={(e) => {
-              lastPointerFlowPosRef.current = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+            onPaneMouseMove={(event) => {
+              lastPointerFlowPosRef.current = screenToFlowPosition({ x: event.clientX, y: event.clientY });
             }}
-            onPaneClick={(e) => {
-              lastPointerFlowPosRef.current = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+            onPaneClick={(event) => {
+              lastPointerFlowPosRef.current = screenToFlowPosition({ x: event.clientX, y: event.clientY });
             }}
             onDragOver={onDragOver}
             onDrop={onDrop}
@@ -537,7 +521,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             defaultEdgeOptions={{
               type: "smoothstep",
               animated: false,
-              style: { stroke: "var(--edge-color)", strokeWidth: 1.5 },
+              style: { stroke: "var(--edge-color)", strokeWidth: 1.8 },
               markerEnd: {
                 type: MarkerType.ArrowClosed,
                 width: 14,
@@ -554,61 +538,31 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             style={{ background: "transparent" }}
             proOptions={{ hideAttribution: true }}
           >
-            <Background
-              variant={BackgroundVariant.Dots}
-              gap={24}
-              size={1.5}
-              color="var(--dot-color)"
-            />
-            <Controls position="bottom-right" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 4, background: 'var(--panel-bg)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--node-shadow)' }} />
+            <Background variant={BackgroundVariant.Dots} gap={24} size={1.6} color="var(--dot-color)" />
+            <Controls position="bottom-right" />
           </ReactFlow>
 
-          {/* Floating Toolbar (Left) */}
-          <div style={{ position: "absolute", top: 20, left: 20, zIndex: 100, display: "flex", flexDirection: "column", gap: 12 }}>
-            <ShapePalette />
-            <Toolbar />
+          <div className="pointer-events-none absolute left-1/2 top-4 z-[100] -translate-x-1/2">
+            <div className="pointer-events-auto">
+              <Toolbar />
+            </div>
           </div>
 
+          <div className="absolute left-5 top-[88px] z-[100] flex flex-col gap-3">
+            <ShapePalette />
+            <div className="floating-panel max-w-[220px] rounded-[24px] px-4 py-3 text-xs text-[var(--text-muted)]">
+              Drag shapes onto the board. Double-click nodes or edges to edit details.
+            </div>
+          </div>
         </div>
 
-        {/* Resizable Mermaid editor panel */}
         {isMermaidCollapsed ? (
-          <div
-            style={{
-              width: 36,
-              flexShrink: 0,
-              background: "var(--panel-bg)",
-              borderLeft: "1px solid var(--border)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              userSelect: "none",
-            }}
-          >
+          <div className="flex w-[58px] shrink-0 items-center justify-center rounded-[28px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--card-shadow)]">
             <button
+              type="button"
               aria-label="Expand Mermaid panel"
               title="Expand Mermaid panel"
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 8,
-                background: "transparent",
-                border: "1px solid var(--border)",
-                color: "var(--text-muted)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--surface)";
-                e.currentTarget.style.color = "var(--foreground)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "transparent";
-                e.currentTarget.style.color = "var(--text-muted)";
-              }}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
               onClick={() => setMermaidCollapsed(false)}
             >
               <PanelRightOpen size={18} />
@@ -619,39 +573,46 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             <div
               ref={resizeHandleRef}
               onMouseDown={onResizeStart}
-              style={{
-                width: "5px",
-                height: "100%",
-                cursor: "col-resize",
-                background: isDragging ? "var(--accent)" : "var(--border)",
-                transition: isDragging ? "none" : "background 0.15s",
-                flexShrink: 0,
-                zIndex: 50,
-                opacity: isDragging ? 1 : 0.5,
-              }}
-              onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.opacity = "1"; }}
-              onMouseLeave={(e) => { if (!isDragging) e.currentTarget.style.opacity = "0.5"; }}
-            />
-            <div style={{ width: panelWidth, minWidth: 200, maxWidth: "60vw", flexShrink: 0, background: "var(--panel-bg)", borderLeft: "1px solid var(--border)", display: "flex", flexDirection: "column" }}>
-              <div className="flex items-center gap-1 border-b border-[var(--border)] px-2 py-2">
+              className="relative hidden w-3 shrink-0 cursor-col-resize md:block"
+            >
+              <div
+                className="absolute bottom-8 left-1/2 top-8 -translate-x-1/2 rounded-full transition-colors"
+                style={{
+                  width: 4,
+                  background: isDragging ? "var(--accent)" : "color-mix(in srgb, var(--border) 78%, transparent)",
+                }}
+              />
+            </div>
+
+            <div
+              className="flex shrink-0 flex-col overflow-hidden rounded-[30px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--card-shadow)]"
+              style={{ width: panelWidth, minWidth: 260, maxWidth: "56vw" }}
+            >
+              <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-3">
                 <button
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    activeRightTab === "mermaid" ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--text-muted)] hover:bg-[var(--surface)]"
+                  type="button"
+                  className={`rounded-2xl px-4 py-2 text-xs font-semibold transition-colors ${
+                    activeRightTab === "mermaid"
+                      ? "bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_12px_24px_rgba(66,98,255,0.18)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
                   }`}
                   onClick={() => setActiveRightTab("mermaid")}
                 >
-                  Mermaid
-                  {mermaidError ? " !" : ""}
+                  Mermaid{mermaidError ? " !" : ""}
                 </button>
                 <button
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    activeRightTab === "investigations" ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--text-muted)] hover:bg-[var(--surface)]"
+                  type="button"
+                  className={`rounded-2xl px-4 py-2 text-xs font-semibold transition-colors ${
+                    activeRightTab === "investigations"
+                      ? "bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_12px_24px_rgba(66,98,255,0.18)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
                   }`}
                   onClick={() => setActiveRightTab("investigations")}
                 >
                   Investigations
                 </button>
               </div>
+
               <div className="min-h-0 flex-1">
                 {activeRightTab === "mermaid" ? (
                   <MermaidPanel onCollapse={() => setMermaidCollapsed(true)} />
@@ -670,7 +631,6 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         )}
       </div>
 
-      {/* Edit modals */}
       {editingNode && (
         <NodeEditModal
           diagramId={currentDiagramId}
@@ -680,11 +640,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         />
       )}
       {editingEdge && (
-        <EdgeEditModal
-          edge={editingEdge}
-          onSave={handleEdgeSave}
-          onClose={() => setEditingEdge(null)}
-        />
+        <EdgeEditModal edge={editingEdge} onSave={handleEdgeSave} onClose={() => setEditingEdge(null)} />
       )}
     </div>
   );
