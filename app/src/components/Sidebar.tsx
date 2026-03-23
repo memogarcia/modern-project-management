@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BookMarked,
+  Component,
   Layers,
   Moon,
   PanelLeftClose,
@@ -22,6 +23,7 @@ const WORKSPACE_ITEMS = [
   { href: "/diagrams", label: "Diagrams", icon: Share2 },
   { href: "/investigations", label: "Investigations", icon: Search },
   { href: "/patterns", label: "Patterns", icon: BookMarked },
+  { href: "/design-system", label: "Design System", icon: Component },
   { href: "/mcp", label: "MCP", icon: Terminal },
 ] as const;
 

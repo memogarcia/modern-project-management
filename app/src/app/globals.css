@@ -258,6 +258,20 @@ select:focus {
   border-bottom: none !important;
 }
 
+.design-system-edge-dash {
+  animation: design-system-edge-dash 1.4s linear infinite;
+}
+
+@keyframes design-system-edge-dash {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -30;
+  }
+}
+
 .react-flow__controls-button:hover {
   background: var(--surface-hover) !important;
 }
