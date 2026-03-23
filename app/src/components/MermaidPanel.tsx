@@ -68,7 +68,7 @@ export default function MermaidPanel(props: { onCollapse?: () => void }) {
           <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
             Mermaid source
           </div>
-          <div className="mt-1 text-sm font-semibold text-[var(--foreground)]">
+          <div className="mt-1 text-[13px] font-semibold text-[var(--foreground)] md:text-sm">
             Text-to-canvas sync
           </div>
           <div className="mt-1 text-xs text-[var(--text-muted)]">
@@ -80,7 +80,7 @@ export default function MermaidPanel(props: { onCollapse?: () => void }) {
           <button
             type="button"
             onClick={() => void handleApply()}
-            className="inline-flex h-10 items-center gap-2 rounded-2xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-foreground)] shadow-[0_16px_28px_rgba(66,98,255,0.18)] transition-colors hover:bg-[var(--accent-hover)]"
+            className="inline-flex h-9 items-center gap-2 rounded-[18px] bg-[var(--accent)] px-3 text-[13px] font-semibold text-[var(--accent-foreground)] shadow-[0_14px_24px_rgba(66,98,255,0.18)] transition-colors hover:bg-[var(--accent-hover)] md:h-10 md:rounded-[20px] md:px-4 md:text-sm"
           >
             <Play size={15} />
             Apply
@@ -91,9 +91,9 @@ export default function MermaidPanel(props: { onCollapse?: () => void }) {
               onClick={props.onCollapse}
               aria-label="Collapse Mermaid panel"
               title="Collapse Mermaid panel"
-              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
+              className="flex h-9 w-9 items-center justify-center rounded-[18px] border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] md:h-10 md:w-10 md:rounded-[20px]"
             >
-              <PanelRightClose size={18} />
+              <PanelRightClose size={16} />
             </button>
           )}
         </div>

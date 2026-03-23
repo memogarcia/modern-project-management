@@ -53,51 +53,56 @@ export function Sidebar() {
     <aside
       className={cn(
         "workspace-sidebar z-50 flex shrink-0 flex-col transition-[width] duration-200 ease-in-out",
-        collapsed ? "w-[88px]" : "w-[280px]"
+        collapsed ? "w-[64px] md:w-[76px]" : "w-[216px] md:w-[248px]"
       )}
     >
-      <div className="flex items-start justify-between gap-3 px-2 pb-5 pt-2">
+      <div className="flex items-start justify-between gap-1.5 px-1 pb-3 pt-0.5 sm:px-1.5">
         {!collapsed ? (
-          <Link href="/diagrams" className="flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_14px_30px_rgba(66,98,255,0.28)]">
-              <Layers size={18} strokeWidth={2.2} />
+          <Link href="/diagrams" className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[16px] bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_10px_20px_rgba(66,98,255,0.22)]">
+              <Layers size={15} strokeWidth={2.2} />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-base font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+              <div className="truncate text-[13px] font-semibold tracking-[-0.03em] text-[var(--foreground)] md:text-sm">
                 PlanView
               </div>
-              <div className="truncate text-xs text-[var(--text-muted)]">
+              <div className="truncate text-[11px] text-[var(--text-muted)]">
                 Diagram workspace
               </div>
             </div>
           </Link>
         ) : (
           <Link href="/diagrams" className="flex w-full items-center justify-center" title="PlanView">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_14px_30px_rgba(66,98,255,0.28)]">
-              <Layers size={18} strokeWidth={2.2} />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[16px] bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_10px_20px_rgba(66,98,255,0.22)]">
+              <Layers size={15} strokeWidth={2.2} />
             </div>
           </Link>
         )}
 
         <button
-          className="flex h-10 w-10 items-center justify-center rounded-2xl border border-transparent text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
+          className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-[16px] border transition-all duration-150",
+            collapsed
+              ? "border-[color:var(--accent-soft)] bg-[color:var(--accent-soft)] text-[var(--accent)] shadow-[0_10px_20px_rgba(66,98,255,0.12)]"
+              : "border-[color:color-mix(in_srgb,var(--surface)_20%,var(--panel-border))] bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)] text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
+          )}
           onClick={() => setCollapsed((value) => !value)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
         </button>
       </div>
 
       {!collapsed && (
-        <div className="mx-1 mb-4 rounded-[24px] border border-[var(--panel-border)] bg-[color:color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
-          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
-            <Sparkles size={14} className="text-[var(--accent)]" />
+        <div className="mx-1 mb-2.5 rounded-[18px] border border-[var(--panel-border)] bg-[color:color-mix(in_srgb,var(--surface)_86%,transparent)] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+          <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
+            <Sparkles size={12} className="text-[var(--accent)]" />
             Focus mode
           </div>
-          <div className="text-sm font-semibold tracking-[-0.02em] text-[var(--foreground)]">
+          <div className="text-[12px] font-semibold tracking-[-0.02em] text-[var(--foreground)] md:text-[13px]">
             Whiteboard-first incident mapping
           </div>
-          <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+          <p className="mt-1 text-[10px] leading-4.5 text-[var(--text-muted)] md:text-[11px]">
             Keep diagrams, evidence, and patterns in one canvas workflow.
           </p>
         </div>
@@ -119,8 +124,8 @@ export function Sidebar() {
                 href={href}
                 title={collapsed ? label : undefined}
                 className={cn(
-                  "group flex items-center rounded-2xl border transition-all duration-150",
-                  collapsed ? "justify-center px-0 py-3" : "gap-3 px-3 py-3",
+                  "group flex items-center rounded-[18px] border transition-all duration-150",
+                  collapsed ? "justify-center px-0 py-2" : "gap-2 px-2 py-2",
                   isActive
                     ? "border-[color:var(--accent-soft)] bg-[color:var(--accent-soft)] text-[var(--accent)] shadow-[0_12px_24px_rgba(66,98,255,0.12)]"
                     : "border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
@@ -128,20 +133,20 @@ export function Sidebar() {
               >
                 <span
                   className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-colors",
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[16px] transition-colors",
                     isActive
                       ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
                       : "bg-[color:color-mix(in_srgb,var(--surface)_86%,transparent)] group-hover:bg-[var(--surface)]"
                   )}
                 >
-                  <Icon size={18} strokeWidth={2.1} />
+                  <Icon size={15} strokeWidth={2.1} />
                 </span>
 
                 {!collapsed && (
-                  <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                    <span className="truncate text-sm font-medium">{label}</span>
+                  <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                    <span className="truncate text-[12px] font-medium md:text-[13px]">{label}</span>
                     {isActive && (
-                      <span className="rounded-full bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+                      <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
                         Open
                       </span>
                     )}
@@ -156,9 +161,9 @@ export function Sidebar() {
       <div className="flex-1" />
 
       {!collapsed && (
-        <div className="mx-2 mb-2 rounded-[22px] border border-[var(--panel-border)] bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)] px-4 py-3">
+        <div className="mx-2 mb-2 rounded-[20px] border border-[var(--panel-border)] bg-[color:color-mix(in_srgb,var(--surface)_88%,transparent)] px-3.5 py-3">
           <div className="text-xs font-semibold text-[var(--foreground)]">Shared workspace</div>
-          <div className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+          <div className="mt-1 text-[11px] leading-5 text-[var(--text-muted)] md:text-xs">
             Miro-style canvas controls on the left. Mermaid and investigations stay docked on the right.
           </div>
         </div>
@@ -167,14 +172,14 @@ export function Sidebar() {
       <div className="flex items-center gap-2 px-2 pt-2">
         <button
           className={cn(
-            "flex items-center rounded-2xl border border-transparent text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]",
-            collapsed ? "mx-auto h-11 w-11 justify-center" : "h-11 w-11 justify-center"
+            "flex items-center rounded-[18px] border border-transparent text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]",
+            collapsed ? "mx-auto h-9 w-9 justify-center" : "h-9 w-9 justify-center"
           )}
           onClick={toggleTheme}
           aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
           title={theme === "dark" ? "Light mode" : "Dark mode"}
         >
-          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
         </button>
 
         {!collapsed && (

@@ -453,19 +453,19 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
 
   return (
     <div className="workspace-page bg-transparent">
-      <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-[var(--panel-border)] px-6">
+      <div className="flex min-h-[60px] shrink-0 items-center justify-between border-b border-[var(--panel-border)] px-4 py-3 md:min-h-[72px] md:px-6">
         <div className="min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
             Canvas workspace
           </div>
-          <div className="mt-1 flex min-w-0 items-center gap-3">
+          <div className="mt-1 flex min-w-0 items-center gap-2.5 md:gap-3">
             <a
               href="/diagrams"
-              className="rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-1 text-xs font-medium text-[var(--text-muted)] no-underline transition-colors hover:text-[var(--foreground)]"
+              className="rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] no-underline transition-colors hover:text-[var(--foreground)] md:px-3 md:text-xs"
             >
               Diagrams
             </a>
-            <span className="truncate text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+            <span className="truncate text-base font-semibold tracking-[-0.03em] text-[var(--foreground)] md:text-lg">
               {diagramName}
             </span>
           </div>
@@ -483,7 +483,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
 
       {diagramPersistError && (
         <div
-          className="mx-4 mt-4 rounded-2xl border px-4 py-3 text-sm font-medium"
+          className="mx-4 mt-4 rounded-[20px] border px-4 py-3 text-sm font-medium"
           style={{
             borderColor: "color-mix(in srgb, var(--danger) 24%, var(--border))",
             background: "color-mix(in srgb, var(--danger) 10%, var(--surface-raised))",
@@ -495,8 +495,8 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-3 px-4 pb-4 pt-4">
-        <div className="relative flex min-w-0 flex-1 overflow-hidden rounded-[34px] border border-[var(--panel-border)] bg-[var(--canvas-bg)] shadow-[var(--card-shadow)]">
+      <div className="flex min-h-0 flex-1 gap-2 px-2 pb-2 pt-2 md:gap-3 md:px-4 md:pb-4 md:pt-4">
+        <div className="relative flex min-w-0 flex-1 overflow-hidden rounded-[24px] border border-[var(--panel-border)] bg-[var(--canvas-bg)] shadow-[var(--card-shadow)] md:rounded-[34px]">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(66,98,255,0.12),transparent_22%),radial-gradient(circle_at_bottom_right,rgba(90,180,255,0.12),transparent_26%)]" />
 
           <ReactFlow
@@ -542,30 +542,32 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             <Controls position="bottom-right" />
           </ReactFlow>
 
-          <div className="pointer-events-none absolute left-1/2 top-4 z-[100] -translate-x-1/2">
-            <div className="pointer-events-auto">
+          <div className="pointer-events-none absolute left-2 right-2 top-2 z-[100] md:left-4 md:right-4 md:top-4">
+            <div className="planview-scroll-panel pointer-events-auto flex justify-center overflow-x-auto pb-1">
               <Toolbar />
             </div>
           </div>
 
-          <div className="absolute left-5 top-[88px] z-[100] flex flex-col gap-3">
-            <ShapePalette />
-            <div className="floating-panel max-w-[220px] rounded-[24px] px-4 py-3 text-xs text-[var(--text-muted)]">
-              Drag shapes onto the board. Double-click nodes or edges to edit details.
+          <div className="planview-scroll-panel absolute bottom-3 left-3 top-[64px] z-[100] overflow-y-auto pr-1 md:bottom-5 md:left-5 md:top-[84px]">
+            <div className="flex flex-col gap-2 md:gap-3">
+              <ShapePalette />
+              <div className="floating-panel hidden max-w-[180px] rounded-[18px] px-2.5 py-2 text-[10px] text-[var(--text-muted)] md:block md:max-w-[220px] md:rounded-[24px] md:px-4 md:py-3 md:text-xs">
+                Drag shapes onto the board. Double-click nodes or edges to edit details.
+              </div>
             </div>
           </div>
         </div>
 
         {isMermaidCollapsed ? (
-          <div className="flex w-[58px] shrink-0 items-center justify-center rounded-[28px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--card-shadow)]">
+          <div className="flex w-[48px] shrink-0 items-center justify-center rounded-[22px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--card-shadow)] md:w-[58px] md:rounded-[28px]">
             <button
               type="button"
               aria-label="Expand Mermaid panel"
               title="Expand Mermaid panel"
-              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
+              className="flex h-9 w-9 items-center justify-center rounded-[18px] border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] md:h-11 md:w-11 md:rounded-2xl"
               onClick={() => setMermaidCollapsed(false)}
             >
-              <PanelRightOpen size={18} />
+              <PanelRightOpen size={16} />
             </button>
           </div>
         ) : (
@@ -585,13 +587,13 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             </div>
 
             <div
-              className="flex shrink-0 flex-col overflow-hidden rounded-[30px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--card-shadow)]"
+              className="flex shrink-0 flex-col overflow-hidden rounded-[22px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--card-shadow)] md:rounded-[30px]"
               style={{ width: panelWidth, minWidth: 260, maxWidth: "56vw" }}
             >
-              <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-3">
+              <div className="flex items-center gap-2 border-b border-[var(--border)] px-2.5 py-2.5 md:px-3 md:py-3">
                 <button
                   type="button"
-                  className={`rounded-2xl px-4 py-2 text-xs font-semibold transition-colors ${
+                  className={`rounded-[18px] px-3 py-1.5 text-[11px] font-semibold transition-colors md:rounded-2xl md:px-4 md:py-2 md:text-xs ${
                     activeRightTab === "mermaid"
                       ? "bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_12px_24px_rgba(66,98,255,0.18)]"
                       : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
@@ -602,7 +604,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
                 </button>
                 <button
                   type="button"
-                  className={`rounded-2xl px-4 py-2 text-xs font-semibold transition-colors ${
+                  className={`rounded-[18px] px-3 py-1.5 text-[11px] font-semibold transition-colors md:rounded-2xl md:px-4 md:py-2 md:text-xs ${
                     activeRightTab === "investigations"
                       ? "bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_12px_24px_rgba(66,98,255,0.18)]"
                       : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
