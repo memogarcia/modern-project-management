@@ -19,6 +19,15 @@ export async function parseJsonBody<TSchema extends ZodTypeAny>(
   return schema.parse(body);
 }
 
+export function parseSearchParams<TSchema extends ZodTypeAny>(
+  request: Request,
+  schema: TSchema,
+  select: (searchParams: URLSearchParams) => unknown
+): ZodOutput<TSchema> {
+  const { searchParams } = new URL(request.url);
+  return schema.parse(select(searchParams));
+}
+
 export function assertSafeEntityId(id: string, label: string): void {
   if (!SAFE_ENTITY_ID_RE.test(id)) {
     throw new PlanViewError("invalid_entity_id", `Invalid ${label}`, { status: 400 });
@@ -37,6 +46,34 @@ export async function withApiErrorHandling(handler: () => Promise<Response>): Pr
   } catch (error) {
     return jsonErrorResponse(error);
   }
+}
+
+export async function jsonRoute<T>(
+  handler: () => Promise<T | Response>,
+  init?: ResponseInit
+): Promise<Response> {
+  return withApiErrorHandling(async () => {
+    const result = await handler();
+    return result instanceof Response ? result : NextResponse.json(result, init);
+  });
+}
+
+export async function parseRouteParams<T extends Record<string, string>>(
+  params: Promise<T>,
+  entries: Array<{ key: keyof T; label: string }>
+): Promise<T> {
+  const resolved = await params;
+  assertSafeEntityIds(
+    entries.map((entry) => ({
+      id: resolved[entry.key],
+      label: entry.label,
+    }))
+  );
+  return resolved;
+}
+
+export function jsonNotFound(message: string): NextResponse {
+  return NextResponse.json({ error: message }, { status: 404 });
 }
 
 export function jsonErrorResponse(error: unknown): NextResponse {

@@ -187,6 +187,48 @@ export function createEmptyDiagramDocument(input: {
   };
 }
 
+export function createEmptyTroubleshootingSession(input: {
+  id?: string;
+  diagramId: string;
+  title: string;
+  summary: string;
+  createdAt: string;
+  projectId?: string | null;
+  systemScope?: string;
+  status?: TroubleshootingSessionStatus;
+  linkedNodeIds?: string[];
+  linkedEdgeIds?: string[];
+  notesMarkdown?: string;
+  hypotheses?: string[];
+  aiTranscriptReferences?: DiagramLinkReference[];
+  resolutionSummary?: string;
+  reusablePatternId?: string;
+  updatedAt?: string;
+}): Omit<TroubleshootingSession, "artifacts"> {
+  const createdAt = input.createdAt ?? new Date().toISOString();
+  return {
+    id: input.id ?? crypto.randomUUID(),
+    diagramId: input.diagramId,
+    projectId: input.projectId ?? null,
+    systemScope: input.systemScope,
+    title: input.title,
+    summary: input.summary,
+    status: input.status ?? "open",
+    linkedNodeIds: input.linkedNodeIds ?? [],
+    linkedEdgeIds: input.linkedEdgeIds ?? [],
+    timelineEntries: [],
+    notesMarkdown: input.notesMarkdown ?? "",
+    hypotheses: input.hypotheses ?? [],
+    commands: [],
+    aiTranscriptReferences: input.aiTranscriptReferences ?? [],
+    comments: [],
+    resolutionSummary: input.resolutionSummary ?? "",
+    reusablePatternId: input.reusablePatternId,
+    createdAt,
+    updatedAt: input.updatedAt ?? createdAt,
+  };
+}
+
 export interface SessionTimelineEntry {
   id: string;
   kind: TimelineEntryKind;

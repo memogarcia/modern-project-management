@@ -19,6 +19,7 @@ import {
   listArtifacts as dbListArtifacts,
   getArtifactById as dbGetArtifactById,
   listKnowledgePatterns as dbListKnowledgePatterns,
+  getPlanViewKnowledgePatternById as dbGetKnowledgePatternById,
   searchTroubleshootingMemory as dbSearchTroubleshootingMemory,
   listDiagrams as dbListDiagrams,
   getDiagramById as dbGetDiagram,
@@ -27,8 +28,15 @@ import {
   saveArtifactFile as dbSaveArtifactFile,
 } from "./db.js";
 import type { Diagram } from "./types.js";
-import { createEmptyDiagramDocument } from "../../shared/planview/domain.js";
-import { mermaidToFlow } from "../../shared/planview/mermaid.js";
+import {
+  createEmptyDiagramDocument,
+  createEmptyTroubleshootingSession,
+} from "../../shared/planview/domain.js";
+import {
+  toArtifactResourceSummary,
+  toDiagramResourceSummary,
+  toTroubleshootingSessionResourceSummary,
+} from "../../shared/planview/projections.js";
 import {
   edgeMetadataSchema,
   nodeMetadataSchema,
@@ -39,6 +47,14 @@ import {
   troubleshootingSessionCreateSchema,
   troubleshootingSessionPatchSchema,
 } from "../../shared/planview/validation.js";
+import {
+  appendDiagramEdge,
+  appendDiagramNode,
+  appendErRelationship,
+  appendErTable,
+  buildDatabaseSchemaMermaid,
+  rebuildGraphFromMermaid,
+} from "./mermaidMutations.js";
 
 // Ensure DB is initialized
 getDb();
@@ -48,29 +64,6 @@ const server = new McpServer({
   name: "planview",
   version: "2.0.0",
 });
-
-function escapeMermaidQuotedText(value: string): string {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/\r?\n/g, "\\n")
-    .replace(/"/g, '\\"');
-}
-
-function sanitizeMermaidEdgeLabel(value: string): string {
-  return value.replace(/\r?\n/g, " ").replace(/\|/g, "/").trim();
-}
-
-function escapeErQuotedText(value: string): string {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/\r?\n/g, " ")
-    .replace(/"/g, '\\"');
-}
-
-function sanitizeErToken(value: string, fallback: string): string {
-  const cleaned = value.replace(/[^A-Za-z0-9_[\](),.-]/g, "");
-  return cleaned || fallback;
-}
 
 function toolSuccess(payload: unknown) {
   return {
@@ -95,20 +88,6 @@ function toolError(code: string, message: string, details?: Record<string, unkno
   };
 }
 
-function rebuildGraphFromMermaid(diagram: Diagram, mermaidCode: string): Diagram {
-  const nextGraph = mermaidToFlow(mermaidCode, {
-    nodes: diagram.nodes as never[],
-    edges: diagram.edges as never[],
-  });
-
-  return {
-    ...diagram,
-    mermaidCode,
-    nodes: nextGraph.nodes as never[],
-    edges: nextGraph.edges as never[],
-  };
-}
-
 // ─── Tool: list_diagrams ─────────────────────────────────────────────
 server.registerTool("list_diagrams", {
   title: "List Diagrams",
@@ -116,12 +95,7 @@ server.registerTool("list_diagrams", {
   annotations: { readOnlyHint: true, destructiveHint: false },
 }, async () => {
   const diagrams = dbListDiagrams();
-  const summary = diagrams.map((d) => ({
-    id: d.id,
-    name: d.name,
-    description: d.description,
-    updatedAt: d.updatedAt,
-  }));
+  const summary = diagrams.map((diagram) => toDiagramResourceSummary(diagram));
   return {
     content: [
       {
@@ -330,26 +304,26 @@ server.registerTool("create_troubleshooting_session", {
 }, async (args: z.infer<typeof troubleshootingSessionCreateSchema>) => {
   try {
     const input = troubleshootingSessionCreateSchema.parse(args);
-    const session = dbCreateTroubleshootingSession({
-      id: input.id,
-      diagramId: input.diagramId,
-      projectId: input.projectId ?? null,
-      systemScope: input.systemScope,
-      title: input.title,
-      summary: input.summary,
-      status: input.status,
-      linkedNodeIds: input.linkedNodeIds,
-      linkedEdgeIds: input.linkedEdgeIds,
-      timelineEntries: [],
-      notesMarkdown: input.notesMarkdown,
-      hypotheses: input.hypotheses,
-      commands: [],
-      aiTranscriptReferences: input.aiTranscriptReferences,
-      comments: [],
-      resolutionSummary: input.resolutionSummary,
-      createdAt: input.createdAt ?? new Date().toISOString(),
-      updatedAt: input.updatedAt ?? new Date().toISOString(),
-    });
+    const now = new Date().toISOString();
+    const session = dbCreateTroubleshootingSession(
+      createEmptyTroubleshootingSession({
+        id: input.id,
+        diagramId: input.diagramId,
+        title: input.title,
+        summary: input.summary,
+        projectId: input.projectId ?? null,
+        systemScope: input.systemScope,
+        status: input.status,
+        linkedNodeIds: input.linkedNodeIds,
+        linkedEdgeIds: input.linkedEdgeIds,
+        notesMarkdown: input.notesMarkdown,
+        hypotheses: input.hypotheses,
+        aiTranscriptReferences: input.aiTranscriptReferences,
+        resolutionSummary: input.resolutionSummary,
+        createdAt: input.createdAt ?? now,
+        updatedAt: input.updatedAt ?? now,
+      })
+    );
     return toolSuccess(session);
   } catch (error) {
     const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
@@ -490,14 +464,15 @@ server.registerTool("extract_knowledge_pattern", {
       return toolError("session_not_found", `Troubleshooting session not found: ${sessionId}`);
     }
     const input = patternExtractionSchema.parse(pattern);
+    const sessionSummary = toTroubleshootingSessionResourceSummary(session);
     const extracted = dbExtractKnowledgePattern(sessionId, {
       title: input.title,
       summary: input.summary,
       symptom: input.symptom,
       resolution: input.resolution,
       tags: input.tags,
-      linkedNodeIds: session.linkedNodeIds,
-      linkedEdgeIds: session.linkedEdgeIds,
+      linkedNodeIds: sessionSummary.linkedNodeIds,
+      linkedEdgeIds: sessionSummary.linkedEdgeIds,
     });
     return toolSuccess(extracted);
   } catch (error) {
@@ -557,19 +532,7 @@ server.registerTool("get_artifact_metadata", {
     if (!artifact) {
       return toolError("artifact_not_found", `Artifact not found: ${artifactId}`);
     }
-    return toolSuccess({
-      id: artifact.id,
-      artifactId: artifact.artifactId,
-      ownerType: artifact.ownerType,
-      ownerId: artifact.ownerId,
-      diagramId: artifact.diagramId,
-      label: artifact.label,
-      fileName: artifact.fileName,
-      mimeType: artifact.mimeType,
-      sizeBytes: artifact.sizeBytes,
-      checksumSha256: artifact.checksumSha256,
-      createdAt: artifact.createdAt,
-    });
+    return toolSuccess(toArtifactResourceSummary(artifact));
   } catch (error) {
     const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
     return toolError(planViewError.code ?? "artifact_read_failed", planViewError.message ?? "Failed to load artifact metadata", planViewError.details);
@@ -643,53 +606,11 @@ server.registerTool("add_node_to_diagram", {
 }, async ({ id, nodeId, label, shapeType, description }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
-      return {
-        content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
-        isError: true,
-      };
+      return toolError("diagram_not_found", `Diagram not found: ${id}`);
     }
-
-    const fullLabel = description ? `${label} - ${description}` : label;
-    const safeLabel = escapeMermaidQuotedText(fullLabel);
-    const shapeMap: Record<string, (id: string, l: string) => string> = {
-      service: (i, l) => `${i}["${l}"]`,
-      database: (i, l) => `${i}[("${l}")]`,
-      gateway: (i, l) => `${i}(["${l}"])`,
-      queue: (i, l) => `${i}{{"${l}"}}`,
-      client: (i, l) => `${i}(["${l}"])`,
-      cloud: (i, l) => `${i}["${l}"]`,
-      cache: (i, l) => `${i}{"${l}"}`,
-      storage: (i, l) => `${i}[("${l}")]`,
-      function: (i, l) => `${i}[/"${l}"\\]`,
-      container: (i, l) => `${i}["${l}"]`,
-      custom: (i, l) => `${i}["${l}"]`,
-    };
-
-    const formatter = shapeMap[shapeType] ?? shapeMap.service;
-    const nodeLine = `    ${formatter(nodeId, safeLabel)}`;
-
-    const lines = diagram.mermaidCode.split("\n");
-    // Insert after the last node definition (before edges/style lines)
-    let insertIdx = lines.length;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const trimmed = lines[i].trim();
-      if (
-        trimmed.startsWith("style ") ||
-        trimmed.includes("-->") ||
-        trimmed === ""
-      ) {
-        insertIdx = i;
-      } else {
-        break;
-      }
-    }
-    lines.splice(insertIdx, 0, nodeLine);
 
     const persisted = dbSaveDiagram(
-      rebuildGraphFromMermaid(
-        { ...diagram, updatedAt: new Date().toISOString() },
-        lines.join("\n")
-      )
+      appendDiagramNode(diagram, { nodeId, label, shapeType, description })
     );
 
     return toolSuccess({ message: `Node '${nodeId}' added`, mermaidCode: persisted.mermaidCode, revision: persisted.revision });
@@ -716,35 +637,10 @@ server.registerTool("add_edge_to_diagram", {
 }, async ({ id, source, target, label }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
-      return {
-        content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
-        isError: true,
-      };
+      return toolError("diagram_not_found", `Diagram not found: ${id}`);
     }
 
-    const safeEdgeLabel = label ? sanitizeMermaidEdgeLabel(label) : "";
-    const edgeLine = safeEdgeLabel
-      ? `    ${source} -->|${safeEdgeLabel}| ${target}`
-      : `    ${source} --> ${target}`;
-
-    const lines = diagram.mermaidCode.split("\n");
-    // Insert before style lines
-    let insertIdx = lines.length;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i].trim().startsWith("style ")) {
-        insertIdx = i;
-      } else {
-        break;
-      }
-    }
-    lines.splice(insertIdx, 0, edgeLine);
-
-    const persisted = dbSaveDiagram(
-      rebuildGraphFromMermaid(
-        { ...diagram, updatedAt: new Date().toISOString() },
-        lines.join("\n")
-      )
-    );
+    const persisted = dbSaveDiagram(appendDiagramEdge(diagram, { source, target, label }));
 
     return toolSuccess({
       message: `Edge ${source} -> ${target} added`,
@@ -796,47 +692,12 @@ server.registerTool("create_database_schema", {
   },
   annotations: { readOnlyHint: false, destructiveHint: false },
 }, async ({ name, description, tables, relationships }) => {
-    const now = new Date().toISOString();
-
-    // Build erDiagram mermaid code
-    const lines: string[] = ["erDiagram"];
-
-    for (const table of tables) {
-      const safeName = table.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "table";
-      lines.push(`    ${safeName} {`);
-      for (const col of table.columns) {
-        const safeType = sanitizeErToken(col.type, "string");
-        const safeColumnName = sanitizeErToken(col.name, "column");
-        const constraintStr = col.constraint
-          ? ` ${col.constraint.toUpperCase()}`
-          : "";
-        lines.push(`        ${safeType} ${safeColumnName}${constraintStr}`);
-      }
-      lines.push("    }");
-    }
-
-    if (relationships) {
-      const cardinalityMap: Record<string, string> = {
-        "one-to-one": "||--||",
-        "one-to-many": "||--o{",
-        "many-to-many": "}o--o{",
-      };
-      for (const rel of relationships) {
-        const from = rel.from.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "from_table";
-        const to = rel.to.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "to_table";
-        const card = cardinalityMap[rel.cardinality ?? "one-to-many"] ?? "||--o{";
-        lines.push(`    ${from} ${card} ${to} : "${escapeErQuotedText(rel.label)}"`);
-      }
-    }
-
-    const mermaidCode = lines.join("\n") + "\n";
-
     const diagram = createEmptyDiagramDocument({
       id: uuidv4(),
       name,
       description: description ?? "",
-      mermaidCode,
-      createdAt: now,
+      mermaidCode: buildDatabaseSchemaMermaid({ tables, relationships }),
+      createdAt: new Date().toISOString(),
     });
     dbSaveDiagram(diagram);
     return {
@@ -848,7 +709,7 @@ server.registerTool("create_database_schema", {
               id: diagram.id,
               name: diagram.name,
               message: "Database schema diagram created",
-              mermaidCode,
+              mermaidCode: diagram.mermaidCode,
             },
             null,
             2
@@ -881,62 +742,10 @@ server.registerTool("add_table_to_diagram", {
 }, async ({ id, tableName, columns }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
-      return {
-        content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
-        isError: true,
-      };
+      return toolError("diagram_not_found", `Diagram not found: ${id}`);
     }
 
-    const safeName = tableName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "table";
-
-    const tableLines: string[] = [];
-    tableLines.push(`    ${safeName} {`);
-    for (const col of columns) {
-      const safeType = sanitizeErToken(col.type, "string");
-      const safeColumnName = sanitizeErToken(col.name, "column");
-      const constraintStr = col.constraint
-        ? ` ${col.constraint.toUpperCase()}`
-        : "";
-      tableLines.push(`        ${safeType} ${safeColumnName}${constraintStr}`);
-    }
-    tableLines.push("    }");
-
-    // Ensure erDiagram section exists
-    let code = diagram.mermaidCode;
-    if (!code.includes("erDiagram")) {
-      code = code.trimEnd() + "\n\nerDiagram\n";
-    }
-
-    const lines = code.split("\n");
-    // Find the end of erDiagram section to insert before relationships
-    let insertIdx = lines.length;
-    const erIdx = lines.findIndex((l) => l.trim() === "erDiagram");
-    if (erIdx !== -1) {
-      // Insert after last table definition (before relationships)
-      for (let i = erIdx + 1; i < lines.length; i++) {
-        const trimmed = lines[i].trim();
-        if (
-          trimmed.includes("||--") ||
-          trimmed.includes("}o--") ||
-          trimmed.includes("--o{") ||
-          trimmed.includes("--||")
-        ) {
-          insertIdx = i;
-          break;
-        }
-      }
-      if (insertIdx === lines.length) {
-        insertIdx = lines.length;
-      }
-    }
-
-    lines.splice(insertIdx, 0, ...tableLines);
-    const persisted = dbSaveDiagram(
-      rebuildGraphFromMermaid(
-        { ...diagram, updatedAt: new Date().toISOString() },
-        lines.join("\n")
-      )
-    );
+    const persisted = dbSaveDiagram(appendErTable(diagram, { name: tableName, columns }));
 
     return toolSuccess({
       message: `Table '${tableName}' added`,
@@ -965,50 +774,11 @@ server.registerTool("add_relationship_to_diagram", {
 }, async ({ id, from, to, label, cardinality }) => {
     const diagram = dbGetDiagram(id);
     if (!diagram) {
-      return {
-        content: [{ type: "text" as const, text: `Diagram not found: ${id}` }],
-        isError: true,
-      };
+      return toolError("diagram_not_found", `Diagram not found: ${id}`);
     }
 
-    const cardinalityMap: Record<string, string> = {
-      "one-to-one": "||--||",
-      "one-to-many": "||--o{",
-      "many-to-many": "}o--o{",
-    };
-    const safeFrom = from.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "from_table";
-    const safeTo = to.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "") || "to_table";
-    const card = cardinalityMap[cardinality ?? "one-to-many"] ?? "||--o{";
-    const relLine = `    ${safeFrom} ${card} ${safeTo} : "${escapeErQuotedText(label)}"`;
-
-    // Ensure erDiagram section exists
-    let code = diagram.mermaidCode;
-    if (!code.includes("erDiagram")) {
-      code = code.trimEnd() + "\n\nerDiagram\n";
-    }
-
-    const lines = code.split("\n");
-    // Find the end of erDiagram section to insert before styles
-    let insertIdx = lines.length;
-    const erIdx = lines.findIndex((l) => l.trim() === "erDiagram");
-    if (erIdx !== -1) {
-      for (let i = lines.length - 1; i >= erIdx; i--) {
-        if (lines[i].trim().startsWith("style ")) {
-          insertIdx = i;
-        } else if (lines[i].trim().length > 0 && i > erIdx) {
-          // Insert after the last non-empty line in the erDiagram block, before styles
-          insertIdx = i + 1;
-          break;
-        }
-      }
-    }
-
-    lines.splice(insertIdx, 0, relLine);
     const persisted = dbSaveDiagram(
-      rebuildGraphFromMermaid(
-        { ...diagram, updatedAt: new Date().toISOString() },
-        lines.join("\n")
-      )
+      appendErRelationship(diagram, { from, to, label, cardinality })
     );
 
     return toolSuccess({
@@ -1035,15 +805,7 @@ server.registerResource("diagrams", "planview://diagrams", {
       {
         uri: uri.href,
         mimeType: "application/json",
-        text: JSON.stringify(
-          diagrams.map((d) => ({
-            id: d.id,
-            name: d.name,
-            description: d.description,
-          })),
-          null,
-          2
-        ),
+        text: JSON.stringify(diagrams.map((diagram) => toDiagramResourceSummary(diagram)), null, 2),
       },
     ],
   };
@@ -1086,14 +848,7 @@ server.registerResource("investigations", "planview://investigations", {
   mimeType: "application/json",
 }, async (uri) => {
   const sessions = dbListTroubleshootingSessions().map((session) => ({
-    id: session.id,
-    diagramId: session.diagramId,
-    title: session.title,
-    summary: session.summary,
-    status: session.status,
-    updatedAt: session.updatedAt,
-    linkedNodeIds: session.linkedNodeIds,
-    linkedEdgeIds: session.linkedEdgeIds,
+    ...toTroubleshootingSessionResourceSummary(session),
   }));
   return {
     contents: [
@@ -1169,7 +924,7 @@ server.registerResource(
     mimeType: "application/json",
   },
   async (uri, { patternId }) => {
-    const pattern = dbListKnowledgePatterns().find((entry) => entry.id === String(patternId));
+    const pattern = dbGetKnowledgePatternById(String(patternId));
     return {
       contents: [
         {
@@ -1194,7 +949,11 @@ server.registerResource("artifacts", "planview://artifacts", {
       {
         uri: uri.href,
         mimeType: "application/json",
-        text: JSON.stringify(dbListArtifacts({ limit: 200 }), null, 2),
+        text: JSON.stringify(
+          dbListArtifacts({ limit: 200 }).map((artifact) => toArtifactResourceSummary(artifact)),
+          null,
+          2
+        ),
       },
     ],
   };
@@ -1224,23 +983,7 @@ server.registerResource(
             uri: uri.href,
             mimeType: "application/json",
             text: artifact
-              ? JSON.stringify(
-                  {
-                    id: artifact.id,
-                    artifactId: artifact.artifactId,
-                    ownerType: artifact.ownerType,
-                    ownerId: artifact.ownerId,
-                    diagramId: artifact.diagramId,
-                    label: artifact.label,
-                    fileName: artifact.fileName,
-                    mimeType: artifact.mimeType,
-                    sizeBytes: artifact.sizeBytes,
-                    checksumSha256: artifact.checksumSha256,
-                    createdAt: artifact.createdAt,
-                  },
-                  null,
-                  2
-                )
+              ? JSON.stringify(toArtifactResourceSummary(artifact), null, 2)
               : JSON.stringify({ error: "Artifact not found" }, null, 2),
           },
         ],

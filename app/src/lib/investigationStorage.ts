@@ -9,7 +9,13 @@ import type {
   TroubleshootingSearchHit,
   TroubleshootingSession,
 } from "@/lib/types";
-import { buildQueryString, requestJson, requestOptionalJson, requestVoid } from "@/lib/request";
+import { investigationClient } from "@/lib/investigationClient";
+import type {
+  InvestigationListFilters,
+  TroubleshootingMemoryQuery,
+} from "@/lib/investigationQueries";
+
+export type CreateInvestigationInput = Parameters<typeof investigationClient.create>[0];
 
 export async function updateNodeMetadata(
   diagramId: string,
@@ -17,11 +23,7 @@ export async function updateNodeMetadata(
   metadata: DiagramNodeMetadata,
   expectedRevision?: number
 ): Promise<void> {
-  return requestVoid(`/api/diagrams/${diagramId}/nodes/${nodeId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ metadata, expectedRevision }),
-  });
+  return investigationClient.updateNodeMetadata(diagramId, nodeId, metadata, expectedRevision);
 }
 
 export async function updateEdgeMetadata(
@@ -30,48 +32,23 @@ export async function updateEdgeMetadata(
   metadata: DiagramEdgeMetadata,
   expectedRevision?: number
 ): Promise<void> {
-  return requestVoid(`/api/diagrams/${diagramId}/edges/${edgeId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ metadata, expectedRevision }),
-  });
+  return investigationClient.updateEdgeMetadata(diagramId, edgeId, metadata, expectedRevision);
 }
 
-export async function listInvestigations(filters?: {
-  diagramId?: string;
-  nodeId?: string;
-  edgeId?: string;
-  q?: string;
-}): Promise<TroubleshootingSession[]> {
-  return requestJson<TroubleshootingSession[]>(
-    `/api/investigations${buildQueryString({
-      diagramId: filters?.diagramId,
-      nodeId: filters?.nodeId,
-      edgeId: filters?.edgeId,
-      q: filters?.q,
-    })}`
-  );
+export async function listInvestigations(
+  filters?: InvestigationListFilters
+): Promise<TroubleshootingSession[]> {
+  return investigationClient.list(filters);
 }
 
 export async function getInvestigation(id: string): Promise<TroubleshootingSession | null> {
-  return requestOptionalJson<TroubleshootingSession>(`/api/investigations/${id}`);
+  return investigationClient.get(id);
 }
 
 export async function createInvestigation(
-  payload: Omit<
-    TroubleshootingSession,
-    "timelineEntries" | "commands" | "comments" | "artifacts" | "createdAt" | "updatedAt"
-  > & {
-    id?: string;
-    createdAt?: string;
-    updatedAt?: string;
-  }
+  payload: CreateInvestigationInput
 ): Promise<TroubleshootingSession> {
-  return requestJson<TroubleshootingSession>("/api/investigations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  return investigationClient.create(payload);
 }
 
 export async function patchInvestigation(
@@ -91,11 +68,7 @@ export async function patchInvestigation(
     >
   >
 ): Promise<TroubleshootingSession> {
-  return requestJson<TroubleshootingSession>(`/api/investigations/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
+  return investigationClient.patch(id, patch);
 }
 
 export async function appendInvestigationTimelineEntry(
@@ -105,11 +78,7 @@ export async function appendInvestigationTimelineEntry(
     createdAt?: string;
   }
 ): Promise<SessionTimelineEntry> {
-  return requestJson<SessionTimelineEntry>(`/api/investigations/${id}/timeline`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(entry),
-  });
+  return investigationClient.appendTimelineEntry(id, entry);
 }
 
 export async function appendInvestigationComment(
@@ -120,11 +89,7 @@ export async function appendInvestigationComment(
     updatedAt?: string;
   }
 ): Promise<SessionComment> {
-  return requestJson<SessionComment>(`/api/investigations/${id}/comments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(comment),
-  });
+  return investigationClient.appendComment(id, comment);
 }
 
 export async function appendInvestigationCommand(
@@ -134,11 +99,7 @@ export async function appendInvestigationCommand(
     createdAt?: string;
   }
 ): Promise<SessionCommand> {
-  return requestJson<SessionCommand>(`/api/investigations/${id}/commands`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(command),
-  });
+  return investigationClient.appendCommand(id, command);
 }
 
 export async function extractPattern(
@@ -151,33 +112,17 @@ export async function extractPattern(
     tags: string[];
   }
 ): Promise<KnowledgePattern> {
-  return requestJson<KnowledgePattern>(`/api/investigations/${id}/pattern`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  return investigationClient.extractPattern(id, payload);
 }
 
 export async function listPatterns(): Promise<KnowledgePattern[]> {
-  return requestJson<KnowledgePattern[]>("/api/patterns");
+  return investigationClient.listPatterns();
 }
 
-export async function searchTroubleshootingMemory(query: {
-  q: string;
-  diagramId?: string;
-  nodeId?: string;
-  edgeId?: string;
-  limit?: number;
-}): Promise<TroubleshootingSearchHit[]> {
-  return requestJson<TroubleshootingSearchHit[]>(
-    `/api/search${buildQueryString({
-      q: query.q,
-      diagramId: query.diagramId,
-      nodeId: query.nodeId,
-      edgeId: query.edgeId,
-      limit: query.limit,
-    })}`
-  );
+export async function searchTroubleshootingMemory(
+  query: TroubleshootingMemoryQuery
+): Promise<TroubleshootingSearchHit[]> {
+  return investigationClient.searchMemory(query);
 }
 
 export async function uploadArtifact(payload: {
@@ -187,15 +132,5 @@ export async function uploadArtifact(payload: {
   label?: string;
   file: File;
 }): Promise<ArtifactReference> {
-  const formData = new FormData();
-  formData.set("ownerType", payload.ownerType);
-  if (payload.diagramId) formData.set("diagramId", payload.diagramId);
-  formData.set("ownerId", payload.ownerId);
-  if (payload.label) formData.set("label", payload.label);
-  formData.set("file", payload.file);
-
-  return requestJson<ArtifactReference>("/api/artifacts", {
-    method: "POST",
-    body: formData,
-  });
+  return investigationClient.uploadArtifact(payload);
 }

@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
 import { saveArtifactFile } from "@/lib/db.server";
-import { withApiErrorHandling } from "@/lib/api";
+import { jsonRoute } from "@/lib/api";
+import { PlanViewError } from "@planview/errors";
 import { artifactOwnerSchema } from "@planview/validation";
 
 const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  return withApiErrorHandling(async () => {
+  return jsonRoute(async () => {
     const formData = await request.formData();
     const rawOwner = {
       ownerType: formData.get("ownerType"),
@@ -23,17 +23,22 @@ export async function POST(request: Request) {
 
     const file = formData.get("file");
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Missing file upload" }, { status: 400 });
+      throw new PlanViewError("artifact_missing_file", "Missing file upload", { status: 400 });
     }
     if (!file.name.trim()) {
-      return NextResponse.json({ error: "Uploaded file must have a name" }, { status: 400 });
+      throw new PlanViewError("artifact_invalid_name", "Uploaded file must have a name", {
+        status: 400,
+      });
     }
     if (file.size <= 0) {
-      return NextResponse.json({ error: "Uploaded file must not be empty" }, { status: 400 });
+      throw new PlanViewError("artifact_empty", "Uploaded file must not be empty", {
+        status: 400,
+      });
     }
     if (file.size > MAX_ARTIFACT_BYTES) {
-      return NextResponse.json(
-        { error: `Uploaded file exceeds the ${Math.round(MAX_ARTIFACT_BYTES / (1024 * 1024))} MB limit` },
+      throw new PlanViewError(
+        "artifact_too_large",
+        `Uploaded file exceeds the ${Math.round(MAX_ARTIFACT_BYTES / (1024 * 1024))} MB limit`,
         { status: 413 }
       );
     }
@@ -49,6 +54,6 @@ export async function POST(request: Request) {
       bytes,
     });
 
-    return NextResponse.json(artifact, { status: 201 });
-  });
+    return artifact;
+  }, { status: 201 });
 }

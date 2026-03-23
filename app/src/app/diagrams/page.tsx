@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Grid2x2Plus, Layers3, Plus, Trash2 } from "lucide-react";
-import { v4 as uuidv4 } from "uuid";
-import type { Diagram, DiagramMeta } from "@/lib/types";
-import { deleteDiagram, loadDiagrams, saveDiagram } from "@/lib/storage";
-import { createEmptyDiagramDocument } from "@planview/domain";
+import { useDiagrams } from "@/hooks/useDiagrams";
+import { createNewDiagram } from "@/lib/factories";
+import { deleteDiagram, saveDiagram } from "@/lib/storage";
 
 function formatUpdatedAt(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
@@ -18,15 +17,11 @@ function formatUpdatedAt(value: string) {
 
 export default function DiagramsListPage() {
   const router = useRouter();
-  const [diagrams, setDiagrams] = useState<DiagramMeta[]>([]);
+  const diagramsQuery = useDiagrams();
   const [actionError, setActionError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
-
-  useEffect(() => {
-    void loadDiagrams().then(setDiagrams);
-  }, []);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -34,17 +29,14 @@ export default function DiagramsListPage() {
     setActionError(null);
 
     try {
-      const id = uuidv4();
-      const now = new Date().toISOString();
-      await saveDiagram(
-        createEmptyDiagramDocument({
-          id,
-          name: newName.trim(),
-          description: newDesc.trim(),
-          mermaidCode: "graph TD\n",
-          createdAt: now,
-        }) as Diagram
-      );
+      const diagram = createNewDiagram({
+        name: newName.trim(),
+        description: newDesc.trim(),
+        mermaidCode: "graph TD\n",
+      });
+      await saveDiagram(diagram);
+      const id = diagram.id;
+      await diagramsQuery.refresh();
       router.push(`/diagrams/${id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create diagram";
@@ -59,7 +51,7 @@ export default function DiagramsListPage() {
     setActionError(null);
     try {
       await deleteDiagram(id);
-      setDiagrams(await loadDiagrams());
+      await diagramsQuery.refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to delete diagram";
       setActionError(message);
@@ -126,7 +118,7 @@ export default function DiagramsListPage() {
                     Boards
                   </div>
                   <div className="mt-1 text-2xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">
-                    {diagrams.length}
+                    {diagramsQuery.data.length}
                   </div>
                 </div>
                 <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
@@ -172,7 +164,7 @@ export default function DiagramsListPage() {
             </div>
           </section>
 
-          {diagrams.length === 0 ? (
+          {diagramsQuery.data.length === 0 ? (
             <section className="floating-panel flex flex-col items-center rounded-lg px-8 py-16 text-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]">
                 <Grid2x2Plus size={34} />
@@ -194,7 +186,7 @@ export default function DiagramsListPage() {
             </section>
           ) : (
             <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {diagrams.map((diagram) => (
+              {diagramsQuery.data.map((diagram) => (
                 <article
                   key={diagram.id}
                   className="group floating-panel cursor-pointer rounded-lg p-4 transition-transform duration-150 hover:-translate-y-0.5"

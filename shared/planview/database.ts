@@ -1570,21 +1570,27 @@ export function listPlanViewKnowledgePatterns(db = getPlanViewDb()): KnowledgePa
       FROM knowledge_patterns
       ORDER BY updated_at DESC
     `)
-    .all() as Array<{
-    id: string;
-    source_session_id: string;
-    title: string;
-    summary: string;
-    symptom: string;
-    resolution: string;
-    tags_json?: string | null;
-    linked_node_ids_json?: string | null;
-    linked_edge_ids_json?: string | null;
-    created_at: string;
-    updated_at: string;
-  }>;
+    .all() as KnowledgePatternRow[];
 
-  return rows.map((row) => ({
+  return rows.map(hydrateKnowledgePatternRow);
+}
+
+type KnowledgePatternRow = {
+  id: string;
+  source_session_id: string;
+  title: string;
+  summary: string;
+  symptom: string;
+  resolution: string;
+  tags_json?: string | null;
+  linked_node_ids_json?: string | null;
+  linked_edge_ids_json?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function hydrateKnowledgePatternRow(row: KnowledgePatternRow): KnowledgePattern {
+  return {
     id: row.id,
     sourceSessionId: row.source_session_id,
     title: row.title,
@@ -1596,7 +1602,23 @@ export function listPlanViewKnowledgePatterns(db = getPlanViewDb()): KnowledgePa
     linkedEdgeIds: parseJsonArray(row.linked_edge_ids_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  };
+}
+
+export function getPlanViewKnowledgePatternById(
+  patternId: string,
+  db = getPlanViewDb()
+): KnowledgePattern | null {
+  const row = db
+    .prepare(`
+      SELECT id, source_session_id, title, summary, symptom, resolution,
+             tags_json, linked_node_ids_json, linked_edge_ids_json, created_at, updated_at
+      FROM knowledge_patterns
+      WHERE id = ?
+    `)
+    .get(patternId) as KnowledgePatternRow | undefined;
+
+  return row ? hydrateKnowledgePatternRow(row) : null;
 }
 
 export function searchPlanViewTroubleshootingMemory(

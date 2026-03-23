@@ -1,20 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import type { TroubleshootingSession } from "@/lib/types";
-import { listInvestigations } from "@/lib/investigationStorage";
+import { useInvestigations } from "@/hooks/useInvestigations";
 
 export default function InvestigationsPage() {
-  const [sessions, setSessions] = useState<TroubleshootingSession[]>([]);
   const [query, setQuery] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listInvestigations({ q: query || undefined })
-      .then(setSessions)
-      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Failed to load investigations"));
-  }, [query]);
+  const sessionsQuery = useInvestigations({ q: query || undefined });
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
@@ -37,14 +29,14 @@ export default function InvestigationsPage() {
             placeholder="Search by symptom, note, or resolution"
           />
 
-          {error && (
+          {sessionsQuery.error && (
             <div className="rounded-md border border-[var(--danger)] bg-[var(--danger)]/10 px-4 py-3 text-sm text-[var(--danger)]">
-              {error}
+              {sessionsQuery.error}
             </div>
           )}
 
           <div className="grid gap-4 md:grid-cols-2">
-            {sessions.map((session) => (
+            {sessionsQuery.data.map((session) => (
               <div key={session.id} className="rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="text-base font-semibold">{session.title}</div>
@@ -64,7 +56,7 @@ export default function InvestigationsPage() {
                 </div>
               </div>
             ))}
-            {sessions.length === 0 && (
+            {!sessionsQuery.isLoading && sessionsQuery.data.length === 0 && (
               <div className="rounded-xl border border-dashed border-[var(--border)] px-5 py-10 text-sm text-[var(--text-muted)]">
                 No investigations found yet. Create one from a diagram to start building reusable troubleshooting memory.
               </div>
@@ -75,4 +67,3 @@ export default function InvestigationsPage() {
     </div>
   );
 }
-

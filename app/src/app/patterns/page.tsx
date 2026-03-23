@@ -1,19 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { KnowledgePattern } from "@/lib/types";
-import { listPatterns } from "@/lib/investigationStorage";
+import { usePatterns } from "@/hooks/usePatterns";
 
 export default function PatternsPage() {
-  const [patterns, setPatterns] = useState<KnowledgePattern[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listPatterns()
-      .then(setPatterns)
-      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Failed to load patterns"));
-  }, []);
+  const patternsQuery = usePatterns();
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
@@ -29,14 +20,14 @@ export default function PatternsPage() {
             </p>
           </div>
 
-          {error && (
+          {patternsQuery.error && (
             <div className="rounded-md border border-[var(--danger)] bg-[var(--danger)]/10 px-4 py-3 text-sm text-[var(--danger)]">
-              {error}
+              {patternsQuery.error}
             </div>
           )}
 
           <div className="grid gap-4 md:grid-cols-2">
-            {patterns.map((pattern) => (
+            {patternsQuery.data.map((pattern) => (
               <div key={pattern.id} className="rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
                 <div className="text-base font-semibold">{pattern.title}</div>
                 <div className="mt-2 text-sm text-[var(--text-muted)]">{pattern.summary}</div>
@@ -56,7 +47,7 @@ export default function PatternsPage() {
                 </div>
               </div>
             ))}
-            {patterns.length === 0 && (
+            {!patternsQuery.isLoading && patternsQuery.data.length === 0 && (
               <div className="rounded-xl border border-dashed border-[var(--border)] px-5 py-10 text-sm text-[var(--text-muted)]">
                 No reusable patterns yet. Resolve an investigation and extract the fix pattern from the diagram sidebar.
               </div>
@@ -67,4 +58,3 @@ export default function PatternsPage() {
     </div>
   );
 }
-
