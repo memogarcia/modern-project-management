@@ -13,20 +13,10 @@ import type {
   TroubleshootingSearchHit,
   TroubleshootingSession,
 } from "@planview/domain";
+import { NODE_SHAPE_TYPES, type NodeShapeType } from "@planview/domain";
 
 // ─── Shape Types (extensible registry) ───────────────────────────────
-export type ShapeType =
-  | "service"
-  | "database"
-  | "gateway"
-  | "queue"
-  | "client"
-  | "cloud"
-  | "cache"
-  | "storage"
-  | "function"
-  | "container"
-  | "custom";
+export type ShapeType = NodeShapeType;
 
 export interface ShapeDefinition {
   type: ShapeType;
@@ -278,7 +268,7 @@ export function getShapeDef(type: ShapeType): ShapeDefinition {
 }
 
 export function getAllShapeTypes(): ShapeType[] {
-  return Object.keys(SHAPE_REGISTRY) as ShapeType[];
+  return [...NODE_SHAPE_TYPES];
 }
 
 /**

@@ -29,9 +29,10 @@ import {
 } from "./db.js";
 import type { Diagram } from "./types.js";
 import {
-  createEmptyDiagramDocument,
-  createEmptyTroubleshootingSession,
-} from "../../shared/planview/domain.js";
+  createDiagramDraft,
+  createTroubleshootingSessionDraft,
+} from "../../shared/planview/application.js";
+import { NODE_SHAPE_TYPES } from "../../shared/planview/domain.js";
 import {
   toArtifactResourceSummary,
   toDiagramResourceSummary,
@@ -135,7 +136,7 @@ server.registerTool("create_diagram", {
   annotations: { readOnlyHint: false, destructiveHint: false },
 }, async ({ name, description, mermaidCode }) => {
     const now = new Date().toISOString();
-    const diagram = createEmptyDiagramDocument({
+    const diagram = createDiagramDraft({
       id: uuidv4(),
       name,
       description: description ?? "",
@@ -304,9 +305,8 @@ server.registerTool("create_troubleshooting_session", {
 }, async (args: z.infer<typeof troubleshootingSessionCreateSchema>) => {
   try {
     const input = troubleshootingSessionCreateSchema.parse(args);
-    const now = new Date().toISOString();
     const session = dbCreateTroubleshootingSession(
-      createEmptyTroubleshootingSession({
+      createTroubleshootingSessionDraft({
         id: input.id,
         diagramId: input.diagramId,
         title: input.title,
@@ -320,8 +320,8 @@ server.registerTool("create_troubleshooting_session", {
         hypotheses: input.hypotheses,
         aiTranscriptReferences: input.aiTranscriptReferences,
         resolutionSummary: input.resolutionSummary,
-        createdAt: input.createdAt ?? now,
-        updatedAt: input.updatedAt ?? now,
+        createdAt: input.createdAt,
+        updatedAt: input.updatedAt,
       })
     );
     return toolSuccess(session);
@@ -586,19 +586,7 @@ server.registerTool("add_node_to_diagram", {
       .describe("Unique node identifier (e.g. 'api_gateway')"),
     label: z.string().describe("Display label for the node"),
     shapeType: z
-      .enum([
-        "service",
-        "database",
-        "gateway",
-        "queue",
-        "client",
-        "cloud",
-        "cache",
-        "storage",
-        "function",
-        "container",
-        "custom",
-      ])
+      .enum(NODE_SHAPE_TYPES)
       .describe("The shape type for the node"),
     description: z.string().optional().describe("Optional description"),
   },
@@ -692,7 +680,7 @@ server.registerTool("create_database_schema", {
   },
   annotations: { readOnlyHint: false, destructiveHint: false },
 }, async ({ name, description, tables, relationships }) => {
-    const diagram = createEmptyDiagramDocument({
+    const diagram = createDiagramDraft({
       id: uuidv4(),
       name,
       description: description ?? "",

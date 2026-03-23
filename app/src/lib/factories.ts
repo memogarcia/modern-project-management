@@ -1,5 +1,8 @@
 import type { Diagram, TroubleshootingSession } from "@/lib/types";
-import { createEmptyDiagramDocument, createEmptyTroubleshootingSession } from "@planview/domain";
+import {
+  createDiagramDraft,
+  createTroubleshootingSessionDraft,
+} from "@planview/application";
 
 export function createNewDiagram(input: {
   id?: string;
@@ -8,14 +11,7 @@ export function createNewDiagram(input: {
   mermaidCode?: string;
   createdAt?: string;
 }): Diagram {
-  const createdAt = input.createdAt ?? new Date().toISOString();
-  return createEmptyDiagramDocument({
-    id: input.id ?? crypto.randomUUID(),
-    name: input.name.trim(),
-    description: input.description?.trim() ?? "",
-    mermaidCode: input.mermaidCode ?? "graph TD\n",
-    createdAt,
-  }) as Diagram;
+  return createDiagramDraft(input) as Diagram;
 }
 
 export function createNewInvestigation(input: {
@@ -26,14 +22,12 @@ export function createNewInvestigation(input: {
   linkedNodeIds?: string[];
   linkedEdgeIds?: string[];
 }): Omit<TroubleshootingSession, "artifacts"> {
-  const now = new Date().toISOString();
-  return createEmptyTroubleshootingSession({
+  return createTroubleshootingSessionDraft({
     id: input.id,
     diagramId: input.diagramId,
-    title: input.title.trim(),
-    summary: input.summary.trim(),
-    createdAt: now,
-    linkedNodeIds: input.linkedNodeIds ?? [],
-    linkedEdgeIds: input.linkedEdgeIds ?? [],
+    title: input.title,
+    summary: input.summary,
+    linkedNodeIds: input.linkedNodeIds,
+    linkedEdgeIds: input.linkedEdgeIds,
   });
 }

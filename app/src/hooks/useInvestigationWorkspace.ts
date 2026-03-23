@@ -9,7 +9,17 @@ import {
   useState,
 } from "react";
 import { createNewInvestigation } from "@/lib/factories";
-import { investigationClient } from "@/lib/investigationClient";
+import {
+  appendInvestigationCommand,
+  appendInvestigationComment,
+  appendInvestigationTimelineEntry,
+  createInvestigation,
+  extractPattern,
+  listInvestigations,
+  searchTroubleshootingMemory,
+  uploadArtifact,
+  patchInvestigation,
+} from "@/lib/investigationStorage";
 import type {
   ArtifactReference,
   SessionCommand,
@@ -114,7 +124,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
     setIsLoading(true);
     setError(null);
     try {
-      const nextSessions = await investigationClient.list({
+      const nextSessions = await listInvestigations({
         diagramId: options.diagramId,
         q: deferredSearch || undefined,
       });
@@ -157,8 +167,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
       return;
     }
 
-    void investigationClient
-      .searchMemory({
+    void searchTroubleshootingMemory({
         q: searchBasis,
         diagramId: options.diagramId,
         limit: 5,
@@ -173,7 +182,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
     setIsSaving(true);
     setError(null);
     try {
-      const session = await investigationClient.create(
+      const session = await createInvestigation(
         createNewInvestigation({
           diagramId: options.diagramId,
           title: createTitle,
@@ -200,7 +209,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
     setIsSaving(true);
     setError(null);
     try {
-      const updated = await investigationClient.patch(selectedSession.id, {
+      const updated = await patchInvestigation(selectedSession.id, {
         title: draft.title.trim(),
         summary: draft.summary.trim(),
         status: draft.status,
@@ -223,7 +232,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
 
     setIsSaving(true);
     try {
-      const created = await investigationClient.appendTimelineEntry(selectedSession.id, {
+      const created = await appendInvestigationTimelineEntry(selectedSession.id, {
         ...timelineEntry,
         occurredAt: new Date().toISOString(),
       });
@@ -246,7 +255,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
 
     setIsSaving(true);
     try {
-      const created = await investigationClient.appendCommand(selectedSession.id, commandDraft);
+      const created = await appendInvestigationCommand(selectedSession.id, commandDraft);
       setSessions((current) =>
         updateSession(current, selectedSession.id, (session) => ({
           ...session,
@@ -266,7 +275,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
 
     setIsSaving(true);
     try {
-      const created = await investigationClient.appendComment(selectedSession.id, commentDraft);
+      const created = await appendInvestigationComment(selectedSession.id, commentDraft);
       setSessions((current) =>
         updateSession(current, selectedSession.id, (session) => ({
           ...session,
@@ -286,7 +295,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
 
     setUploadError(null);
     try {
-      const artifact = await investigationClient.uploadArtifact({
+      const artifact = await uploadArtifact({
         ownerType: "session",
         ownerId: selectedSession.id,
         diagramId: options.diagramId,
@@ -309,7 +318,7 @@ export function useInvestigationWorkspace(options: UseInvestigationWorkspaceOpti
 
     setIsSaving(true);
     try {
-      await investigationClient.extractPattern(selectedSession.id, {
+      await extractPattern(selectedSession.id, {
         title: draft.title,
         summary: draft.summary,
         symptom: draft.summary,

@@ -1,7 +1,7 @@
 import { createTroubleshootingSession, listTroubleshootingSessions } from "@/lib/db.server";
 import { parseInvestigationListQuery } from "@/lib/investigationQueries";
 import { jsonRoute, parseJsonBody } from "@/lib/api";
-import { createEmptyTroubleshootingSession } from "@planview/domain";
+import { createTroubleshootingSessionDraft } from "@planview/application";
 import { troubleshootingSessionCreateSchema } from "@planview/validation";
 
 export async function GET(request: Request) {
@@ -12,9 +12,8 @@ export async function POST(request: Request) {
   return jsonRoute(
     async () => {
       const body = await parseJsonBody(request, troubleshootingSessionCreateSchema);
-      const now = new Date().toISOString();
-      return createTroubleshootingSession({
-        ...createEmptyTroubleshootingSession({
+      return createTroubleshootingSession(
+        createTroubleshootingSessionDraft({
           id: body.id,
           diagramId: body.diagramId,
           title: body.title,
@@ -28,10 +27,10 @@ export async function POST(request: Request) {
           hypotheses: body.hypotheses,
           aiTranscriptReferences: body.aiTranscriptReferences,
           resolutionSummary: body.resolutionSummary,
-          createdAt: body.createdAt ?? now,
-          updatedAt: body.updatedAt ?? now,
-        }),
-      });
+          createdAt: body.createdAt,
+          updatedAt: body.updatedAt,
+        })
+      );
     },
     { status: 201 }
   );
