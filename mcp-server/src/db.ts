@@ -76,12 +76,13 @@ function initSchema(db: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS columns (
-      id TEXT PRIMARY KEY,
+      id TEXT NOT NULL,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       color TEXT NOT NULL DEFAULT '#94a3b8',
       position INTEGER NOT NULL DEFAULT 0,
-      wip_limit INTEGER
+      wip_limit INTEGER,
+      PRIMARY KEY (project_id, id)
     );
 
     CREATE TABLE IF NOT EXISTS epics (
@@ -98,7 +99,7 @@ function initSchema(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       epic_id TEXT REFERENCES epics(id) ON DELETE SET NULL,
-      column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
+      column_id TEXT NOT NULL,
       name TEXT NOT NULL,
       description TEXT,
       priority TEXT NOT NULL DEFAULT 'medium',
@@ -110,7 +111,8 @@ function initSchema(db: Database.Database): void {
       color TEXT,
       metadata TEXT DEFAULT '{}',
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id, column_id) REFERENCES columns(project_id, id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS task_tags (
@@ -162,6 +164,80 @@ function initSchema(db: Database.Database): void {
       updated_at TEXT NOT NULL
     );
   `);
+
+  migrateColumnsToCompositePrimaryKey(db);
+}
+
+function migrateColumnsToCompositePrimaryKey(db: Database.Database): void {
+  const info = db.prepare("PRAGMA table_info(columns)").all() as any[];
+  if (!info?.length) return;
+
+  const idCol = info.find((c) => c.name === "id");
+  const projectIdCol = info.find((c) => c.name === "project_id");
+  const isCompositePk = Boolean(idCol?.pk) && Boolean(projectIdCol?.pk);
+  if (isCompositePk) return;
+
+  const priorFk = db.pragma("foreign_keys", { simple: true }) as number;
+  db.pragma("foreign_keys = OFF");
+  try {
+    const run = db.transaction(() => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS columns_new (
+          id TEXT NOT NULL,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          color TEXT NOT NULL DEFAULT '#94a3b8',
+          position INTEGER NOT NULL DEFAULT 0,
+          wip_limit INTEGER,
+          PRIMARY KEY (project_id, id)
+        );
+      `);
+
+      db.prepare(
+        `INSERT INTO columns_new (id, project_id, name, color, position, wip_limit)
+         SELECT id, project_id, name, color, position, wip_limit FROM columns`
+      ).run();
+
+      db.exec("DROP TABLE columns;");
+      db.exec("ALTER TABLE columns_new RENAME TO columns;");
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tasks_new (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          epic_id TEXT REFERENCES epics(id) ON DELETE SET NULL,
+          column_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          priority TEXT NOT NULL DEFAULT 'medium',
+          assignee TEXT,
+          start_date TEXT,
+          due_date TEXT,
+          progress INTEGER NOT NULL DEFAULT 0,
+          position INTEGER NOT NULL DEFAULT 0,
+          color TEXT,
+          metadata TEXT DEFAULT '{}',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (project_id, column_id) REFERENCES columns(project_id, id) ON DELETE CASCADE
+        );
+      `);
+
+      db.prepare(
+        `INSERT INTO tasks_new (id, project_id, epic_id, column_id, name, description, priority, assignee,
+                               start_date, due_date, progress, position, color, metadata, created_at, updated_at)
+         SELECT id, project_id, epic_id, column_id, name, description, priority, assignee,
+                start_date, due_date, progress, position, color, metadata, created_at, updated_at
+         FROM tasks`
+      ).run();
+
+      db.exec("DROP TABLE tasks;");
+      db.exec("ALTER TABLE tasks_new RENAME TO tasks;");
+    });
+    run();
+  } finally {
+    db.pragma(`foreign_keys = ${priorFk ? "ON" : "OFF"}`);
+  }
 }
 
 // ─── Project CRUD ────────────────────────────────────────────────────
