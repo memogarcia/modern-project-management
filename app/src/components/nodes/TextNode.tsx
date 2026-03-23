@@ -64,7 +64,7 @@ function TextNodeComponent({ id, data, selected }: NodeProps<TextNodeType>) {
 
   const style: CSSProperties = {
     padding: "10px 12px",
-    borderRadius: 18,
+    borderRadius: 8,
     border: selected ? "1.5px solid var(--accent)" : "1px solid transparent",
     background: data.backgroundColor ?? "rgba(255, 241, 184, 0.88)",
     color: data.color ?? "var(--foreground)",

@@ -5,74 +5,74 @@
 
 :root,
 [data-theme="light"] {
-  --background: #e9eef8;
-  --foreground: #172033;
-  --panel-bg: rgba(255, 255, 255, 0.82);
-  --panel-border: rgba(132, 150, 181, 0.26);
-  --border: #d8e1f0;
+  --background: #f5f5f5;
+  --foreground: #1a1a2e;
+  --panel-bg: #ffffff;
+  --panel-border: rgba(0, 0, 0, 0.08);
+  --border: rgba(0, 0, 0, 0.1);
   --accent: #4262ff;
   --accent-foreground: #ffffff;
-  --accent-hover: #2e4ff7;
-  --accent-soft: rgba(66, 98, 255, 0.16);
+  --accent-hover: #3554e6;
+  --accent-soft: rgba(66, 98, 255, 0.1);
   --surface: #ffffff;
-  --surface-hover: #f3f7fe;
+  --surface-hover: #fafafa;
   --surface-raised: #ffffff;
-  --canvas-bg: #f7f9fd;
-  --text-muted: #66758f;
-  --text-subtle: #97a3b8;
-  --dot-color: #d8e0ee;
-  --edge-color: #7d8cab;
-  --scrollbar-thumb: rgba(113, 129, 156, 0.42);
-  --scrollbar-thumb-hover: rgba(83, 99, 130, 0.55);
-  --modal-overlay: rgba(21, 31, 51, 0.16);
-  --node-shadow: 0 18px 40px rgba(17, 24, 39, 0.08), 0 4px 12px rgba(17, 24, 39, 0.06);
-  --node-shadow-selected: 0 0 0 2px rgba(66, 98, 255, 0.2), 0 20px 44px rgba(66, 98, 255, 0.18);
-  --card-shadow: 0 22px 50px rgba(26, 36, 56, 0.08), 0 6px 18px rgba(26, 36, 56, 0.05);
-  --card-shadow-hover: 0 28px 64px rgba(26, 36, 56, 0.12), 0 10px 24px rgba(26, 36, 56, 0.08);
-  --glass-bg: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(168, 181, 206, 0.5);
-  --input-bg: rgba(255, 255, 255, 0.94);
-  --input-border: #d1dced;
+  --canvas-bg: #f0f0f0;
+  --text-muted: #6b7280;
+  --text-subtle: #9ca3af;
+  --dot-color: #e0e0e0;
+  --edge-color: #9ca3af;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+  --modal-overlay: rgba(0, 0, 0, 0.24);
+  --node-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --node-shadow-selected: 0 0 0 2px rgba(66, 98, 255, 0.2), 0 1px 4px rgba(66, 98, 255, 0.08);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --card-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.08);
+  --glass-bg: #ffffff;
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --input-bg: #ffffff;
+  --input-border: rgba(0, 0, 0, 0.12);
   --input-focus: var(--accent);
-  --success: #1f9d63;
-  --warning: #de9b00;
-  --danger: #d14343;
+  --success: #22c55e;
+  --warning: #eab308;
+  --danger: #ef4444;
   color-scheme: light;
 }
 
 [data-theme="dark"] {
-  --background: #0f1729;
-  --foreground: #f5f8ff;
-  --panel-bg: rgba(18, 27, 45, 0.84);
-  --panel-border: rgba(105, 128, 173, 0.2);
-  --border: #24324a;
+  --background: #1a1a2e;
+  --foreground: #f0f0f5;
+  --panel-bg: #252540;
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.1);
   --accent: #6b84ff;
-  --accent-foreground: #f7f9ff;
-  --accent-hover: #7f95ff;
-  --accent-soft: rgba(107, 132, 255, 0.18);
-  --surface: #162236;
-  --surface-hover: #1d2c45;
-  --surface-raised: #17253b;
-  --canvas-bg: #0e1525;
-  --text-muted: #9aaccd;
-  --text-subtle: #70829f;
-  --dot-color: #22314d;
-  --edge-color: #7e93ba;
-  --scrollbar-thumb: rgba(113, 134, 177, 0.42);
-  --scrollbar-thumb-hover: rgba(146, 166, 206, 0.55);
-  --modal-overlay: rgba(8, 12, 22, 0.62);
-  --node-shadow: 0 18px 40px rgba(3, 8, 17, 0.42), 0 4px 12px rgba(3, 8, 17, 0.24);
-  --node-shadow-selected: 0 0 0 2px rgba(107, 132, 255, 0.25), 0 20px 44px rgba(14, 20, 36, 0.42);
-  --card-shadow: 0 22px 50px rgba(2, 6, 16, 0.3), 0 6px 18px rgba(2, 6, 16, 0.18);
-  --card-shadow-hover: 0 28px 64px rgba(2, 6, 16, 0.42), 0 10px 24px rgba(2, 6, 16, 0.24);
-  --glass-bg: rgba(16, 24, 39, 0.78);
-  --glass-border: rgba(68, 87, 122, 0.55);
-  --input-bg: rgba(18, 27, 45, 0.96);
-  --input-border: #31415f;
+  --accent-foreground: #ffffff;
+  --accent-hover: #8399ff;
+  --accent-soft: rgba(107, 132, 255, 0.12);
+  --surface: #252540;
+  --surface-hover: #2e2e4a;
+  --surface-raised: #2a2a46;
+  --canvas-bg: #161628;
+  --text-muted: #a0a0b8;
+  --text-subtle: #6e6e88;
+  --dot-color: #2e2e4a;
+  --edge-color: #8888a0;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.14);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
+  --modal-overlay: rgba(0, 0, 0, 0.52);
+  --node-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --node-shadow-selected: 0 0 0 2px rgba(107, 132, 255, 0.2), 0 1px 4px rgba(0, 0, 0, 0.16);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+  --card-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.22);
+  --glass-bg: #252540;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --input-bg: #2a2a46;
+  --input-border: rgba(255, 255, 255, 0.12);
   --input-focus: var(--accent);
-  --success: #27c377;
-  --warning: #f3b01d;
-  --danger: #f66b6b;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
   color-scheme: dark;
 }
 
@@ -89,12 +89,9 @@ body {
 }
 
 body {
-  background:
-    radial-gradient(circle at top left, rgba(66, 98, 255, 0.18), transparent 32%),
-    radial-gradient(circle at top right, rgba(85, 179, 255, 0.12), transparent 28%),
-    linear-gradient(180deg, color-mix(in srgb, var(--background) 92%, white 8%) 0%, var(--background) 100%);
+  background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-ui), "Avenir Next", "Segoe UI Variable", "Helvetica Neue", sans-serif;
+  font-family: var(--font-ui), "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background 0.2s ease, color 0.2s ease;
@@ -128,7 +125,7 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--input-focus);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .planview-shell {
@@ -149,22 +146,12 @@ select:focus {
 
 .workspace-sidebar {
   position: relative;
-  margin: 6px 0 6px 6px;
-  padding: 8px;
-  border-radius: 20px;
+  margin: 8px 0 8px 8px;
+  padding: 10px;
+  border-radius: 10px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   box-shadow: var(--card-shadow);
-  backdrop-filter: blur(24px);
-}
-
-.workspace-sidebar::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .workspace-page {
@@ -175,10 +162,9 @@ select:focus {
 }
 
 .floating-panel {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
   box-shadow: var(--card-shadow);
-  backdrop-filter: blur(24px);
 }
 
 .planview-scroll-panel {
@@ -187,13 +173,13 @@ select:focus {
 }
 
 .react-flow__node {
-  border-radius: 16px;
+  border-radius: 8px;
   font-size: 12px;
 }
 
 .react-flow__selection {
   background: rgba(66, 98, 255, 0.06);
-  border: 1px solid rgba(66, 98, 255, 0.26);
+  border: 1px solid rgba(66, 98, 255, 0.2);
 }
 
 .react-flow__edge-path {
@@ -201,13 +187,12 @@ select:focus {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-  transition: stroke 0.18s ease, stroke-width 0.18s ease, filter 0.18s ease;
+  transition: stroke 0.15s ease, stroke-width 0.15s ease;
 }
 
 .react-flow__edge:hover .react-flow__edge-path {
   stroke: var(--accent);
   stroke-width: 2.2;
-  filter: drop-shadow(0 0 10px rgba(66, 98, 255, 0.16));
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
@@ -226,8 +211,8 @@ select:focus {
   height: 10px;
   border-radius: 999px;
   background: var(--accent);
-  border: 2px solid color-mix(in srgb, var(--surface) 72%, transparent);
-  box-shadow: 0 0 0 4px rgba(66, 98, 255, 0.08);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
@@ -237,11 +222,10 @@ select:focus {
 }
 
 .react-flow__controls {
-  border: 1px solid var(--glass-border);
-  border-radius: 18px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
   overflow: hidden;
-  background: var(--glass-bg);
-  backdrop-filter: blur(18px);
+  background: var(--panel-bg);
   box-shadow: var(--card-shadow);
 }
 
@@ -277,8 +261,8 @@ select:focus {
 }
 
 .react-flow__minimap {
-  border: 1px solid var(--glass-border);
-  border-radius: 18px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
   overflow: hidden;
   background: var(--surface);
   box-shadow: var(--card-shadow);
@@ -344,19 +328,18 @@ select:focus {
   align-items: center;
   justify-content: center;
   background: var(--modal-overlay);
-  backdrop-filter: blur(12px);
-  animation: modal-fade-in 0.18s ease;
+  animation: modal-fade-in 0.15s ease;
 }
 
 .edit-modal {
   width: 90vw;
   max-height: 85vh;
   overflow-y: auto;
-  border-radius: 24px;
+  border-radius: 12px;
   background: var(--surface-raised);
   border: 1px solid var(--panel-border);
-  box-shadow: 0 32px 80px rgba(10, 18, 32, 0.16), 0 8px 24px rgba(10, 18, 32, 0.08);
-  animation: modal-slide-in 0.2s ease;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  animation: modal-slide-in 0.18s ease;
 }
 
 .edit-modal-header {
@@ -364,7 +347,7 @@ select:focus {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px 24px;
+  padding: 20px 24px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -375,17 +358,16 @@ select:focus {
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .edit-modal-close:hover {
   background: var(--surface-hover);
   color: var(--foreground);
-  border-color: var(--border);
 }
 
 .edit-modal-body {
@@ -410,12 +392,12 @@ select:focus {
 .edit-modal-input {
   width: 100%;
   border: 1px solid var(--input-border);
-  border-radius: 14px;
+  border-radius: 6px;
   background: var(--input-bg);
   color: var(--foreground);
-  padding: 12px 14px;
+  padding: 10px 14px;
   font-size: 14px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .edit-modal-input option {
@@ -457,7 +439,7 @@ select:focus {
   position: relative;
   border-radius: 999px;
   background: var(--border);
-  transition: background 0.18s ease;
+  transition: background 0.15s ease;
 }
 
 .edit-modal-toggle-slider::after {
@@ -469,7 +451,7 @@ select:focus {
   height: 16px;
   border-radius: 999px;
   background: #ffffff;
-  transition: transform 0.18s ease;
+  transition: transform 0.15s ease;
 }
 
 .edit-modal-toggle input:checked + .edit-modal-toggle-slider {
@@ -484,19 +466,19 @@ select:focus {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  padding: 20px 24px 24px;
+  padding: 18px 24px 22px;
   border-top: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-raised) 85%, var(--surface-hover) 15%);
+  background: var(--surface-raised);
 }
 
 .edit-modal-btn {
-  border-radius: 14px;
-  padding: 11px 18px;
+  border-radius: 6px;
+  padding: 10px 18px;
   font-size: 14px;
   font-weight: 600;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .edit-modal-btn:active {
@@ -506,7 +488,6 @@ select:focus {
 .edit-modal-btn-primary {
   background: var(--accent);
   color: var(--accent-foreground);
-  box-shadow: 0 12px 24px rgba(66, 98, 255, 0.22);
 }
 
 .edit-modal-btn-primary:hover {
@@ -531,11 +512,11 @@ select:focus {
   .workspace-sidebar {
     margin: 12px 0 12px 12px;
     padding: 12px;
-    border-radius: 28px;
+    border-radius: 12px;
   }
 
   .react-flow__controls {
-    border-radius: 20px;
+    border-radius: 8px;
   }
 
   .react-flow__controls-button {

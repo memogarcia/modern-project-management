@@ -16,6 +16,7 @@ import {
   Controls,
   MarkerType,
   ReactFlow,
+  type EdgeTypes,
   type EdgeMouseHandler,
   type InternalNode,
   type NodeMouseHandler,
@@ -30,6 +31,7 @@ import ShapePalette from "@/components/ShapePalette";
 import Toolbar from "@/components/Toolbar";
 import TroubleshootingPanel from "@/components/TroubleshootingPanel";
 import { useTheme } from "@/components/ThemeProvider";
+import SmartSmoothStepEdge from "@/components/edges/SmartSmoothStepEdge";
 import { nodeTypes } from "@/components/nodes";
 import type { ArchEdge, ArchNode, ShapeType } from "@/lib/types";
 import { useDiagramStore } from "@/store/diagramStore";
@@ -37,6 +39,10 @@ import { useDiagramStore } from "@/store/diagramStore";
 interface DiagramEditorProps {
   diagramId: string;
 }
+
+const edgeTypes: EdgeTypes = {
+  smoothstep: SmartSmoothStepEdge,
+};
 
 export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const { theme } = useTheme();
@@ -506,6 +512,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onPaneMouseMove={(event) => {
               lastPointerFlowPosRef.current = screenToFlowPosition({ x: event.clientX, y: event.clientY });
             }}

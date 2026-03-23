@@ -65,14 +65,14 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
 
   const borderRadius =
     shape.mermaidShape === "cylinder"
-      ? "16px 16px 28px 28px"
+      ? "8px 8px 12px 12px"
       : shape.mermaidShape === "stadium"
         ? "999px"
         : shape.mermaidShape === "diamond"
-          ? "22px"
+          ? "10px"
           : shape.mermaidShape === "hexagon"
-            ? "18px"
-            : "18px";
+            ? "10px"
+            : "8px";
 
   const containerStyle: CSSProperties = {
     minWidth: shape.defaultWidth,
@@ -120,7 +120,7 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
           flexShrink: 0,
           width: 40,
           height: 40,
-          borderRadius: 14,
+          borderRadius: 6,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -142,7 +142,7 @@ function ArchNodeComponent({ id, data, selected }: NodeProps<ArchNodeType>) {
             onKeyDown={handleKeyDown}
             style={{
               width: "100%",
-              borderRadius: 10,
+              borderRadius: 6,
               border: "1px solid var(--border)",
               background: "rgba(255,255,255,0.8)",
               padding: "8px 10px",

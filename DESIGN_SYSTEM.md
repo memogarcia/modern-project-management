@@ -1,108 +1,90 @@
 # Planview Design System
 
-This document outlines the core design language, UI/UX philosophy, and technical foundations for the Planview application. The design system is engineered to provide a **"pixel-perfect," psychologically safe, and fluid** experience, blending modern B2B SaaS trends with human-centric consumer aesthetics. It is built strictly on the robust, accessible foundation of **shadcn/ui**.
+This document outlines the core design language for the Planview application, inspired by **Miro's Aura design language** (2025-2026). The design prioritizes **clarity, warmth, and minimal visual noise** using flat surfaces, subtle borders, and clean typography.
 
 ---
 
 ## 1. Design Philosophy
 
-Our interface is built on two intersecting pillars:
-
-### 1.1 Fluid Interfaces
-Interactions should feel like physical extensions of the user's intent. The UI must be:
-- **Responsive:** Zero perceived latency. Immediate visual feedback upon interaction.
-- **Interruptible:** Users can stop animations mid-transition (e.g., closing a modal while it opens).
-- **Natural Motion:** Utilizing spring physics and ease-out curves instead of linear timing. Elements have "weight."
-- **Glassmorphism (Liquid Glass):** Using blurred backgrounds (`backdrop-filter: blur(12px)`) and semi-transparent layers to establish spatial depth and hierarchy without overwhelming the user.
+### 1.1 Clean & Functional
+- **Flat surfaces** — no glassmorphism, no backdrop-filter blur
+- **Minimal shadows** — nearly invisible, used only for spatial cues
+- **Warm backgrounds** — off-white (#F5F5F5) in light, deep navy (#1A1A2E) in dark
+- **Opaque panels** — solid white/dark surfaces, no transparency
 
 ### 1.2 Psychological Safety
-The UI must foster a "safe to explore" environment. Users should never feel penalized for mistakes.
-- **Error Forgiveness:** Actions are easily reversible. Destructive actions require explicit, localized confirmation.
-- **Non-Punitive Feedback:** Error states are descriptive, helpful, and emotionally neutral. Never use aggressive reds or harsh language.
-- **Cognitive Load Reduction:** "Bento Box" modular layouts break complex data down. Progressive disclosure reveals advanced features only when needed.
+- **Error Forgiveness** — actions are easily reversible
+- **Non-Punitive Feedback** — empathetic, descriptive error states
+- **Cognitive Load Reduction** — "Bento Box" modular layouts, progressive disclosure
 
 ---
 
 ## 2. Foundations
 
-Our foundations rely on a robust set of CSS variables (mapped in `globals.css`), Tailwind CSS v4, and the **shadcn/ui** component architecture.
+Built on CSS custom properties (in `globals.css`), Tailwind CSS v4, and **shadcn/ui** components.
 
-### 2.1 Color Palette (Adaptive Theming)
-We use a semantic token system strictly aligned with `shadcn/ui` conventions, ensuring perfect contrast in both Light and Dark modes.
+### 2.1 Color Palette
 
-*   **Backgrounds:**
-    *   `--background`: Base app background (`#09090b` Dark / `#ffffff` Light).
-    *   `--surface` / `--panel-bg`: Elevated containers.
-    *   `--glass-bg`: Semi-transparent overlays for depth (`rgba(9, 9, 11, 0.8)`).
-*   **Foregrounds (Text):**
-    *   `--foreground`: Primary text (`#fafafa` / `#09090b`).
-    *   `--text-muted` / `--text-subtle`: Secondary/tertiary text for reducing visual noise.
-*   **Accents:**
-    *   `--accent`: Primary interactive color (High contrast).
-    *   `--accent-soft`: Subtle interactive states (Hover/Focus rings).
-*   **Status:**
-    *   `--success`: `#22c55e`
-    *   `--warning`: `#eab308`
-    *   `--danger`: `#ef4444` (Used sparingly).
+| Token | Light | Dark |
+|---|---|---|
+| `--background` | `#f5f5f5` | `#1a1a2e` |
+| `--surface` | `#ffffff` | `#252540` |
+| `--surface-hover` | `#fafafa` | `#2e2e4a` |
+| `--foreground` | `#1a1a2e` | `#f0f0f5` |
+| `--text-muted` | `#6b7280` | `#a0a0b8` |
+| `--accent` | `#4262ff` | `#6b84ff` |
+| `--border` | `rgba(0,0,0,0.1)` | `rgba(255,255,255,0.1)` |
+
+**Status colors:** `--success` (#22c55e), `--warning` (#eab308), `--danger` (#ef4444)
 
 ### 2.2 Typography
-Clean, legible, and system-native.
-*   **Font Family:** `-apple-system, BlinkMacSystemFont, "Inter", sans-serif`
-*   **Hierarchy:** High contrast in weight (e.g., `600` for headers, `400` for body) rather than just size.
-*   **Tracking:** Tighter letter spacing on headings (`tracking-tight` / `-0.01em`) for a premium SaaS feel.
+- **Font:** Noto Sans (Google Fonts) — supports 800+ languages
+- **Variable:** `--font-ui`
+- **Weights:** 400 (body), 500 (labels), 600 (headings), 700 (emphasis)
+- **Tracking:** Tight on headings (`-0.02em`), normal on body
 
 ### 2.3 Depth & Shadows
-Shadows define elevation and interactiveness.
-*   **Base Shadow:** `--card-shadow` for standard panels.
-*   **Hover State:** `--card-shadow-hover` lifts the element slightly towards the user.
-*   **Node Shadow:** `--node-shadow` creates deep physical separation for diagram elements on the canvas.
+Shadows are nearly invisible — used only for spatial separation, never decorative.
+
+| Token | Value |
+|---|---|
+| `--card-shadow` | `0 1px 2px rgba(0,0,0,0.04)` |
+| `--card-shadow-hover` | `0 2px 6px rgba(0,0,0,0.08)` |
+| `--node-shadow` | `0 1px 2px rgba(0,0,0,0.05)` |
 
 ### 2.4 Border Radius
-Softened corners convey approachability.
-*   **Containers/Modals:** `16px` (`rounded-2xl`)
-*   **Nodes/Cards:** `8px` (`rounded-lg` or `shadcn` defaults)
-*   **Inputs/Buttons:** `8px` (`rounded-lg` or `shadcn` defaults)
+| Element | Radius |
+|---|---|
+| Containers/Modals | `12px` (`rounded-lg`) |
+| Cards | `8px` (`rounded-lg`) |
+| Inputs/Buttons | `6-8px` (`rounded-md` / `rounded-lg`) |
 
 ---
 
 ## 3. Interaction & Motion
 
-### 3.1 Focus & Active States
-*   **Focus Rings:** Fully integrated with `shadcn/ui`'s `ring-offset` and `ring` utilities. All interactive elements must show a clear, predictable focus state for keyboard navigation.
-*   **Active Scale:** Buttons should slightly scale down (`transform: scale(0.98)`) on `:active` to simulate physical button presses.
-
-### 3.2 Key Animations
-*   **Modal Slide-In:** Modals fade in and slightly scale up/translate from the bottom (`scale(0.96) translateY(-8px)` to `scale(1) translateY(0)`), creating a natural "arrival" effect.
-*   **Node Pulse:** Important diagram nodes utilize a soft breathing shadow animation (`node-pulse`) to draw attention without aggressive blinking.
+- **Transitions:** `150ms ease` — subtle and quick, no spring physics
+- **Focus:** `ring-3` with `--accent-soft` color
+- **Active:** `scale(0.98)` on buttons
+- **Modals:** `scale(0.98) → scale(1)` with `150ms` fade-in
 
 ---
 
 ## 4. Components & Layout
 
-### 4.1 Base Component Architecture: shadcn/ui
-Planview relies entirely on **shadcn/ui** for its UI primitives. 
-*   **Accessible by Default:** Built on top of Radix UI, `shadcn/ui` provides uncompromised keyboard navigation, ARIA attributes, and screen-reader support out of the box. This fulfills our core mandate of **Psychological Safety** by ensuring users always feel in control and the system behaves predictably.
-*   **Ownership and Fluidity:** Because `shadcn/ui` components are copied into our workspace rather than installed as an opaque `node_module`, we have full power to inject our "Liquid Glass" and fluid animation styles directly into the component definitions.
-*   **Usage Rule:** Never build a raw `<button>`, `<dialog>`, or `<select>` from scratch. Always utilize and extend the respective `shadcn/ui` components.
+### 4.1 Base: shadcn/ui
+All UI primitives built on Radix UI via shadcn/ui for accessibility. Never build raw `<button>`, `<dialog>`, or `<select>` from scratch.
 
-### 4.2 The "Bento Box" Layout
-Interfaces should organize discrete pieces of information into distinct, rounded cards (using `shadcn/ui`'s `Card` component). This avoids the "spreadsheet" look of legacy enterprise software, making data scannable and reducing cognitive load.
+### 4.2 Cards
+White/dark surface, near-invisible shadow, thin border. "Bento Box" modular layouts for structured data.
 
-### 4.3 Glass Panels & Toolbars
-Floating toolbars and context menus use `--glass-bg` with a background blur. This ensures the user maintains context of the underlying canvas or data grid, promoting a feeling of continuous control.
+### 4.3 Sidebar
+Clean, flat navigation. No decorative cards or glassmorphism. Simple icon + label rows with flat hover states.
 
-### 4.4 Forms and Inputs
-*   Leverage `shadcn/ui`'s `<Form>`, `<Input>`, and `<Label>` components.
-*   **Labels:** Small (`13px`), bold (`600`), placed directly above the input.
-*   **Toggles:** Use the `shadcn/ui` `Switch` component for immediate state feedback instead of native checkboxes.
+### 4.4 Toolbar
+Compact horizontal groups with solid surface backgrounds and thin borders. No transparency or blur effects.
 
----
-
-## 5. Applying Psychological Safety in Planview
-
-When building new features, ask:
-1.  **Is the "Undo" clear?** (e.g., Can I easily delete a relationship I just drew in React Flow?)
-2.  **Is the system state visible?** (e.g., Save status, current selected node, edge hover states).
-3.  **Is the text empathetic?** (e.g., Instead of "Invalid Input," use "Please select a valid node type.")
-4.  **Are we using shadcn/ui primitives?** (Ensuring we don't break accessibility or keyboard navigation).
-5.  **Is there too much on screen?** (Hide advanced configuration inside edit modals or collapsible `shadcn/ui` Accordions rather than cluttering the canvas).
+### 4.5 Forms
+- shadcn/ui `<Form>`, `<Input>`, `<Label>` components
+- Labels: `13px`, weight `600`, above input
+- Focus: `3px` accent ring, no heavy glow

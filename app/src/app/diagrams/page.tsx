@@ -88,7 +88,7 @@ export default function DiagramsListPage() {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-foreground)] shadow-[0_16px_30px_rgba(66,98,255,0.2)] transition-colors hover:bg-[var(--accent-hover)]"
+          className="inline-flex h-11 items-center gap-2 rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-foreground)] shadow-[0_1px_3px_rgba(66,98,255,0.18)] transition-colors hover:bg-[var(--accent-hover)]"
         >
           <Plus size={18} />
           New board
@@ -100,7 +100,7 @@ export default function DiagramsListPage() {
           {actionError && (
             <div
               role="alert"
-              className="rounded-2xl border px-4 py-3 text-sm font-medium"
+              className="rounded-md border px-4 py-3 text-sm font-medium"
               style={{
                 borderColor: "color-mix(in srgb, var(--danger) 24%, var(--border))",
                 background: "color-mix(in srgb, var(--danger) 10%, var(--surface-raised))",
@@ -112,7 +112,7 @@ export default function DiagramsListPage() {
           )}
 
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_360px]">
-            <div className="floating-panel rounded-[32px] px-6 py-6">
+            <div className="floating-panel rounded-lg px-6 py-6">
               <div className="max-w-2xl">
                 <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
                   <Layers3 size={14} className="text-[var(--accent)]" />
@@ -127,7 +127,7 @@ export default function DiagramsListPage() {
               </div>
 
               <div className="mt-6 flex flex-wrap items-center gap-3 text-sm text-[var(--text-muted)]">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
                     Boards
                   </div>
@@ -135,7 +135,7 @@ export default function DiagramsListPage() {
                     {diagrams.length}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
                     Right panel
                   </div>
@@ -143,7 +143,7 @@ export default function DiagramsListPage() {
                     Mermaid + investigations
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
                     Shortcuts
                   </div>
@@ -154,7 +154,7 @@ export default function DiagramsListPage() {
               </div>
             </div>
 
-            <div className="floating-panel rounded-[32px] px-5 py-5">
+            <div className="floating-panel rounded-lg px-5 py-5">
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
                 Quickstart
               </div>
@@ -167,7 +167,7 @@ export default function DiagramsListPage() {
                   "Drop shapes from the left rail directly onto the canvas.",
                   "Use the right dock to sync Mermaid text or attach an investigation.",
                 ].map((step, index) => (
-                  <div key={step} className="flex gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <div key={step} className="flex gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-xs font-semibold text-[var(--accent)]">
                       {index + 1}
                     </div>
@@ -179,8 +179,8 @@ export default function DiagramsListPage() {
           </section>
 
           {diagrams.length === 0 ? (
-            <section className="floating-panel flex flex-col items-center rounded-[36px] px-8 py-16 text-center">
-              <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-[var(--accent-soft)] text-[var(--accent)]">
+            <section className="floating-panel flex flex-col items-center rounded-lg px-8 py-16 text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]">
                 <Grid2x2Plus size={34} />
               </div>
               <h2 className="mt-5 text-2xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">
@@ -192,7 +192,7 @@ export default function DiagramsListPage() {
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
-                className="mt-6 inline-flex h-11 items-center gap-2 rounded-2xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-foreground)] shadow-[0_16px_30px_rgba(66,98,255,0.2)] transition-colors hover:bg-[var(--accent-hover)]"
+                className="mt-6 inline-flex h-11 items-center gap-2 rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-foreground)] shadow-[0_1px_3px_rgba(66,98,255,0.18)] transition-colors hover:bg-[var(--accent-hover)]"
               >
                 <Plus size={18} />
                 Create board
@@ -203,19 +203,19 @@ export default function DiagramsListPage() {
               {diagrams.map((diagram) => (
                 <article
                   key={diagram.id}
-                  className="group floating-panel cursor-pointer rounded-[30px] p-4 transition-transform duration-150 hover:-translate-y-1"
+                  className="group floating-panel cursor-pointer rounded-lg p-4 transition-transform duration-150 hover:-translate-y-0.5"
                   onClick={() => router.push(`/diagrams/${diagram.id}`)}
                 >
-                  <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <div className="rounded-[18px] border border-dashed border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[linear-gradient(180deg,rgba(66,98,255,0.05),transparent_55%),var(--canvas-bg)] p-4">
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <div className="rounded border border-dashed border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[linear-gradient(180deg,rgba(66,98,255,0.05),transparent_55%),var(--canvas-bg)] p-4">
                       <div className="grid gap-3">
                         <div className="flex gap-3">
-                          <div className="h-14 flex-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]" />
-                          <div className="h-14 w-20 rounded-2xl border border-[var(--border)] bg-[var(--surface)]" />
+                          <div className="h-14 flex-1 rounded border border-[var(--border)] bg-[var(--surface)]" />
+                          <div className="h-14 w-20 rounded border border-[var(--border)] bg-[var(--surface)]" />
                         </div>
                         <div className="flex gap-3">
-                          <div className="h-12 w-20 rounded-2xl border border-[var(--border)] bg-[var(--surface)]" />
-                          <div className="h-12 flex-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]" />
+                          <div className="h-12 w-20 rounded border border-[var(--border)] bg-[var(--surface)]" />
+                          <div className="h-12 flex-1 rounded border border-[var(--border)] bg-[var(--surface)]" />
                         </div>
                       </div>
                     </div>
@@ -235,7 +235,7 @@ export default function DiagramsListPage() {
                       <button
                         type="button"
                         title="Delete board"
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-transparent text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[color:color-mix(in_srgb,var(--danger)_10%,var(--surface))] hover:text-[var(--danger)]"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-transparent text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[color:color-mix(in_srgb,var(--danger)_10%,var(--surface))] hover:text-[var(--danger)]"
                         onClick={(event) => {
                           event.stopPropagation();
                           void handleDelete(diagram.id);
@@ -246,13 +246,13 @@ export default function DiagramsListPage() {
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      <span className="rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                         Updated {formatUpdatedAt(diagram.updatedAt)}
                       </span>
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      <span className="rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                         {diagram.nodeCount} nodes
                       </span>
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      <span className="rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                         {diagram.edgeCount} edges
                       </span>
                     </div>

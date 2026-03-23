@@ -13,6 +13,7 @@ import type { ArchNode, ArchEdge, ShapeType, Diagram, DiagramNode, SchemaColumn,
 import { getShapeDef } from "@/lib/types";
 import { MermaidParseError, type MermaidDiagnostic, flowToMermaid, mermaidToFlow, type MermaidSubgraph } from "@/lib/converters";
 import { autoLayout, type LayoutDirection } from "@/lib/layout";
+import { computeOrthogonalEdgeRoutes, writeStoredEdgeRoute, type EdgeRouteSide, type OrthogonalEdgeRoute } from "@/lib/edgeRouting";
 import { saveDiagram, loadDiagram } from "@/lib/storage";
 
 let persistQueue: Promise<void> = Promise.resolve();
@@ -413,7 +414,8 @@ function applyEdgePositions(
   nodes: DiagramNode[],
   edges: ArchEdge[],
   direction: LayoutDirection,
-  mode: EdgeAttachMode
+  mode: EdgeAttachMode,
+  routes?: Map<string, OrthogonalEdgeRoute>
 ): ArchEdge[] {
   const absPosMap = buildAbsolutePositionMap(nodes);
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -428,22 +430,18 @@ function applyEdgePositions(
     return n?.type === "archNode" || n?.type === "databaseSchemaNode";
   };
 
-  if (mode === "ORIENTED") {
-    if (direction === "DOWN") {
-      return edges.map((e) => ({
-        ...e,
-        ...oriented,
-        ...(supportsHandles(e.source) ? { sourceHandle: "bottom" } : {}),
-        ...(supportsHandles(e.target) ? { targetHandle: "t-top" } : {}),
-      }));
+  const sideToPosition = (side: EdgeRouteSide) => {
+    switch (side) {
+      case "top":
+        return Position.Top;
+      case "right":
+        return Position.Right;
+      case "bottom":
+        return Position.Bottom;
+      case "left":
+        return Position.Left;
     }
-    return edges.map((e) => ({
-      ...e,
-      ...oriented,
-      ...(supportsHandles(e.source) ? { sourceHandle: "right" } : {}),
-      ...(supportsHandles(e.target) ? { targetHandle: "t-left" } : {}),
-    }));
-  }
+  };
 
   const getCenter = (nodeId: string): FlowPoint | null => {
     const node = byId.get(nodeId);
@@ -455,9 +453,44 @@ function applyEdgePositions(
   };
 
   return edges.map((edge) => {
+    const route = routes?.get(edge.id);
+    if (route) {
+      const sourcePosition = sideToPosition(route.sourceSide);
+      const targetPosition = sideToPosition(route.targetSide);
+      return {
+        ...edge,
+        sourcePosition,
+        targetPosition,
+        data: writeStoredEdgeRoute(edge.data, edge.type === "smoothstep" || edge.type == null ? route : null),
+        ...(supportsHandles(edge.source) ? { sourceHandle: route.sourceSide } : {}),
+        ...(supportsHandles(edge.target) ? { targetHandle: `t-${route.targetSide}` } : {}),
+      };
+    }
+
+    if (mode === "ORIENTED") {
+      if (direction === "DOWN") {
+        return {
+          ...edge,
+          ...oriented,
+          data: writeStoredEdgeRoute(edge.data, null),
+          ...(supportsHandles(edge.source) ? { sourceHandle: "bottom" } : {}),
+          ...(supportsHandles(edge.target) ? { targetHandle: "t-top" } : {}),
+        };
+      }
+      return {
+        ...edge,
+        ...oriented,
+        data: writeStoredEdgeRoute(edge.data, null),
+        ...(supportsHandles(edge.source) ? { sourceHandle: "right" } : {}),
+        ...(supportsHandles(edge.target) ? { targetHandle: "t-left" } : {}),
+      };
+    }
+
     const sourceCenter = getCenter(edge.source);
     const targetCenter = getCenter(edge.target);
-    if (!sourceCenter || !targetCenter) return { ...edge, ...oriented };
+    if (!sourceCenter || !targetCenter) {
+      return { ...edge, ...oriented, data: writeStoredEdgeRoute(edge.data, null) };
+    }
 
     const dx = targetCenter.x - sourceCenter.x;
     const dy = targetCenter.y - sourceCenter.y;
@@ -467,6 +500,7 @@ function applyEdgePositions(
       const leftToRight = dx >= 0;
       return {
         ...edge,
+        data: writeStoredEdgeRoute(edge.data, null),
         sourcePosition: leftToRight ? Position.Right : Position.Left,
         targetPosition: leftToRight ? Position.Left : Position.Right,
         ...(supportsHandles(edge.source)
@@ -481,6 +515,7 @@ function applyEdgePositions(
     const topToBottom = dy >= 0;
     return {
       ...edge,
+      data: writeStoredEdgeRoute(edge.data, null),
       sourcePosition: topToBottom ? Position.Bottom : Position.Top,
       targetPosition: topToBottom ? Position.Top : Position.Bottom,
       ...(supportsHandles(edge.source)
@@ -1867,10 +1902,6 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       }
       finalNodes = applyMermaidSubgraphGroups(finalNodes, subgraphs);
 
-      // Assign edge handles based on closest-side routing
-      const layoutDir: LayoutDirection = s.layoutDirection ?? "DOWN";
-      const positionedEdges = applyEdgePositions(finalNodes, parsedEdges, layoutDir, "CLOSEST");
-
       if (preservedNonMermaidNodes.length > 0) {
         const finalNodeIds = new Set(finalNodes.map((n) => n.id));
         const preserved = preservedNonMermaidNodes.map((n) => {
@@ -1883,17 +1914,46 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         finalNodes = [...finalNodes, ...preserved];
       }
 
+      // Assign edge handles and routed paths against the actual final node set.
+      const layoutDir: LayoutDirection = s.layoutDirection ?? "DOWN";
+      const routes = computeOrthogonalEdgeRoutes(finalNodes, parsedEdges, layoutDir);
+      const positionedEdges = applyEdgePositions(finalNodes, parsedEdges, layoutDir, "CLOSEST", routes);
+
       // Preserve existing edge objects when source/target/label haven't changed
       // so React Flow doesn't re-route them.
       const existingEdgeMap = new Map(s.edges.map((e) => [e.id, e]));
       const mergedEdges = positionedEdges.map((pe) => {
         const existing = existingEdgeMap.get(pe.id);
         if (existing) {
-          // Keep the existing edge, only update label if changed
+          const existingWithPositions = existing as ArchEdge & {
+            sourcePosition?: Position;
+            targetPosition?: Position;
+          };
+          const parsedWithPositions = pe as ArchEdge & {
+            sourcePosition?: Position;
+            targetPosition?: Position;
+          };
           const existingLabel = existing.data?.label ?? existing.label;
           const parsedLabel = pe.data?.label ?? pe.label;
-          if (existingLabel === parsedLabel) return existing;
-          return { ...existing, label: pe.label, data: { ...existing.data, ...pe.data } };
+          const sameRoute =
+            JSON.stringify(existing.data?.layoutRoute ?? null) ===
+            JSON.stringify(pe.data?.layoutRoute ?? null);
+          if (
+            existingLabel === parsedLabel &&
+            existing.sourceHandle === pe.sourceHandle &&
+            existing.targetHandle === pe.targetHandle &&
+            existingWithPositions.sourcePosition === parsedWithPositions.sourcePosition &&
+            existingWithPositions.targetPosition === parsedWithPositions.targetPosition &&
+            sameRoute
+          ) {
+            return existing;
+          }
+          return {
+            ...existing,
+            ...pe,
+            label: pe.label,
+            data: pe.data,
+          };
         }
         return pe;
       });
@@ -1953,7 +2013,8 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     const hasGroups = s.nodes.some((n) => n.type === "groupNode");
     if (!hasGroups) {
       const laid = await autoLayout(s.nodes, s.edges, { direction: dir });
-      const laidEdges = applyEdgePositions(laid, s.edges, dir, attachMode);
+      const routes = computeOrthogonalEdgeRoutes(laid, s.edges, dir);
+      const laidEdges = applyEdgePositions(laid, s.edges, dir, attachMode, routes);
       if (s._applyingHistory || s._syncingFromMermaid) {
         set({ nodes: laid, edges: laidEdges, layoutDirection: dir });
         return;
@@ -2001,7 +2062,8 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       groupTemplates: templates,
     });
     const packed = packRootNodesToAvoidOverlaps(rebuilt);
-    const laidEdges = applyEdgePositions(packed, s.edges, dir, attachMode);
+    const routes = computeOrthogonalEdgeRoutes(packed, s.edges, dir);
+    const laidEdges = applyEdgePositions(packed, s.edges, dir, attachMode, routes);
     if (s._applyingHistory || s._syncingFromMermaid) {
       set({ nodes: packed, edges: laidEdges, layoutDirection: dir });
       return;

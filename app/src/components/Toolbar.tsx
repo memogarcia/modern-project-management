@@ -41,9 +41,9 @@ function ToolbarButton({
       title={title}
       disabled={disabled}
       className={cn(
-        "flex h-8 w-8 items-center justify-center rounded-[16px] border border-transparent text-[var(--foreground)] transition-all duration-150 md:h-10 md:w-10 md:rounded-[20px]",
-        "hover:border-[var(--border)] hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]",
-        "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-[var(--foreground)]"
+        "flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-muted)] transition-all duration-150 md:h-9 md:w-9",
+        "hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]",
+        "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)]"
       )}
       aria-label={label}
     >
@@ -54,7 +54,7 @@ function ToolbarButton({
 
 function ToolbarGroup({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-1 rounded-[18px] border border-[var(--panel-border)] bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)] px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] md:rounded-[22px] md:px-2 md:py-2">
+    <div className="flex items-center gap-0.5 rounded-lg border border-[var(--panel-border)] bg-[var(--surface)] px-1 py-1 md:px-1.5 md:py-1.5">
       {children}
     </div>
   );
@@ -181,7 +181,7 @@ export default function Toolbar() {
   }, [diagramName]);
 
   return (
-    <div className="floating-panel flex w-max min-w-min max-w-full flex-nowrap items-center justify-center gap-1 rounded-[20px] px-1.5 py-1.5 md:max-w-[calc(100vw-2rem)] md:flex-wrap md:gap-2 md:rounded-[28px] md:px-3 md:py-3">
+    <div className="floating-panel flex w-max min-w-min max-w-full flex-nowrap items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 md:max-w-[calc(100vw-2rem)] md:flex-wrap md:gap-2 md:rounded-xl md:px-3 md:py-3">
       <ToolbarGroup>
         <ToolbarButton
           label="Auto arrange"

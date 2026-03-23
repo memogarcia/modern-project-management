@@ -57,7 +57,7 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
   const containerStyle: CSSProperties = {
     minWidth: 240,
     overflow: "hidden",
-    borderRadius: 22,
+    borderRadius: 8,
     border: `1.5px solid ${selected ? "var(--accent)" : "color-mix(in srgb, var(--accent) 18%, var(--border))"}`,
     background: "var(--surface-raised)",
     boxShadow: selected ? "var(--node-shadow-selected)" : "var(--node-shadow)",
@@ -110,7 +110,7 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
             height: 28,
             alignItems: "center",
             justifyContent: "center",
-            borderRadius: 12,
+            borderRadius: 6,
             background: "rgba(255,255,255,0.16)",
           }}
         >
@@ -126,7 +126,7 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
             onKeyDown={handleKeyDown}
             style={{
               width: "100%",
-              borderRadius: 10,
+              borderRadius: 6,
               border: "1px solid rgba(255,255,255,0.28)",
               background: "rgba(255,255,255,0.14)",
               padding: "6px 8px",

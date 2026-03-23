@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Noto_Sans } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Sidebar } from "@/components/Sidebar";
 
-const plusJakartaSans = Plus_Jakarta_Sans({
+const notoSans = Noto_Sans({
   subsets: ["latin"],
   variable: "--font-ui",
   weight: ["400", "500", "600", "700"],
@@ -24,7 +24,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${plusJakartaSans.variable} antialiased`}>
+      <body className={`${notoSans.variable} antialiased`}>
         <ThemeProvider>
           <div className="planview-shell">
             <Suspense>

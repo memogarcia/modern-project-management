@@ -60,10 +60,9 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
     minWidth: 220,
     minHeight: 140,
     position: "relative",
-    borderRadius: 28,
+    borderRadius: 10,
     border: `1.5px dashed ${selected ? "var(--accent)" : borderColor}`,
     background: `linear-gradient(180deg, ${bgColor} 0%, color-mix(in srgb, ${bgColor} 72%, transparent) 100%)`,
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.28)",
     backdropFilter: "blur(8px)",
   };
 
@@ -74,7 +73,7 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
     display: "inline-flex",
     alignItems: "center",
     gap: 8,
-    borderRadius: 999,
+    borderRadius: 6,
     border: `1px solid color-mix(in srgb, ${borderColor} 32%, transparent)`,
     background: "var(--surface-raised)",
     color: "var(--foreground)",
@@ -84,7 +83,7 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
     lineHeight: 1.2,
     letterSpacing: "-0.02em",
     pointerEvents: "auto",
-    boxShadow: "0 10px 20px rgba(15, 23, 42, 0.08)",
+    boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
   };
 
   return (
