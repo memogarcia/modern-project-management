@@ -20,10 +20,10 @@ const CLIENT_LABELS: Record<ClientType, { name: string; file: string }> = {
 
 function buildConfig(client: ClientType): string {
   const serverBlock = {
-    command: "node",
-    args: ["/absolute/path/to/mcp-server/dist/index.js"],
+    command: "npm",
+    args: ["--prefix", "./mcp-server", "run", "dev"],
     env: {
-      PLANVIEW_DB: "/absolute/path/to/mcp-server/data/planview.db",
+      PLANVIEW_DB: "./mcp-server/data/planview.db",
     },
   };
 
@@ -31,7 +31,7 @@ function buildConfig(client: ClientType): string {
     case "claude":
       return JSON.stringify({ mcpServers: { planview: serverBlock } }, null, 2);
     case "gemini":
-      return JSON.stringify({ mcpServers: { planview: { ...serverBlock, cwd: "/absolute/path/to/project" } } }, null, 2);
+      return JSON.stringify({ mcpServers: { planview: { ...serverBlock, cwd: "." } } }, null, 2);
     case "vscode":
       return JSON.stringify({
         servers: {
@@ -56,34 +56,31 @@ export default function McpConfigView({ project }: McpConfigViewProps) {
   const [copied, setCopied] = useState<string | null>(null);
   const [activeClient, setActiveClient] = useState<ClientType>("claude");
 
-  const buildCmd = `npm --prefix mcp-server install
+  const buildCmd = `npm install --prefix mcp-server
 npm --prefix mcp-server run build`;
 
   const mcpConfig = buildConfig(activeClient);
   const clientMeta = CLIENT_LABELS[activeClient];
 
   const tools = [
-    ["list_projects", "List all projects"],
-    ["get_project", "Get a project by ID"],
-    ["create_project", "Create a new project"],
-    ["create_kanban_task", "Add a task to a project"],
-    ["update_kanban_task", "Update a task"],
-    ["move_kanban_task", "Move a task between columns"],
-    ["add_project_session", "Create a focus session"],
-    ["create_diagram", "Create a diagram"],
-    ["link_diagram_to_project", "Link a diagram to a project"],
+    ["get_diagram", "Read the full diagram graph and metadata"],
+    ["update_diagram_node_metadata", "Update rich node metadata safely"],
+    ["update_diagram_edge_metadata", "Update dependency metadata safely"],
+    ["create_troubleshooting_session", "Create an investigation linked to a diagram"],
+    ["update_troubleshooting_session", "Update status, notes, and linked entities"],
+    ["append_session_command", "Record commands and outputs"],
+    ["extract_knowledge_pattern", "Publish a reusable troubleshooting pattern"],
+    ["search_troubleshooting_memory", "Search sessions and patterns"],
   ];
 
   const resources = [
-    ["planview://projects", "All projects (summary)"],
-    ["planview://projects/{id}", "Single project (full detail)"],
-    ["planview://diagrams", "All diagrams"],
+    ["planview://diagrams", "Diagram summaries"],
+    ["planview://diagrams/{id}", "Full diagram document"],
+    ["planview://investigations", "Investigation summaries"],
+    ["planview://patterns", "Reusable troubleshooting patterns"],
   ];
 
-  const prompts = [
-    ["plan-sprint", "Generate a sprint plan from backlog"],
-    ["project-status", "Status report for a project"],
-  ];
+  const prompts: Array<[string, string]> = [];
 
   const handleCopy = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text);
@@ -100,7 +97,7 @@ npm --prefix mcp-server run build`;
             MCP Configuration
           </h2>
           <p className="text-sm text-[var(--text-muted)]">
-            Connect this workspace to Claude, Gemini CLI, VS Code, Cursor, or any MCP-compatible AI.
+            Connect this workspace to Claude, Gemini CLI, VS Code, Cursor, or any MCP-compatible client so agents can operate on the same diagrams, investigations, and patterns as the app.
           </p>
         </div>
 
@@ -202,22 +199,23 @@ npm --prefix mcp-server run build`;
           </div>
         </section>
 
-        {/* Step 5: Prompts */}
-        <section className="space-y-3">
-          <div className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-            5 — Prompts
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {prompts.map(([name, desc]) => (
-              <div key={name} className="flex flex-col gap-1">
-                <code className="w-fit rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-xs font-mono text-[var(--foreground)]">
-                  {name}
-                </code>
-                <span className="text-xs text-[var(--text-muted)]">{desc}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+        {prompts.length > 0 && (
+          <section className="space-y-3">
+            <div className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+              5 — Prompts
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {prompts.map(([name, desc]) => (
+                <div key={name} className="flex flex-col gap-1">
+                  <code className="w-fit rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-xs font-mono text-[var(--foreground)]">
+                    {name}
+                  </code>
+                  <span className="text-xs text-[var(--text-muted)]">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

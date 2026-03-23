@@ -1,6 +1,3 @@
-import Database from "better-sqlite3";
-import path from "node:path";
-import fs from "node:fs";
 import type {
   KanbanProject,
   KanbanProjectMeta,
@@ -12,228 +9,26 @@ import type {
   ProjectSession,
 } from "./projectTypes";
 import type { Diagram, DiagramMeta } from "./types";
-
-// ─── DB Path Resolution ─────────────────────────────────────────────
-
-function resolveDbPath(): string {
-  const fromEnv = process.env.PLANVIEW_DB;
-  if (fromEnv) {
-    return path.isAbsolute(fromEnv)
-      ? fromEnv
-      : path.resolve(process.cwd(), fromEnv);
-  }
-
-  const cwd = process.cwd();
-  // Running from repo root (npm --prefix app run dev)
-  const repoRoot = path.join(cwd, "mcp-server", "data");
-  if (fs.existsSync(path.join(cwd, "mcp-server"))) {
-    return path.join(repoRoot, "planview.db");
-  }
-  // Running from app/ dir
-  const parentRoot = path.join(cwd, "..", "mcp-server", "data");
-  if (fs.existsSync(path.join(cwd, "..", "mcp-server"))) {
-    return path.join(parentRoot, "planview.db");
-  }
-  return path.join(cwd, "data", "planview.db");
-}
-
-// ─── Singleton Connection ────────────────────────────────────────────
-
-let _db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (_db) return _db;
-  const dbPath = resolveDbPath();
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  _db = new Database(dbPath);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
-  initSchema(_db);
-  return _db;
-}
-
-// ─── Schema ──────────────────────────────────────────────────────────
-
-function initSchema(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT DEFAULT '',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS columns (
-      id TEXT NOT NULL,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      color TEXT NOT NULL DEFAULT '#94a3b8',
-      position INTEGER NOT NULL DEFAULT 0,
-      wip_limit INTEGER,
-      PRIMARY KEY (project_id, id)
-    );
-
-    CREATE TABLE IF NOT EXISTS epics (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      description TEXT,
-      color TEXT DEFAULT '#6b7280',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      epic_id TEXT REFERENCES epics(id) ON DELETE SET NULL,
-      column_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      description TEXT,
-      priority TEXT NOT NULL DEFAULT 'medium',
-      assignee TEXT,
-      start_date TEXT,
-      due_date TEXT,
-      progress INTEGER NOT NULL DEFAULT 0,
-      position INTEGER NOT NULL DEFAULT 0,
-      color TEXT,
-      metadata TEXT DEFAULT '{}',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (project_id, column_id) REFERENCES columns(project_id, id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS task_tags (
-      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      tag TEXT NOT NULL,
-      PRIMARY KEY (task_id, tag)
-    );
-
-    CREATE TABLE IF NOT EXISTS task_links (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      label TEXT NOT NULL,
-      url TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'other'
-    );
-
-    CREATE TABLE IF NOT EXISTS task_dependencies (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      depends_on_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      type TEXT NOT NULL DEFAULT 'finish-to-start'
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      notes TEXT DEFAULT '',
-      pomodoros_completed INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS session_tasks (
-      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      PRIMARY KEY (session_id, task_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS diagrams (
-      id TEXT PRIMARY KEY,
-      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
-      name TEXT NOT NULL,
-      description TEXT DEFAULT '',
-      mermaid_code TEXT DEFAULT '',
-      nodes TEXT DEFAULT '[]',
-      edges TEXT DEFAULT '[]',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-  `);
-
-  migrateColumnsToCompositePrimaryKey(db);
-}
-
-function migrateColumnsToCompositePrimaryKey(db: Database.Database): void {
-  // Older databases used `columns.id` as a global primary key, which prevents
-  // multiple projects from having the same logical column IDs (e.g. "todo").
-  const info = db.prepare("PRAGMA table_info(columns)").all() as any[];
-  if (!info?.length) return;
-
-  const idCol = info.find((c) => c.name === "id");
-  const projectIdCol = info.find((c) => c.name === "project_id");
-  const isCompositePk = Boolean(idCol?.pk) && Boolean(projectIdCol?.pk);
-  if (isCompositePk) return;
-
-  const priorFk = db.pragma("foreign_keys", { simple: true }) as number;
-  db.pragma("foreign_keys = OFF");
-  try {
-    const run = db.transaction(() => {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS columns_new (
-          id TEXT NOT NULL,
-          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          name TEXT NOT NULL,
-          color TEXT NOT NULL DEFAULT '#94a3b8',
-          position INTEGER NOT NULL DEFAULT 0,
-          wip_limit INTEGER,
-          PRIMARY KEY (project_id, id)
-        );
-      `);
-
-      db.prepare(
-        `INSERT INTO columns_new (id, project_id, name, color, position, wip_limit)
-         SELECT id, project_id, name, color, position, wip_limit FROM columns`
-      ).run();
-
-      db.exec("DROP TABLE columns;");
-      db.exec("ALTER TABLE columns_new RENAME TO columns;");
-
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS tasks_new (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          epic_id TEXT REFERENCES epics(id) ON DELETE SET NULL,
-          column_id TEXT NOT NULL,
-          name TEXT NOT NULL,
-          description TEXT,
-          priority TEXT NOT NULL DEFAULT 'medium',
-          assignee TEXT,
-          start_date TEXT,
-          due_date TEXT,
-          progress INTEGER NOT NULL DEFAULT 0,
-          position INTEGER NOT NULL DEFAULT 0,
-          color TEXT,
-          metadata TEXT DEFAULT '{}',
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY (project_id, column_id) REFERENCES columns(project_id, id) ON DELETE CASCADE
-        );
-      `);
-
-      db.prepare(
-        `INSERT INTO tasks_new (id, project_id, epic_id, column_id, name, description, priority, assignee,
-                               start_date, due_date, progress, position, color, metadata, created_at, updated_at)
-         SELECT id, project_id, epic_id, column_id, name, description, priority, assignee,
-                start_date, due_date, progress, position, color, metadata, created_at, updated_at
-         FROM tasks`
-      ).run();
-
-      db.exec("DROP TABLE tasks;");
-      db.exec("ALTER TABLE tasks_new RENAME TO tasks;");
-    });
-
-    run();
-  } finally {
-    db.pragma(`foreign_keys = ${priorFk ? "ON" : "OFF"}`);
-  }
-}
+import {
+  deletePlanViewDiagram,
+  extractPlanViewKnowledgePattern,
+  getPlanViewDb as getDb,
+  getPlanViewDiagramById,
+  getPlanViewTroubleshootingSessionById,
+  listPlanViewKnowledgePatterns,
+  listPlanViewDiagrams,
+  listPlanViewTroubleshootingSessions,
+  savePlanViewArtifactFile,
+  savePlanViewDiagram,
+  searchPlanViewTroubleshootingMemory,
+  updatePlanViewEdgeMetadata,
+  updatePlanViewNodeMetadata,
+  updatePlanViewTroubleshootingSession,
+  createPlanViewTroubleshootingSession,
+  appendPlanViewSessionComment,
+  appendPlanViewSessionCommand,
+  appendPlanViewTimelineEntry,
+} from "@planview/database";
 
 // ─── Project CRUD ────────────────────────────────────────────────────
 
@@ -543,80 +338,52 @@ export function deleteProject(id: string): boolean {
 // ─── Diagram CRUD ────────────────────────────────────────────────────
 
 export function listDiagrams(): DiagramMeta[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      "SELECT id, project_id, name, description, created_at, updated_at FROM diagrams ORDER BY updated_at DESC"
-    )
-    .all() as any[];
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    description: r.description ?? "",
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  }));
+  return listPlanViewDiagrams(getDb()) as DiagramMeta[];
 }
 
 export function getDiagramById(id: string): Diagram | null {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM diagrams WHERE id = ?").get(id) as any;
-  if (!row) return null;
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description ?? "",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    mermaidCode: row.mermaid_code ?? "",
-    nodes: JSON.parse(row.nodes || "[]"),
-    edges: JSON.parse(row.edges || "[]"),
-  };
+  return getPlanViewDiagramById(id, getDb()) as Diagram | null;
 }
 
-export function upsertDiagram(diagram: Diagram): void {
-  const db = getDb();
-  db.prepare(
-    `INSERT INTO diagrams (id, name, description, mermaid_code, nodes, edges, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       name = excluded.name,
-       description = excluded.description,
-       mermaid_code = excluded.mermaid_code,
-       nodes = excluded.nodes,
-       edges = excluded.edges,
-       updated_at = excluded.updated_at`
-  ).run(
-    diagram.id,
-    diagram.name,
-    diagram.description ?? "",
-    diagram.mermaidCode ?? "",
-    JSON.stringify(diagram.nodes || []),
-    JSON.stringify(diagram.edges || []),
-    diagram.createdAt,
-    diagram.updatedAt
-  );
+export function upsertDiagram(
+  diagram: Diagram & { expectedRevision?: number }
+): Diagram {
+  return savePlanViewDiagram(
+    {
+      id: diagram.id,
+      projectId: diagram.projectId,
+      name: diagram.name,
+      description: diagram.description ?? "",
+      mermaidCode: diagram.mermaidCode ?? "graph TD\n",
+      nodes: diagram.nodes as never[],
+      edges: diagram.edges as never[],
+      createdAt: diagram.createdAt,
+      expectedRevision: diagram.expectedRevision ?? diagram.revision,
+    },
+    getDb()
+  ) as Diagram;
 }
 
 export function deleteDiagram(id: string): boolean {
-  const db = getDb();
-  const result = db.prepare("DELETE FROM diagrams WHERE id = ?").run(id);
-  return result.changes > 0;
+  return deletePlanViewDiagram(id, getDb());
 }
 
 export function listDiagramsFull(): Diagram[] {
-  const db = getDb();
-  const rows = db
-    .prepare("SELECT * FROM diagrams ORDER BY updated_at DESC")
-    .all() as any[];
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    description: r.description ?? "",
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    mermaidCode: r.mermaid_code ?? "",
-    nodes: JSON.parse(r.nodes || "[]"),
-    edges: JSON.parse(r.edges || "[]"),
-  }));
+  return listPlanViewDiagrams(getDb())
+    .map((diagram) => getPlanViewDiagramById(diagram.id, getDb()))
+    .filter((diagram): diagram is NonNullable<typeof diagram> => Boolean(diagram)) as Diagram[];
 }
+
+export const updateDiagramNodeDetails = updatePlanViewNodeMetadata;
+export const updateDiagramEdgeDetails = updatePlanViewEdgeMetadata;
+export const listTroubleshootingSessions = listPlanViewTroubleshootingSessions;
+export const getTroubleshootingSessionById = getPlanViewTroubleshootingSessionById;
+export const createTroubleshootingSession = createPlanViewTroubleshootingSession;
+export const updateTroubleshootingSession = updatePlanViewTroubleshootingSession;
+export const appendSessionTimelineEntry = appendPlanViewTimelineEntry;
+export const appendSessionComment = appendPlanViewSessionComment;
+export const appendSessionCommand = appendPlanViewSessionCommand;
+export const extractKnowledgePattern = extractPlanViewKnowledgePattern;
+export const listKnowledgePatterns = listPlanViewKnowledgePatterns;
+export const searchTroubleshootingMemory = searchPlanViewTroubleshootingMemory;
+export const saveArtifactFile = savePlanViewArtifactFile;

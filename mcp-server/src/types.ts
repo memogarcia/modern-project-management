@@ -1,16 +1,13 @@
-export interface DiagramMeta {
-  id: string;
-  name: string;
-  description: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Diagram extends DiagramMeta {
-  mermaidCode: string;
-  nodes: unknown[];
-  edges: unknown[];
-}
+export type {
+  ArtifactReference,
+  DiagramDocument as Diagram,
+  DiagramEdgeMetadata,
+  DiagramLinkReference,
+  DiagramNodeMetadata,
+  DiagramSummary as DiagramMeta,
+  KnowledgePattern,
+  TroubleshootingSession,
+} from "../../shared/planview/domain.js";
 
 // ─── Project Types (Unified Task Management) ─────────────────────────
 

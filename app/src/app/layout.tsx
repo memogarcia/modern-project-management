@@ -5,9 +5,9 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { Sidebar } from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "Planview — Plan, visualize, and focus",
+  title: "PlanView — Diagram-First Troubleshooting Memory",
   description:
-    "Plan, visualize, and focus — unified project management with Kanban, Gantt, Calendar, Matrix, and more.",
+    "Private troubleshooting memory for engineers and MCP clients: diagrams, investigations, evidence, and reusable patterns backed by shared SQLite storage.",
 };
 
 export default function RootLayout({

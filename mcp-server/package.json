@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "npx tsx src/__tests__/e2e-complex-diagram.test.ts && npx tsx src/__tests__/e2e-kanban.test.ts && npx tsx src/__tests__/e2e-gantt.test.ts && npx tsx src/__tests__/e2e-sessions.test.ts && npx tsx src/__tests__/e2e-matrix.test.ts",
-    "start": "node dist/index.js",
+    "test": "npx tsx src/__tests__/mermaid-roundtrip.test.ts && npx tsx src/__tests__/storage-troubleshooting-persistence.test.ts && npx tsx src/__tests__/e2e-troubleshooting-memory.test.ts && npx tsx src/__tests__/e2e-complex-diagram.test.ts && npx tsx src/__tests__/e2e-kanban.test.ts && npx tsx src/__tests__/e2e-gantt.test.ts && npx tsx src/__tests__/e2e-sessions.test.ts && npx tsx src/__tests__/e2e-matrix.test.ts",
+    "start": "node dist/mcp-server/src/index.js",
     "dev": "tsx src/index.ts"
   },
   "dependencies": {

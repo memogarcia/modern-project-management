@@ -60,7 +60,7 @@ export default function ProjectDetailPage() {
   const viewParam = searchParams.get("view") as ExtendedViewMode | null;
   const currentView: ExtendedViewMode = viewParam && ["kanban", "gantt", "calendar", "matrix", "sessions", "diagrams", "mcp"].includes(viewParam)
     ? viewParam
-    : activeView;
+    : "diagrams";
 
   useEffect(() => {
     void loadProject(id);
@@ -70,7 +70,9 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (viewParam && viewParam !== "mcp" && ["kanban", "gantt", "calendar", "matrix", "sessions", "diagrams"].includes(viewParam)) {
       setActiveView(viewParam as KanbanViewMode);
+      return;
     }
+    setActiveView("diagrams");
   }, [viewParam, setActiveView]);
 
   const handleRequestCreate = useCallback((mode: CreateItemMode, defaults?: CreateItemDefaults) => {

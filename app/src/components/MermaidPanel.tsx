@@ -9,6 +9,8 @@ import { useTheme } from "@/components/ThemeProvider";
 
 export default function MermaidPanel(props: { onCollapse?: () => void }) {
   const mermaidCode = useDiagramStore((s) => s.mermaidCode);
+  const mermaidError = useDiagramStore((s) => s.mermaidError);
+  const mermaidDiagnostics = useDiagramStore((s) => s.mermaidDiagnostics);
   const updateMermaidCode = useDiagramStore((s) => s.updateMermaidCode);
   const syncMermaidToFlow = useDiagramStore((s) => s.syncMermaidToFlow);
   const { theme } = useTheme();
@@ -145,7 +147,30 @@ export default function MermaidPanel(props: { onCollapse?: () => void }) {
           )}
         </div>
       </div>
-      <div style={{ flex: 1, overflow: "hidden" }}>
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {mermaidError && (
+          <div
+            style={{
+              borderBottom: "1px solid color-mix(in srgb, var(--danger) 32%, var(--border))",
+              background: "color-mix(in srgb, var(--danger) 12%, var(--panel-bg))",
+              color: "var(--danger)",
+              padding: "10px 12px",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            <div>{mermaidError}</div>
+            {mermaidDiagnostics.length > 0 && (
+              <div style={{ marginTop: 6, fontWeight: 500 }}>
+                {mermaidDiagnostics.slice(0, 4).map((diagnostic) => (
+                  <div key={`${diagnostic.line}:${diagnostic.message}`}>
+                    Line {diagnostic.line}: {diagnostic.message}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <Editor
           height="100%"
           defaultLanguage="markdown"

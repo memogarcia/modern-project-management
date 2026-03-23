@@ -20,6 +20,8 @@ import {
   FolderOpen,
   ChevronRight,
   Trash2,
+  BookMarked,
+  Search,
 } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
 import { Button } from "./ui/button";
@@ -27,14 +29,22 @@ import { cn } from "@/lib/utils";
 import type { KanbanProjectMeta } from "@/lib/projectTypes";
 import { loadProjects, deleteProject } from "@/lib/projectStorage";
 
+const WORKSPACE_ITEMS = [
+  { href: "/projects", label: "Systems", icon: FolderOpen },
+  { href: "/diagrams", label: "Diagrams", icon: Share2 },
+  { href: "/investigations", label: "Investigations", icon: Search },
+  { href: "/patterns", label: "Patterns", icon: BookMarked },
+  { href: "/mcp", label: "MCP", icon: Terminal },
+] as const;
+
 const VIEW_ITEMS = [
+  { key: "diagrams", label: "Diagrams", icon: Share2 },
+  { key: "mcp", label: "MCP", icon: Terminal },
   { key: "kanban", label: "Kanban", icon: KanbanSquare },
   { key: "gantt", label: "Gantt", icon: BarChart3 },
   { key: "calendar", label: "Calendar", icon: Calendar },
   { key: "matrix", label: "Matrix", icon: Grid3X3 },
-  { key: "sessions", label: "Sessions", icon: Timer },
-  { key: "diagrams", label: "Diagrams", icon: Share2 },
-  { key: "mcp", label: "MCP", icon: Terminal },
+  { key: "sessions", label: "Focus Sessions", icon: Timer },
 ] as const;
 
 export function Sidebar() {
@@ -110,17 +120,17 @@ export function Sidebar() {
       {/* Logo + collapse */}
       <div className="flex h-10 items-center border-b border-[var(--border)] px-3 justify-between">
         {!collapsed && (
-          <Link href="/projects" className="flex items-center gap-2 min-w-0">
+          <Link href="/diagrams" className="flex items-center gap-2 min-w-0">
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[var(--accent-foreground)]">
               <Layers size={13} strokeWidth={2.5} />
             </div>
             <span className="text-sm font-bold tracking-tight text-[var(--foreground)] truncate">
-              Planview
+              PlanView
             </span>
           </Link>
         )}
         {collapsed && (
-          <Link href="/projects" className="flex items-center justify-center w-full" title="Planview">
+          <Link href="/diagrams" className="flex items-center justify-center w-full" title="PlanView">
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[var(--accent-foreground)]">
               <Layers size={13} strokeWidth={2.5} />
             </div>
@@ -150,13 +160,41 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Projects list */}
+      {!collapsed && (
+        <div className="border-b border-[var(--border)] px-2 py-2">
+          <div className="mb-2 px-2 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+            Workspace
+          </div>
+          <nav className="flex flex-col gap-px">
+            {WORKSPACE_ITEMS.map(({ href, label, icon: Icon }) => {
+              const isActive = pathname === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors",
+                    isActive
+                      ? "bg-[var(--surface-hover)] text-[var(--foreground)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+                  )}
+                >
+                  <Icon size={14} className={isActive ? "text-[var(--accent)]" : ""} />
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      )}
+
+      {/* Systems list */}
       <div className="flex-1 overflow-y-auto">
         {!collapsed && (
           <div className="px-3 pt-3 pb-1">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-                Projects
+                Systems
               </span>
               <Link
                 href="/projects"
@@ -187,14 +225,14 @@ export function Sidebar() {
                   )}
                   onClick={() => {
                     if (collapsed) {
-                      router.push(`/projects/${project.id}?view=kanban`);
+                      router.push(`/projects/${project.id}?view=diagrams`);
                       return;
                     }
                     if (isExpanded) {
                       setExpandedProjectId(null);
                     } else {
                       setExpandedProjectId(project.id);
-                      router.push(`/projects/${project.id}?view=kanban`);
+                      router.push(`/projects/${project.id}?view=diagrams`);
                     }
                   }}
                   title={collapsed ? project.name : undefined}

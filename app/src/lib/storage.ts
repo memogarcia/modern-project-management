@@ -1,11 +1,7 @@
-import type { Diagram } from "@/lib/types";
+import type { Diagram, DiagramMeta } from "@/lib/types";
 
 /**
- * Storage layer — reads / writes diagrams via the Next.js API routes,
- * which in turn read / write JSON files in the shared diagrams-data
- * directory (the same directory the MCP server uses).
- *
- * All public functions are async; callers must await them.
+ * Diagram storage client used by the editor and diagram list pages.
  */
 
 const API_BASE = "/api/diagrams";
@@ -20,15 +16,15 @@ async function readErrorMessage(res: Response): Promise<string> {
   return `${res.status} ${res.statusText}`.trim();
 }
 
-/** Fetch all diagrams (sorted newest-first by the API). */
-export async function loadDiagrams(): Promise<Diagram[]> {
+/** Fetch diagram summaries (sorted newest-first by the API). */
+export async function loadDiagrams(): Promise<DiagramMeta[]> {
   try {
     const res = await fetch(API_BASE);
     if (!res.ok) {
       console.error(`Failed to load diagrams: ${await readErrorMessage(res)}`);
       return [];
     }
-    return (await res.json()) as Diagram[];
+    return (await res.json()) as DiagramMeta[];
   } catch (error) {
     console.error("Failed to load diagrams", error);
     return [];
@@ -45,8 +41,8 @@ export async function loadDiagram(id: string): Promise<Diagram | null> {
   return (await res.json()) as Diagram;
 }
 
-/** Create or update a diagram (POST to the API, which writes the JSON file). */
-export async function saveDiagram(diagram: Diagram): Promise<void> {
+/** Create or update a diagram and return the persisted revision. */
+export async function saveDiagram(diagram: Diagram & { expectedRevision?: number }): Promise<Diagram> {
   const res = await fetch(API_BASE, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -58,6 +54,7 @@ export async function saveDiagram(diagram: Diagram): Promise<void> {
   if (!res.ok) {
     throw new Error(`Failed to save diagram: ${await readErrorMessage(res)}`);
   }
+  return (await res.json()) as Diagram;
 }
 
 /** Delete a diagram by ID. */

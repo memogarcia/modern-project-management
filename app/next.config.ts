@@ -1,12 +1,15 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ["elkjs"],
+  experimental: {
+    externalDir: true,
+  },
   turbopack: {
-    // Prevent Next from inferring the monorepo root (it breaks Tailwind resolution
-    // when multiple lockfiles exist).
-    root: ".",
+    // Shared PlanView modules live one level above the app package.
+    root: path.resolve(__dirname, ".."),
   },
 };
 

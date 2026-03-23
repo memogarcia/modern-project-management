@@ -6,6 +6,18 @@ import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import {
   getDb,
+  updateDiagramNodeDetails as dbUpdateDiagramNodeDetails,
+  updateDiagramEdgeDetails as dbUpdateDiagramEdgeDetails,
+  listTroubleshootingSessions as dbListTroubleshootingSessions,
+  getTroubleshootingSessionById as dbGetTroubleshootingSession,
+  createTroubleshootingSession as dbCreateTroubleshootingSession,
+  updateTroubleshootingSession as dbUpdateTroubleshootingSession,
+  appendSessionTimelineEntry as dbAppendTimelineEntry,
+  appendSessionComment as dbAppendSessionComment,
+  appendSessionCommand as dbAppendSessionCommand,
+  extractKnowledgePattern as dbExtractKnowledgePattern,
+  listKnowledgePatterns as dbListKnowledgePatterns,
+  searchTroubleshootingMemory as dbSearchTroubleshootingMemory,
   listDiagrams as dbListDiagrams,
   getDiagramById as dbGetDiagram,
   upsertDiagram as dbSaveDiagram,
@@ -18,6 +30,17 @@ import {
 } from "./db.js";
 import type { Diagram, KanbanProject, KanbanEpic, KanbanTask, KanbanColumn, KanbanTaskLink, ProjectSession } from "./types.js";
 import { DEFAULT_KANBAN_COLUMNS } from "./types.js";
+import { mermaidToFlow } from "../../shared/planview/mermaid.js";
+import {
+  edgeMetadataSchema,
+  nodeMetadataSchema,
+  patternExtractionSchema,
+  sessionCommandSchema,
+  sessionCommentSchema,
+  timelineEntrySchema,
+  troubleshootingSessionCreateSchema,
+  troubleshootingSessionPatchSchema,
+} from "../../shared/planview/validation.js";
 
 // Ensure DB is initialized
 getDb();
@@ -25,8 +48,33 @@ const MERMAID_NODE_ID_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 const server = new McpServer({
   name: "planview",
-  version: "1.1.0",
+  version: "2.0.0",
 });
+
+function createEmptyDiagram(
+  id: string,
+  name: string,
+  description: string,
+  mermaidCode: string,
+  createdAt: string
+): Diagram {
+  return {
+    id,
+    projectId: null,
+    name,
+    description,
+    revision: 1,
+    createdAt,
+    updatedAt: createdAt,
+    nodeCount: 0,
+    edgeCount: 0,
+    sessionCount: 0,
+    openSessionCount: 0,
+    mermaidCode,
+    nodes: [],
+    edges: [],
+  };
+}
 
 function escapeMermaidQuotedText(value: string): string {
   return value
@@ -51,9 +99,41 @@ function sanitizeErToken(value: string, fallback: string): string {
   return cleaned || fallback;
 }
 
-function markDiagramFlowStale(diagram: Diagram): void {
-  diagram.nodes = [];
-  diagram.edges = [];
+function toolSuccess(payload: unknown) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify(payload, null, 2),
+      },
+    ],
+  };
+}
+
+function toolError(code: string, message: string, details?: Record<string, unknown>) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify({ error: message, code, details }, null, 2),
+      },
+    ],
+    isError: true,
+  };
+}
+
+function rebuildGraphFromMermaid(diagram: Diagram, mermaidCode: string): Diagram {
+  const nextGraph = mermaidToFlow(mermaidCode, {
+    nodes: diagram.nodes as never[],
+    edges: diagram.edges as never[],
+  });
+
+  return {
+    ...diagram,
+    mermaidCode,
+    nodes: nextGraph.nodes as never[],
+    edges: nextGraph.edges as never[],
+  };
 }
 
 // ─── Tool: list_diagrams ─────────────────────────────────────────────
@@ -118,16 +198,7 @@ server.registerTool("create_diagram", {
   annotations: { readOnlyHint: false, destructiveHint: false },
 }, async ({ name, description, mermaidCode }) => {
     const now = new Date().toISOString();
-    const diagram: Diagram = {
-      id: uuidv4(),
-      name,
-      description: description ?? "",
-      createdAt: now,
-      updatedAt: now,
-      mermaidCode,
-      nodes: [],
-      edges: [],
-    };
+    const diagram = createEmptyDiagram(uuidv4(), name, description ?? "", mermaidCode, now);
     dbSaveDiagram(diagram);
     return {
       content: [
@@ -173,22 +244,8 @@ server.registerTool("update_diagram", {
       mermaidCode: nextMermaidCode,
       updatedAt: new Date().toISOString(),
     };
-    if (mermaidChanged) {
-      markDiagramFlowStale(updated);
-    }
-    dbSaveDiagram(updated);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            { id: updated.id, name: updated.name, message: "Diagram updated" },
-            null,
-            2
-          ),
-        },
-      ],
-    };
+    const persisted = mermaidChanged ? dbSaveDiagram(rebuildGraphFromMermaid(updated, nextMermaidCode)) : dbSaveDiagram(updated);
+    return toolSuccess({ id: persisted.id, name: persisted.name, revision: persisted.revision, message: "Diagram updated" });
   }
 );
 
@@ -213,6 +270,292 @@ server.registerTool("delete_diagram", {
     };
   }
 );
+
+server.registerTool("get_diagram_metadata", {
+  title: "Get Diagram Metadata",
+  description: "Return diagram summary plus node and edge metadata records",
+  inputSchema: {
+    id: z.string().describe("The diagram ID"),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ id }) => {
+  const diagram = dbGetDiagram(id);
+  if (!diagram) {
+    return toolError("diagram_not_found", `Diagram not found: ${id}`);
+  }
+
+  return toolSuccess({
+    id: diagram.id,
+    name: diagram.name,
+    description: diagram.description,
+    revision: diagram.revision,
+    nodeCount: diagram.nodeCount,
+    edgeCount: diagram.edgeCount,
+    sessionCount: diagram.sessionCount,
+    openSessionCount: diagram.openSessionCount,
+    nodes: diagram.nodes.map((node) => ({
+      id: node.id,
+      label: node.data.label,
+      metadata: node.data.metadata ?? null,
+    })),
+    edges: diagram.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      label: edge.data?.label ?? edge.label ?? "",
+      metadata: edge.data?.metadata ?? null,
+    })),
+  });
+});
+
+server.registerTool("update_diagram_node_metadata", {
+  title: "Update Diagram Node Metadata",
+  description: "Safely update rich metadata for a single node in a diagram",
+  inputSchema: {
+    diagramId: z.string().describe("The diagram ID"),
+    nodeId: z.string().describe("The node ID"),
+    metadata: nodeMetadataSchema,
+    expectedRevision: z.number().int().positive().optional(),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ diagramId, nodeId, metadata, expectedRevision }) => {
+  try {
+    const diagram = dbUpdateDiagramNodeDetails(diagramId, nodeId, metadata, expectedRevision);
+    return toolSuccess({
+      diagramId: diagram.id,
+      nodeId,
+      revision: diagram.revision,
+      message: "Node metadata updated",
+    });
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "node_update_failed", planViewError.message ?? "Failed to update node metadata", planViewError.details);
+  }
+});
+
+server.registerTool("update_diagram_edge_metadata", {
+  title: "Update Diagram Edge Metadata",
+  description: "Safely update dependency metadata for a single edge in a diagram",
+  inputSchema: {
+    diagramId: z.string().describe("The diagram ID"),
+    edgeId: z.string().describe("The edge ID"),
+    metadata: edgeMetadataSchema,
+    expectedRevision: z.number().int().positive().optional(),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ diagramId, edgeId, metadata, expectedRevision }) => {
+  try {
+    const diagram = dbUpdateDiagramEdgeDetails(diagramId, edgeId, metadata, expectedRevision);
+    return toolSuccess({
+      diagramId: diagram.id,
+      edgeId,
+      revision: diagram.revision,
+      message: "Edge metadata updated",
+    });
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "edge_update_failed", planViewError.message ?? "Failed to update edge metadata", planViewError.details);
+  }
+});
+
+server.registerTool("create_troubleshooting_session", {
+  title: "Create Troubleshooting Session",
+  description: "Create a new investigation linked to a diagram and affected graph entities",
+  inputSchema: troubleshootingSessionCreateSchema.shape,
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async (args: z.infer<typeof troubleshootingSessionCreateSchema>) => {
+  try {
+    const input = troubleshootingSessionCreateSchema.parse(args);
+    const session = dbCreateTroubleshootingSession({
+      id: input.id,
+      diagramId: input.diagramId,
+      projectId: input.projectId ?? null,
+      systemScope: input.systemScope,
+      title: input.title,
+      summary: input.summary,
+      status: input.status,
+      linkedNodeIds: input.linkedNodeIds,
+      linkedEdgeIds: input.linkedEdgeIds,
+      timelineEntries: [],
+      notesMarkdown: input.notesMarkdown,
+      hypotheses: input.hypotheses,
+      commands: [],
+      aiTranscriptReferences: input.aiTranscriptReferences,
+      comments: [],
+      resolutionSummary: input.resolutionSummary,
+      createdAt: input.createdAt ?? new Date().toISOString(),
+      updatedAt: input.updatedAt ?? new Date().toISOString(),
+    });
+    return toolSuccess(session);
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "session_create_failed", planViewError.message ?? "Failed to create troubleshooting session", planViewError.details);
+  }
+});
+
+server.registerTool("list_troubleshooting_sessions", {
+  title: "List Troubleshooting Sessions",
+  description: "List troubleshooting sessions filtered by diagram, node, edge, or search term",
+  inputSchema: {
+    diagramId: z.string().optional(),
+    nodeId: z.string().optional(),
+    edgeId: z.string().optional(),
+    q: z.string().optional(),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ diagramId, nodeId, edgeId, q }) => {
+  return toolSuccess(dbListTroubleshootingSessions({ diagramId, nodeId, edgeId, q }));
+});
+
+server.registerTool("get_troubleshooting_session", {
+  title: "Get Troubleshooting Session",
+  description: "Get a single troubleshooting session by ID",
+  inputSchema: { id: z.string().describe("The troubleshooting session ID") },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ id }) => {
+  const session = dbGetTroubleshootingSession(id);
+  if (!session) {
+    return toolError("session_not_found", `Troubleshooting session not found: ${id}`);
+  }
+  return toolSuccess(session);
+});
+
+server.registerTool("update_troubleshooting_session", {
+  title: "Update Troubleshooting Session",
+  description: "Update summary fields, linked entities, notes, hypotheses, or resolution for a troubleshooting session",
+  inputSchema: {
+    id: z.string(),
+    ...troubleshootingSessionPatchSchema.shape,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ id, ...patch }: { id: string } & z.infer<typeof troubleshootingSessionPatchSchema>) => {
+  try {
+    const input = troubleshootingSessionPatchSchema.parse(patch);
+    return toolSuccess(dbUpdateTroubleshootingSession(id, input));
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "session_update_failed", planViewError.message ?? "Failed to update troubleshooting session", planViewError.details);
+  }
+});
+
+server.registerTool("append_session_timeline_entry", {
+  title: "Append Session Timeline Entry",
+  description: "Append a timeline entry to a troubleshooting session",
+  inputSchema: {
+    sessionId: z.string(),
+    entry: timelineEntrySchema,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ sessionId, entry }) => {
+  try {
+    const created = dbAppendTimelineEntry(sessionId, timelineEntrySchema.parse(entry));
+    return toolSuccess(created);
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "timeline_append_failed", planViewError.message ?? "Failed to append timeline entry", planViewError.details);
+  }
+});
+
+server.registerTool("append_session_comment", {
+  title: "Append Session Comment",
+  description: "Append a comment to a troubleshooting session",
+  inputSchema: {
+    sessionId: z.string(),
+    comment: sessionCommentSchema,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ sessionId, comment }) => {
+  try {
+    const created = dbAppendSessionComment(sessionId, sessionCommentSchema.parse(comment));
+    return toolSuccess(created);
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "comment_append_failed", planViewError.message ?? "Failed to append session comment", planViewError.details);
+  }
+});
+
+server.registerTool("append_session_command", {
+  title: "Append Session Command",
+  description: "Append a command record to a troubleshooting session",
+  inputSchema: {
+    sessionId: z.string(),
+    command: sessionCommandSchema,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ sessionId, command }) => {
+  try {
+    const created = dbAppendSessionCommand(sessionId, sessionCommandSchema.parse(command));
+    return toolSuccess(created);
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "command_append_failed", planViewError.message ?? "Failed to append session command", planViewError.details);
+  }
+});
+
+server.registerTool("link_session_to_entities", {
+  title: "Link Session To Entities",
+  description: "Update the set of linked nodes and edges for a troubleshooting session",
+  inputSchema: {
+    sessionId: z.string(),
+    linkedNodeIds: z.array(z.string()).default([]),
+    linkedEdgeIds: z.array(z.string()).default([]),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+}, async ({ sessionId, linkedNodeIds, linkedEdgeIds }) => {
+  try {
+    const updated = dbUpdateTroubleshootingSession(sessionId, { linkedNodeIds, linkedEdgeIds });
+    return toolSuccess(updated);
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "session_link_failed", planViewError.message ?? "Failed to link session entities", planViewError.details);
+  }
+});
+
+server.registerTool("extract_knowledge_pattern", {
+  title: "Extract Knowledge Pattern",
+  description: "Extract a reusable troubleshooting pattern from a resolved troubleshooting session",
+  inputSchema: {
+    sessionId: z.string(),
+    pattern: patternExtractionSchema,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false },
+}, async ({ sessionId, pattern }) => {
+  try {
+    const session = dbGetTroubleshootingSession(sessionId);
+    if (!session) {
+      return toolError("session_not_found", `Troubleshooting session not found: ${sessionId}`);
+    }
+    const input = patternExtractionSchema.parse(pattern);
+    const extracted = dbExtractKnowledgePattern(sessionId, {
+      title: input.title,
+      summary: input.summary,
+      symptom: input.symptom,
+      resolution: input.resolution,
+      tags: input.tags,
+      linkedNodeIds: session.linkedNodeIds,
+      linkedEdgeIds: session.linkedEdgeIds,
+    });
+    return toolSuccess(extracted);
+  } catch (error) {
+    const planViewError = error as { code?: string; message?: string; details?: Record<string, unknown> };
+    return toolError(planViewError.code ?? "pattern_extract_failed", planViewError.message ?? "Failed to extract knowledge pattern", planViewError.details);
+  }
+});
+
+server.registerTool("search_troubleshooting_memory", {
+  title: "Search Troubleshooting Memory",
+  description: "Search troubleshooting sessions and reusable patterns by text and affected graph entities",
+  inputSchema: {
+    q: z.string(),
+    diagramId: z.string().optional(),
+    nodeId: z.string().optional(),
+    edgeId: z.string().optional(),
+    limit: z.number().int().positive().max(100).optional(),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false },
+}, async ({ q, diagramId, nodeId, edgeId, limit }) => {
+  return toolSuccess(dbSearchTroubleshootingMemory({ q, diagramId, nodeId, edgeId, limit }));
+});
 
 // ─── Tool: add_node ──────────────────────────────────────────────────
 server.registerTool("add_node_to_diagram", {
@@ -288,23 +631,14 @@ server.registerTool("add_node_to_diagram", {
     }
     lines.splice(insertIdx, 0, nodeLine);
 
-    diagram.mermaidCode = lines.join("\n");
-    markDiagramFlowStale(diagram);
-    diagram.updatedAt = new Date().toISOString();
-    dbSaveDiagram(diagram);
+    const persisted = dbSaveDiagram(
+      rebuildGraphFromMermaid(
+        { ...diagram, updatedAt: new Date().toISOString() },
+        lines.join("\n")
+      )
+    );
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            { message: `Node '${nodeId}' added`, mermaidCode: diagram.mermaidCode },
-            null,
-            2
-          ),
-        },
-      ],
-    };
+    return toolSuccess({ message: `Node '${nodeId}' added`, mermaidCode: persisted.mermaidCode, revision: persisted.revision });
   }
 );
 
@@ -351,26 +685,18 @@ server.registerTool("add_edge_to_diagram", {
     }
     lines.splice(insertIdx, 0, edgeLine);
 
-    diagram.mermaidCode = lines.join("\n");
-    markDiagramFlowStale(diagram);
-    diagram.updatedAt = new Date().toISOString();
-    dbSaveDiagram(diagram);
+    const persisted = dbSaveDiagram(
+      rebuildGraphFromMermaid(
+        { ...diagram, updatedAt: new Date().toISOString() },
+        lines.join("\n")
+      )
+    );
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            {
-              message: `Edge ${source} -> ${target} added`,
-              mermaidCode: diagram.mermaidCode,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
+    return toolSuccess({
+      message: `Edge ${source} -> ${target} added`,
+      mermaidCode: persisted.mermaidCode,
+      revision: persisted.revision,
+    });
   }
 );
 
@@ -451,16 +777,7 @@ server.registerTool("create_database_schema", {
 
     const mermaidCode = lines.join("\n") + "\n";
 
-    const diagram: Diagram = {
-      id: uuidv4(),
-      name,
-      description: description ?? "",
-      createdAt: now,
-      updatedAt: now,
-      mermaidCode,
-      nodes: [],
-      edges: [],
-    };
+    const diagram = createEmptyDiagram(uuidv4(), name, description ?? "", mermaidCode, now);
     dbSaveDiagram(diagram);
     return {
       content: [
@@ -554,26 +871,18 @@ server.registerTool("add_table_to_diagram", {
     }
 
     lines.splice(insertIdx, 0, ...tableLines);
-    diagram.mermaidCode = lines.join("\n");
-    markDiagramFlowStale(diagram);
-    diagram.updatedAt = new Date().toISOString();
-    dbSaveDiagram(diagram);
+    const persisted = dbSaveDiagram(
+      rebuildGraphFromMermaid(
+        { ...diagram, updatedAt: new Date().toISOString() },
+        lines.join("\n")
+      )
+    );
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            {
-              message: `Table '${tableName}' added`,
-              mermaidCode: diagram.mermaidCode,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
+    return toolSuccess({
+      message: `Table '${tableName}' added`,
+      mermaidCode: persisted.mermaidCode,
+      revision: persisted.revision,
+    });
   }
 );
 
@@ -635,26 +944,18 @@ server.registerTool("add_relationship_to_diagram", {
     }
 
     lines.splice(insertIdx, 0, relLine);
-    diagram.mermaidCode = lines.join("\n");
-    markDiagramFlowStale(diagram);
-    diagram.updatedAt = new Date().toISOString();
-    dbSaveDiagram(diagram);
+    const persisted = dbSaveDiagram(
+      rebuildGraphFromMermaid(
+        { ...diagram, updatedAt: new Date().toISOString() },
+        lines.join("\n")
+      )
+    );
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            {
-              message: `Relationship ${from} -> ${to} added`,
-              mermaidCode: diagram.mermaidCode,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
+    return toolSuccess({
+      message: `Relationship ${from} -> ${to} added`,
+      mermaidCode: persisted.mermaidCode,
+      revision: persisted.revision,
+    });
   }
 );
 
@@ -1809,6 +2110,110 @@ server.registerResource("diagrams", "planview://diagrams", {
           null,
           2
         ),
+      },
+    ],
+  };
+});
+
+server.registerResource(
+  "diagram",
+  new ResourceTemplate("planview://diagrams/{diagramId}", {
+    list: async () => ({
+      resources: dbListDiagrams().map((diagram) => ({
+        uri: `planview://diagrams/${diagram.id}`,
+        name: diagram.name,
+      })),
+    }),
+  }),
+  {
+    title: "Diagram Details",
+    description: "Full diagram document with graph, metadata, and troubleshooting counts",
+    mimeType: "application/json",
+  },
+  async (uri, { diagramId }) => {
+    const diagram = dbGetDiagram(String(diagramId));
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: diagram
+            ? JSON.stringify(diagram, null, 2)
+            : JSON.stringify({ error: "Diagram not found" }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.registerResource("investigations", "planview://investigations", {
+  title: "All Investigations",
+  description: "List of troubleshooting sessions in the workspace",
+  mimeType: "application/json",
+}, async (uri) => {
+  const sessions = dbListTroubleshootingSessions().map((session) => ({
+    id: session.id,
+    diagramId: session.diagramId,
+    title: session.title,
+    summary: session.summary,
+    status: session.status,
+    updatedAt: session.updatedAt,
+    linkedNodeIds: session.linkedNodeIds,
+    linkedEdgeIds: session.linkedEdgeIds,
+  }));
+  return {
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(sessions, null, 2),
+      },
+    ],
+  };
+});
+
+server.registerResource(
+  "investigation",
+  new ResourceTemplate("planview://investigations/{sessionId}", {
+    list: async () => ({
+      resources: dbListTroubleshootingSessions().map((session) => ({
+        uri: `planview://investigations/${session.id}`,
+        name: session.title,
+      })),
+    }),
+  }),
+  {
+    title: "Investigation Details",
+    description: "Full troubleshooting session with links, notes, commands, and artifacts",
+    mimeType: "application/json",
+  },
+  async (uri, { sessionId }) => {
+    const session = dbGetTroubleshootingSession(String(sessionId));
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: session
+            ? JSON.stringify(session, null, 2)
+            : JSON.stringify({ error: "Troubleshooting session not found" }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.registerResource("patterns", "planview://patterns", {
+  title: "Reusable Patterns",
+  description: "Extracted troubleshooting memory patterns",
+  mimeType: "application/json",
+}, async (uri) => {
+  return {
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(dbListKnowledgePatterns(), null, 2),
       },
     ],
   };

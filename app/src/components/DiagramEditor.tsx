@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -21,6 +21,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import { nodeTypes } from "@/components/nodes";
 import ShapePalette from "@/components/ShapePalette";
 import MermaidPanel from "@/components/MermaidPanel";
+import TroubleshootingPanel from "@/components/TroubleshootingPanel";
 import Toolbar from "@/components/Toolbar";
 import NodeEditModal from "@/components/NodeEditModal";
 import EdgeEditModal from "@/components/EdgeEditModal";
@@ -45,6 +46,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const diagramPersistError = useDiagramStore((s) => s.persistError);
   const loadDiagramFn = useDiagramStore((s) => s.loadDiagram);
   const mermaidCode = useDiagramStore((s) => s.mermaidCode);
+  const mermaidError = useDiagramStore((s) => s.mermaidError);
   const syncMermaidToFlow = useDiagramStore((s) => s.syncMermaidToFlow);
   const persist = useDiagramStore((s) => s.persist);
   const deleteSelected = useDiagramStore((s) => s.deleteSelected);
@@ -80,6 +82,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const lastExpandedWidthRef = useRef(380);
   const [isMermaidCollapsed, setIsMermaidCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [activeRightTab, setActiveRightTab] = useState<"mermaid" | "investigations">("mermaid");
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(380);
@@ -352,6 +355,15 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
     updateEdge(edgeId, updates);
   }, [updateEdge]);
 
+  const selectedNodeIds = useMemo(
+    () => nodes.filter((node) => node.selected).map((node) => node.id),
+    [nodes]
+  );
+  const selectedEdgeIds = useMemo(
+    () => edges.filter((edge) => edge.selected).map((edge) => edge.id),
+    [edges]
+  );
+
   // Drag-to-reparent: when a node is dropped onto a group, make it a child
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_event, draggedNode) => {
@@ -620,8 +632,39 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
               onMouseEnter={(e) => { if (!isDragging) e.currentTarget.style.opacity = "1"; }}
               onMouseLeave={(e) => { if (!isDragging) e.currentTarget.style.opacity = "0.5"; }}
             />
-            <div style={{ width: panelWidth, minWidth: 200, maxWidth: "60vw", flexShrink: 0, background: "var(--panel-bg)", borderLeft: "1px solid var(--border)" }}>
-              <MermaidPanel onCollapse={() => setMermaidCollapsed(true)} />
+            <div style={{ width: panelWidth, minWidth: 200, maxWidth: "60vw", flexShrink: 0, background: "var(--panel-bg)", borderLeft: "1px solid var(--border)", display: "flex", flexDirection: "column" }}>
+              <div className="flex items-center gap-1 border-b border-[var(--border)] px-2 py-2">
+                <button
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    activeRightTab === "mermaid" ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--text-muted)] hover:bg-[var(--surface)]"
+                  }`}
+                  onClick={() => setActiveRightTab("mermaid")}
+                >
+                  Mermaid
+                  {mermaidError ? " !" : ""}
+                </button>
+                <button
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    activeRightTab === "investigations" ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--text-muted)] hover:bg-[var(--surface)]"
+                  }`}
+                  onClick={() => setActiveRightTab("investigations")}
+                >
+                  Investigations
+                </button>
+              </div>
+              <div className="min-h-0 flex-1">
+                {activeRightTab === "mermaid" ? (
+                  <MermaidPanel onCollapse={() => setMermaidCollapsed(true)} />
+                ) : (
+                  <TroubleshootingPanel
+                    diagramId={currentDiagramId}
+                    nodes={nodes as never[]}
+                    edges={edges as never[]}
+                    selectedNodeIds={selectedNodeIds}
+                    selectedEdgeIds={selectedEdgeIds}
+                  />
+                )}
+              </div>
             </div>
           </>
         )}
@@ -630,6 +673,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
       {/* Edit modals */}
       {editingNode && (
         <NodeEditModal
+          diagramId={currentDiagramId}
           node={editingNode}
           onSave={handleNodeSave}
           onClose={() => setEditingNode(null)}

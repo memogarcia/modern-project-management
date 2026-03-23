@@ -11,7 +11,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import type { ArchNode, ArchEdge, ShapeType, Diagram, DiagramNode, SchemaColumn, GroupNodeData, DatabaseSchemaNodeData, TextNodeData } from "@/lib/types";
 import { getShapeDef } from "@/lib/types";
-import { flowToMermaid, mermaidToFlow, type MermaidSubgraph } from "@/lib/converters";
+import { MermaidParseError, type MermaidDiagnostic, flowToMermaid, mermaidToFlow, type MermaidSubgraph } from "@/lib/converters";
 import { autoLayout, type LayoutDirection } from "@/lib/layout";
 import { saveDiagram, loadDiagram } from "@/lib/storage";
 
@@ -737,9 +737,13 @@ interface DiagramStore {
   diagramId: string;
   diagramName: string;
   diagramDescription: string;
+  diagramRevision: number;
   isLoading: boolean;
   loadError: string | null;
+  loadWarnings: string[];
   persistError: string | null;
+  mermaidError: string | null;
+  mermaidDiagnostics: MermaidDiagnostic[];
 
   // Graph state
   nodes: DiagramNode[];
@@ -807,9 +811,13 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   diagramId: "",
   diagramName: "Untitled Diagram",
   diagramDescription: "",
+  diagramRevision: 0,
   isLoading: false,
   loadError: null,
+  loadWarnings: [],
   persistError: null,
+  mermaidError: null,
+  mermaidDiagnostics: [],
   nodes: [],
   edges: [],
   mermaidCode: "graph TD\n",
@@ -980,9 +988,13 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       diagramId: "",
       diagramName: "Untitled Diagram",
       diagramDescription: "",
+      diagramRevision: 0,
       isLoading: true,
       loadError: null,
+      loadWarnings: [],
       persistError: null,
+      mermaidError: null,
+      mermaidDiagnostics: [],
       nodes: [],
       edges: [],
       mermaidCode: "graph TD\n",
@@ -1012,9 +1024,13 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         diagramId: diagram.id,
         diagramName: diagram.name,
         diagramDescription: diagram.description,
+        diagramRevision: diagram.revision,
         isLoading: shouldReconcile,
         loadError: null,
+        loadWarnings: diagram.warnings ?? [],
         persistError: null,
+        mermaidError: null,
+        mermaidDiagnostics: [],
         nodes: diagram.nodes as DiagramNode[],
         edges: diagram.edges as ArchEdge[],
         mermaidCode: diagram.mermaidCode,
@@ -1047,8 +1063,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         diagramId: "",
         diagramName: "Untitled Diagram",
         diagramDescription: "",
+        diagramRevision: 0,
         isLoading: false,
         loadError: message,
+        loadWarnings: [],
         nodes: [],
         edges: [],
         mermaidCode: "graph TD\n",
@@ -1069,14 +1087,24 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       id,
       name,
       description: description ?? "",
+      projectId: null,
       createdAt: now,
       updatedAt: now,
+      revision: 1,
+      nodeCount: 0,
+      edgeCount: 0,
+      sessionCount: 0,
+      openSessionCount: 0,
       nodes: [],
       edges: [],
       mermaidCode: "graph TD\n",
     };
     try {
-      await saveDiagram(diagram);
+      const saved = await saveDiagram(diagram);
+      set({
+        diagramRevision: saved.revision,
+        loadWarnings: saved.warnings ?? [],
+      });
     } catch (error) {
       const message = getErrorMessage(error, "Failed to create diagram");
       set({ persistError: message });
@@ -1086,9 +1114,13 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       diagramId: id,
       diagramName: name,
       diagramDescription: description ?? "",
+      diagramRevision: 1,
       isLoading: false,
       loadError: null,
+      loadWarnings: [],
       persistError: null,
+      mermaidError: null,
+      mermaidDiagnostics: [],
       nodes: [],
       edges: [],
       mermaidCode: "graph TD\n",
@@ -1109,6 +1141,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   persist: () => {
     const s = get();
     if (!s.diagramId || s.isLoading) return;
+    if (s.mermaidError) {
+      set({ persistError: "Resolve Mermaid errors before saving this diagram." });
+      return;
+    }
     set({ persistError: null });
 
     const requestId = ++latestPersistRequest;
@@ -1116,6 +1152,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       diagramId: s.diagramId,
       diagramName: s.diagramName,
       diagramDescription: s.diagramDescription,
+      diagramRevision: s.diagramRevision,
       nodes: s.nodes,
       edges: s.edges,
       mermaidCode: s.mermaidCode,
@@ -1131,22 +1168,33 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         const existing = await loadDiagram(snapshot.diagramId);
         if (requestId !== latestPersistRequest) return;
 
-        const diagram: Diagram = {
+        const diagram: Diagram & { expectedRevision?: number } = {
           id: snapshot.diagramId,
           name: snapshot.diagramName,
           description: snapshot.diagramDescription,
+          projectId: existing?.projectId ?? null,
           createdAt: existing?.createdAt ?? new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          revision: existing?.revision ?? snapshot.diagramRevision,
+          nodeCount: snapshot.nodes.length,
+          edgeCount: snapshot.edges.length,
+          sessionCount: existing?.sessionCount ?? 0,
+          openSessionCount: existing?.openSessionCount ?? 0,
+          expectedRevision: snapshot.diagramRevision || existing?.revision,
           nodes: snapshot.nodes,
           edges: snapshot.edges,
           mermaidCode: snapshot.mermaidCode,
         };
 
-        await saveDiagram(diagram);
+        const saved = await saveDiagram(diagram);
         if (requestId !== latestPersistRequest) return;
         set((curr) => {
           if (curr.diagramId !== snapshot.diagramId) return {};
-          return { persistError: null };
+          return {
+            diagramRevision: saved.revision,
+            loadWarnings: saved.warnings ?? [],
+            persistError: null,
+          };
         });
       })
       .catch((error) => {
@@ -1774,7 +1822,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   },
 
   updateMermaidCode: (code) => {
-    set({ mermaidCode: code });
+    set({ mermaidCode: code, mermaidError: null, mermaidDiagnostics: [] });
   },
 
   syncFlowToMermaid: () => {
@@ -1782,7 +1830,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     if (s._syncingFromMermaid) return;
     set({ _syncingFromFlow: true });
     const code = flowToMermaid(s.nodes, s.edges);
-    set({ mermaidCode: code, _syncingFromFlow: false });
+    set({ mermaidCode: code, _syncingFromFlow: false, mermaidError: null, mermaidDiagnostics: [] });
   },
 
   syncMermaidToFlow: async () => {
@@ -1796,6 +1844,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       const { nodes: parsedNodes, edges: parsedEdges, subgraphs } = mermaidToFlow(
         s.mermaidCode,
         s.nodes, // pass existing nodes so visual metadata (shapeType, etc.) is preserved
+        s.edges,
       );
       // Preserve positions for nodes that already exist
       const absPosMap = buildAbsolutePositionMap(s.nodes);
@@ -1864,14 +1913,33 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
           nodes: finalNodes,
           edges: mergedEdges,
           _syncingFromMermaid: false,
+          mermaidError: null,
+          mermaidDiagnostics: [],
           _historyPast: past,
           _historyFuture: [],
           canUndo: past.length > 0,
           canRedo: false,
         };
       });
-    } catch {
-      set({ _syncingFromMermaid: false });
+    } catch (error) {
+      if (error instanceof MermaidParseError) {
+        const diagnostics = error.diagnostics;
+        const summary = diagnostics
+          .slice(0, 3)
+          .map((diagnostic) => `Line ${diagnostic.line}: ${diagnostic.message}`)
+          .join(" ");
+        set({
+          _syncingFromMermaid: false,
+          mermaidError: summary || error.message,
+          mermaidDiagnostics: diagnostics,
+        });
+        return;
+      }
+      set({
+        _syncingFromMermaid: false,
+        mermaidError: "Mermaid reconciliation failed.",
+        mermaidDiagnostics: [],
+      });
     }
   },
 

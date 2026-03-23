@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createEmptyEdgeMetadata, type DiagramLinkReference } from "@planview/domain";
 import type { ArchEdge } from "@/lib/types";
 
 interface EdgeEditModalProps {
@@ -10,217 +11,274 @@ interface EdgeEditModalProps {
 }
 
 const EDGE_TYPES: { value: string; label: string }[] = [
-  { value: "smoothstep", label: "Smooth Step" },
+  { value: "smoothstep", label: "Smooth step" },
   { value: "default", label: "Bezier" },
   { value: "straight", label: "Straight" },
   { value: "step", label: "Step" },
 ];
 
-const STROKE_COLORS = [
-  "#475569", "#333333", "#000000", "#94a3b8", "#cbd5e1",
-  "#2196f3", "#4caf50", "#9c27b0", "#ff9800", "#00bcd4",
-  "#f44336", "#cddc39", "#3f51b5", "#03a9f4", "#e91e63",
-];
+function normalizeLinks(links: DiagramLinkReference[]): DiagramLinkReference[] {
+  return links
+    .map((entry) => ({
+      id: entry.id.trim() || crypto.randomUUID(),
+      label: entry.label.trim(),
+      url: entry.url.trim(),
+      kind: entry.kind,
+    }))
+    .filter((entry) => entry.label && entry.url);
+}
 
-const STROKE_WIDTHS = [1, 2, 3, 4, 5];
+function splitLines(value: string): string[] {
+  return value
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function EvidenceSection(props: {
+  links: DiagramLinkReference[];
+  onChange: (links: DiagramLinkReference[]) => void;
+}) {
+  return (
+    <section className="edit-modal-field">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <label className="edit-modal-label">Evidence references</label>
+          <div className="text-[11px] text-[var(--text-muted)]">Links to logs, dashboards, traces, or tickets that support this dependency.</div>
+        </div>
+        <button
+          className="edit-modal-btn edit-modal-btn-secondary"
+          type="button"
+          onClick={() =>
+            props.onChange([
+              ...props.links,
+              { id: crypto.randomUUID(), label: "", url: "", kind: "other" },
+            ])
+          }
+        >
+          Add link
+        </button>
+      </div>
+      <div className="mt-2 space-y-2">
+        {props.links.length === 0 && (
+          <div className="rounded-md border border-dashed border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
+            No evidence references added yet.
+          </div>
+        )}
+        {props.links.map((link, index) => (
+          <div key={link.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2">
+            <input
+              className="edit-modal-input"
+              value={link.label}
+              onChange={(event) => {
+                const next = [...props.links];
+                next[index] = { ...link, label: event.target.value };
+                props.onChange(next);
+              }}
+              placeholder="Reference label"
+            />
+            <input
+              className="edit-modal-input"
+              value={link.url}
+              onChange={(event) => {
+                const next = [...props.links];
+                next[index] = { ...link, url: event.target.value };
+                props.onChange(next);
+              }}
+              placeholder="https://..."
+            />
+            <div className="flex justify-end">
+              <button
+                className="edit-modal-btn edit-modal-btn-secondary"
+                type="button"
+                onClick={() => props.onChange(props.links.filter((entry) => entry.id !== link.id))}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function EdgeEditModal({ edge, onSave, onClose }: EdgeEditModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const initialMetadata = useMemo(
+    () => edge.data?.metadata ?? createEmptyEdgeMetadata(new Date().toISOString()),
+    [edge.data?.metadata]
+  );
+
   const [label, setLabel] = useState((edge.data?.label ?? edge.label ?? "") as string);
   const [edgeType, setEdgeType] = useState(edge.type ?? "smoothstep");
   const [animated, setAnimated] = useState(edge.animated ?? false);
-  const [strokeColor, setStrokeColor] = useState(edge.data?.strokeColor ?? edge.style?.stroke ?? "#475569");
-  const [strokeWidth, setStrokeWidth] = useState(edge.data?.strokeWidth ?? edge.style?.strokeWidth ?? 2);
-  const overlayRef = useRef<HTMLDivElement>(null);
+  const [relationshipType, setRelationshipType] = useState(initialMetadata.relationshipType);
+  const [protocol, setProtocol] = useState(initialMetadata.protocol || edge.data?.protocol || "");
+  const [authAssumptions, setAuthAssumptions] = useState(initialMetadata.authAssumptions);
+  const [dependencyNotes, setDependencyNotes] = useState(initialMetadata.dependencyNotes);
+  const [knownFailureModesText, setKnownFailureModesText] = useState(initialMetadata.knownFailureModes.join("\n"));
+  const [notesMarkdown, setNotesMarkdown] = useState(initialMetadata.notesMarkdown);
+  const [commentsMarkdown, setCommentsMarkdown] = useState(initialMetadata.commentsMarkdown);
+  const [evidenceReferences, setEvidenceReferences] = useState(initialMetadata.evidenceReferences);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
   const handleSave = useCallback(() => {
+    const metadata = {
+      ...initialMetadata,
+      relationshipType: relationshipType.trim(),
+      protocol: protocol.trim(),
+      authAssumptions,
+      dependencyNotes,
+      knownFailureModes: splitLines(knownFailureModesText),
+      notesMarkdown,
+      commentsMarkdown,
+      evidenceReferences: normalizeLinks(evidenceReferences),
+      updatedAt: new Date().toISOString(),
+    };
+
     onSave(edge.id, {
       label: label.trim() || undefined,
       type: edgeType,
       animated,
-      style: {
-        stroke: strokeColor,
-        strokeWidth: Number(strokeWidth),
-      },
       data: {
-        ...edge.data,
+        ...(edge.data ?? {}),
         label: label.trim() || undefined,
-        strokeColor,
-        strokeWidth: Number(strokeWidth),
+        protocol: protocol.trim() || undefined,
+        metadata,
       },
     });
     onClose();
-  }, [edge.id, edge.data, label, edgeType, animated, strokeColor, strokeWidth, onSave, onClose]);
+  }, [
+    animated,
+    authAssumptions,
+    commentsMarkdown,
+    dependencyNotes,
+    edge.data,
+    edge.id,
+    edgeType,
+    evidenceReferences,
+    initialMetadata,
+    knownFailureModesText,
+    label,
+    notesMarkdown,
+    onClose,
+    onSave,
+    protocol,
+    relationshipType,
+  ]);
 
-  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === overlayRef.current) onClose();
-  }, [onClose]);
+  const handleOverlayClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (event.target === overlayRef.current) onClose();
+    },
+    [onClose]
+  );
 
   return (
     <div ref={overlayRef} className="edit-modal-overlay" onClick={handleOverlayClick}>
-      <div className="edit-modal" style={{ maxWidth: 440 }}>
-        {/* Header */}
+      <div className="edit-modal" style={{ maxWidth: 760, width: "min(88vw, 760px)" }}>
         <div className="edit-modal-header">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
-            <span>Edit Edge</span>
+            <span>Edit dependency</span>
           </div>
-          <button className="edit-modal-close" onClick={onClose}>✕</button>
+          <button className="edit-modal-close" onClick={onClose}>x</button>
         </div>
 
-        {/* Body */}
-        <div className="edit-modal-body">
-          {/* Label */}
-          <div className="edit-modal-field">
-            <label className="edit-modal-label">Label</label>
-            <input
-              className="edit-modal-input"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Edge label (optional)"
-              autoFocus
-            />
-          </div>
-
-          {/* Edge Type */}
-          <div className="edit-modal-field">
-            <label className="edit-modal-label">Edge Type</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              {EDGE_TYPES.map((t) => (
-                <button
-                  key={t.value}
-                  onClick={() => setEdgeType(t.value)}
-                  className="edit-modal-btn"
-                  style={{
-                    flex: 1,
-                    padding: "6px 10px",
-                    fontSize: 12,
-                    background: edgeType === t.value ? "var(--accent)" : "var(--surface)",
-                    color: edgeType === t.value ? "var(--accent-foreground)" : "var(--foreground)",
-                    border: `1px solid ${edgeType === t.value ? "var(--accent)" : "var(--border)"}`,
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
+        <div className="edit-modal-body" style={{ maxHeight: "72vh", overflowY: "auto" }}>
+          <section className="grid gap-4 md:grid-cols-2">
+            <div className="edit-modal-field">
+              <label className="edit-modal-label">Label</label>
+              <input className="edit-modal-input" value={label} onChange={(event) => setLabel(event.target.value)} autoFocus />
             </div>
-          </div>
-
-          {/* Stroke Color */}
-          <div className="edit-modal-field">
-            <label className="edit-modal-label">Stroke Color</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <input
-                type="color"
-                value={strokeColor}
-                onChange={(e) => setStrokeColor(e.target.value)}
-                style={{ width: 36, height: 36, border: "none", borderRadius: 6, cursor: "pointer", background: "none", padding: 0 }}
-              />
-              {STROKE_COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setStrokeColor(c)}
-                  className="edit-modal-color-swatch"
-                  style={{
-                    background: c,
-                    outline: strokeColor === c ? "2px solid var(--accent)" : "1px solid var(--border)",
-                    outlineOffset: 1,
-                  }}
-                />
-              ))}
+            <div className="edit-modal-field">
+              <label className="edit-modal-label">Relationship type</label>
+              <input className="edit-modal-input" value={relationshipType} onChange={(event) => setRelationshipType(event.target.value)} placeholder="sync call, queue subscription, replication" />
             </div>
-          </div>
+          </section>
 
-          {/* Stroke Width */}
-          <div className="edit-modal-field">
-            <label className="edit-modal-label">Stroke Width</label>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {STROKE_WIDTHS.map((w) => (
-                <button
-                  key={w}
-                  onClick={() => setStrokeWidth(w)}
-                  className="edit-modal-btn"
-                  style={{
-                    width: 40,
-                    height: 36,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 0,
-                    background: strokeWidth === w ? "var(--accent)" : "var(--surface)",
-                    color: strokeWidth === w ? "var(--accent-foreground)" : "var(--foreground)",
-                    border: `1px solid ${strokeWidth === w ? "var(--accent)" : "var(--border)"}`,
-                    fontSize: 13,
-                    fontWeight: 600,
-                  }}
-                >
-                  {w}
-                </button>
-              ))}
-              <span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 4 }}>px</span>
+          <section className="grid gap-4 md:grid-cols-2">
+            <div className="edit-modal-field">
+              <label className="edit-modal-label">Protocol</label>
+              <input className="edit-modal-input" value={protocol} onChange={(event) => setProtocol(event.target.value)} placeholder="HTTP, gRPC, Kafka, SQL" />
             </div>
-          </div>
+            <div className="edit-modal-field">
+              <label className="edit-modal-label">Edge style</label>
+              <div className="flex gap-2 flex-wrap">
+                {EDGE_TYPES.map((typeOption) => (
+                  <button
+                    key={typeOption.value}
+                    type="button"
+                    className="edit-modal-btn"
+                    style={{
+                      background: edgeType === typeOption.value ? "var(--accent)" : "var(--surface)",
+                      color: edgeType === typeOption.value ? "var(--accent-foreground)" : "var(--foreground)",
+                      border: `1px solid ${edgeType === typeOption.value ? "var(--accent)" : "var(--border)"}`,
+                    }}
+                    onClick={() => setEdgeType(typeOption.value)}
+                  >
+                    {typeOption.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
 
-          {/* Animation Toggle */}
-          <div className="edit-modal-field">
+          <section className="edit-modal-field">
+            <label className="edit-modal-label">Auth assumptions</label>
+            <textarea className="edit-modal-input" rows={3} value={authAssumptions} onChange={(event) => setAuthAssumptions(event.target.value)} placeholder="mTLS, JWT claims, shared IAM role assumptions, or network trust boundaries" />
+          </section>
+
+          <section className="edit-modal-field">
+            <label className="edit-modal-label">Dependency notes</label>
+            <textarea className="edit-modal-input" rows={4} value={dependencyNotes} onChange={(event) => setDependencyNotes(event.target.value)} placeholder="Latency sensitivity, retries, timeout behavior, or sequencing constraints" />
+          </section>
+
+          <section className="edit-modal-field">
+            <label className="edit-modal-label">Known failure modes</label>
+            <textarea className="edit-modal-input" rows={4} value={knownFailureModesText} onChange={(event) => setKnownFailureModesText(event.target.value)} placeholder="One failure mode per line" />
+          </section>
+
+          <section className="edit-modal-field">
+            <label className="edit-modal-label">Notes</label>
+            <textarea className="edit-modal-input" rows={6} value={notesMarkdown} onChange={(event) => setNotesMarkdown(event.target.value)} placeholder="Markdown notes for this dependency edge." />
+          </section>
+
+          <section className="edit-modal-field">
+            <label className="edit-modal-label">Comments</label>
+            <textarea className="edit-modal-input" rows={5} value={commentsMarkdown} onChange={(event) => setCommentsMarkdown(event.target.value)} placeholder="Operational commentary, caveats, and human context." />
+          </section>
+
+          <EvidenceSection links={evidenceReferences} onChange={setEvidenceReferences} />
+
+          <section className="edit-modal-field">
             <label className="edit-modal-label">Animation</label>
             <label className="edit-modal-toggle">
-              <input
-                type="checkbox"
-                checked={animated}
-                onChange={(e) => setAnimated(e.target.checked)}
-              />
+              <input type="checkbox" checked={animated} onChange={(event) => setAnimated(event.target.checked)} />
               <span className="edit-modal-toggle-slider" />
-              <span style={{ marginLeft: 8, fontSize: 13 }}>Animated dashed flow</span>
+              <span style={{ marginLeft: 8, fontSize: 13 }}>Animated edge</span>
             </label>
-          </div>
+          </section>
 
-          {/* Preview */}
-          <div className="edit-modal-field">
-            <label className="edit-modal-label">Preview</label>
-            <div style={{ display: "flex", justifyContent: "center", padding: "16px 0" }}>
-              <svg width="240" height="60" viewBox="0 0 240 60">
-                <defs>
-                  <marker id="edge-preview-arrow" viewBox="0 0 10 10" refX="10" refY="5"
-                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill={strokeColor} />
-                  </marker>
-                </defs>
-                <path
-                  d={edgeType === "straight" ? "M 20 30 L 220 30" :
-                    edgeType === "step" ? "M 20 30 L 120 30 L 120 30 L 220 30" :
-                      "M 20 30 C 80 5, 160 55, 220 30"}
-                  fill="none"
-                  stroke={strokeColor}
-                  strokeWidth={Number(strokeWidth)}
-                  strokeDasharray={animated ? "5 5" : "none"}
-                  markerEnd="url(#edge-preview-arrow)"
-                  className={animated ? "edge-animated-preview" : ""}
-                />
-                {label && (
-                  <text x="120" y="52" textAnchor="middle" fill="var(--foreground)" fontSize="11" fontWeight="500">
-                    {label}
-                  </text>
-                )}
-              </svg>
+          <section className="edit-modal-field">
+            <label className="edit-modal-label">Timestamps</label>
+            <div className="grid gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--text-muted)] md:grid-cols-2">
+              <div>Created: {new Date(initialMetadata.createdAt).toLocaleString()}</div>
+              <div>Updated: {new Date(initialMetadata.updatedAt).toLocaleString()}</div>
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* Footer */}
         <div className="edit-modal-footer">
           <button className="edit-modal-btn edit-modal-btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="edit-modal-btn edit-modal-btn-primary" onClick={handleSave}>Save Changes</button>
+          <button className="edit-modal-btn edit-modal-btn-primary" onClick={handleSave}>Save changes</button>
         </div>
       </div>
     </div>

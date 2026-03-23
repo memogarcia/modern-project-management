@@ -37,7 +37,7 @@ export default function ProjectsListPage() {
     try {
       const id = await initNewProject(newName.trim(), newDesc.trim() || undefined);
       setShowCreate(false);
-      router.push(`/projects/${id}?view=kanban`);
+      router.push(`/projects/${id}?view=diagrams`);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to create project");
     }
@@ -47,12 +47,12 @@ export default function ProjectsListPage() {
     <div className="flex h-full flex-col bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
       {/* Top header bar — aligned with sidebar header */}
       <div className="flex h-10 items-center border-b border-[var(--border)] px-4 shrink-0">
-        <span className="text-sm font-semibold text-[var(--foreground)]">Projects</span>
+        <span className="text-sm font-semibold text-[var(--foreground)]">Systems</span>
       </div>
       <div className="flex-1 overflow-y-auto p-8">
         <div className="mx-auto w-full max-w-2xl">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-lg font-bold tracking-tight">Projects</h1>
+            <h1 className="text-lg font-bold tracking-tight">Systems</h1>
             <Button size="sm" onClick={() => {
               setNewName("");
               setNewDesc("");
@@ -75,7 +75,7 @@ export default function ProjectsListPage() {
               <Layers className="mb-4 h-10 w-10 opacity-20" />
               <div className="mb-2 text-sm font-medium">No projects yet</div>
               <div className="mb-6 max-w-sm text-xs">
-                Create a project to start managing tasks.
+                Create a system workspace to map architecture and retain troubleshooting memory.
               </div>
               <Button size="sm" onClick={() => setShowCreate(true)}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -87,7 +87,7 @@ export default function ProjectsListPage() {
               {projects.map((project) => (
                 <button
                   key={project.id}
-                  onClick={() => router.push(`/projects/${project.id}?view=kanban`)}
+                  onClick={() => router.push(`/projects/${project.id}?view=diagrams`)}
                   className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]"
                 >
                   <Layers className="h-4 w-4 text-[var(--accent)] shrink-0" />
@@ -111,9 +111,9 @@ export default function ProjectsListPage() {
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New Project</DialogTitle>
+            <DialogTitle>New System</DialogTitle>
             <DialogDescription>
-              Create a project to manage tasks across views.
+              Create a system workspace for diagrams, investigations, and MCP context.
             </DialogDescription>
           </DialogHeader>
 

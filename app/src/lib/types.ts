@@ -1,4 +1,18 @@
 import type { Node, Edge } from "@xyflow/react";
+import type {
+  ArtifactReference,
+  DiagramDocument as SharedDiagramDocument,
+  DiagramEdgeMetadata,
+  DiagramLinkReference,
+  DiagramNodeMetadata,
+  DiagramSummary as SharedDiagramSummary,
+  KnowledgePattern,
+  SessionCommand,
+  SessionComment,
+  SessionTimelineEntry,
+  TroubleshootingSearchHit,
+  TroubleshootingSession,
+} from "@planview/domain";
 
 // ─── Shape Types (extensible registry) ───────────────────────────────
 export type ShapeType =
@@ -181,6 +195,7 @@ export interface ArchNodeData {
   shapeType: ShapeType;
   description?: string;
   icon?: string;
+  metadata?: DiagramNodeMetadata;
   // Custom style overrides
   color?: string;        // background color override
   borderColor?: string;  // border color override
@@ -228,6 +243,7 @@ export type ArchEdge = Edge & {
   data?: {
     label?: string;
     protocol?: string;
+    metadata?: DiagramEdgeMetadata;
     // Custom style overrides
     strokeColor?: string;
     strokeWidth?: number;
@@ -236,19 +252,25 @@ export type ArchEdge = Edge & {
 };
 
 // ─── Diagram Model ──────────────────────────────────────────────────
-export interface DiagramMeta {
-  id: string;
-  name: string;
-  description: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type DiagramMeta = SharedDiagramSummary;
 
-export interface Diagram extends DiagramMeta {
+export interface Diagram extends Omit<SharedDiagramDocument, "nodes" | "edges"> {
   nodes: DiagramNode[];
   edges: ArchEdge[];
-  mermaidCode: string;
 }
+
+export type {
+  ArtifactReference,
+  DiagramEdgeMetadata,
+  DiagramLinkReference,
+  DiagramNodeMetadata,
+  KnowledgePattern,
+  SessionCommand,
+  SessionComment,
+  SessionTimelineEntry,
+  TroubleshootingSearchHit,
+  TroubleshootingSession,
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 export function getShapeDef(type: ShapeType): ShapeDefinition {
