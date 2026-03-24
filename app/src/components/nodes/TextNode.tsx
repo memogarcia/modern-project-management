@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import { type Node, type NodeProps, useReactFlow, useViewport } from "@xyflow/react";
+import { getCanvasRenderMode } from "@/lib/canvasRenderMode";
 import type { TextNodeData } from "@/lib/types";
 
 type TextNodeType = Node<TextNodeData, "textNode">;
@@ -12,11 +13,17 @@ function formatDisplayText(value: string): string {
 
 function TextNodeComponent({ id, data, selected }: NodeProps<TextNodeType>) {
   const { updateNodeData } = useReactFlow();
+  const { zoom } = useViewport();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.text ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const displayText = formatDisplayText(data.text ?? "");
+  const renderMode = getCanvasRenderMode(zoom);
+  const isCompact = renderMode !== "full";
+  const isMicro = renderMode === "micro";
+  const padding = isMicro ? "8px 10px" : isCompact ? "9px 11px" : "10px 12px";
+  const textFontSize = data.fontSize ?? 16;
 
   useEffect(() => {
     if (!editing) return;
@@ -63,12 +70,16 @@ function TextNodeComponent({ id, data, selected }: NodeProps<TextNodeType>) {
   }, [cancel, commit]);
 
   const style: CSSProperties = {
-    padding: "10px 12px",
+    padding,
     borderRadius: 8,
-    border: selected ? "1.5px solid var(--accent)" : "1px solid transparent",
+    border: selected
+      ? "1.5px solid var(--accent)"
+      : isCompact
+        ? "1px solid color-mix(in srgb, var(--border) 82%, transparent)"
+        : "1px solid transparent",
     background: data.backgroundColor ?? "rgba(255, 241, 184, 0.88)",
     color: data.color ?? "var(--foreground)",
-    boxShadow: selected ? "var(--node-shadow-selected)" : "var(--node-shadow)",
+    boxShadow: isCompact ? "none" : selected ? "var(--node-shadow-selected)" : "var(--node-shadow)",
     cursor: editing ? "text" : "grab",
     minWidth: 80,
     maxWidth: 420,
@@ -92,7 +103,7 @@ function TextNodeComponent({ id, data, selected }: NodeProps<TextNodeType>) {
             resize: "none",
             background: "transparent",
             color: "inherit",
-            fontSize: data.fontSize ?? 16,
+            fontSize: textFontSize,
             lineHeight: 1.3,
             fontFamily: "inherit",
             padding: 0,
@@ -106,11 +117,19 @@ function TextNodeComponent({ id, data, selected }: NodeProps<TextNodeType>) {
     <div style={style} onDoubleClick={onDoubleClick}>
       <div
         style={{
-          fontSize: data.fontSize ?? 16,
+          fontSize: textFontSize,
           lineHeight: 1.3,
           whiteSpace: "pre-line",
           overflowWrap: "anywhere",
           wordBreak: "break-word",
+          ...(isCompact
+            ? {
+                display: "-webkit-box",
+                WebkitLineClamp: isMicro ? 2 : 3,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }
+            : {}),
         }}
       >
         {displayText || "Text"}

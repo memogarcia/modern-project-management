@@ -49,6 +49,40 @@ function buildRoundedPath(points: EdgeRoutePoint[], radius = 14): string {
   return path;
 }
 
+function buildSmoothSplinePath(points: EdgeRoutePoint[]): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0]!.x} ${points[0]!.y}`;
+  if (points.length === 2) {
+    const [start, end] = points;
+    const dx = end!.x - start!.x;
+    const dy = end!.y - start!.y;
+    const controlOffset = Math.max(36, Math.min(120, Math.abs(dx) * 0.35 + Math.abs(dy) * 0.2));
+    return `M ${start!.x} ${start!.y} C ${start!.x + Math.sign(dx || 1) * controlOffset} ${start!.y} ${end!.x - Math.sign(dx || 1) * controlOffset} ${end!.y} ${end!.x} ${end!.y}`;
+  }
+
+  let path = `M ${points[0]!.x} ${points[0]!.y}`;
+
+  for (let index = 0; index < points.length - 1; index++) {
+    const p0 = points[index - 1] ?? points[index]!;
+    const p1 = points[index]!;
+    const p2 = points[index + 1]!;
+    const p3 = points[index + 2] ?? p2;
+
+    const cp1 = {
+      x: p1.x + (p2.x - p0.x) / 6,
+      y: p1.y + (p2.y - p0.y) / 6,
+    };
+    const cp2 = {
+      x: p2.x - (p3.x - p1.x) / 6,
+      y: p2.y - (p3.y - p1.y) / 6,
+    };
+
+    path += ` C ${cp1.x} ${cp1.y} ${cp2.x} ${cp2.y} ${p2.x} ${p2.y}`;
+  }
+
+  return path;
+}
+
 function midpointAlongPath(points: EdgeRoutePoint[]): EdgeRoutePoint | null {
   if (points.length < 2) return null;
 
@@ -88,6 +122,45 @@ function SmartSmoothStepEdge(props: EdgeProps<ArchEdge>) {
   } as ArchEdge);
 
   const label = props.label ?? (typeof props.data?.label === "string" ? props.data.label : undefined);
+  const renderWarningLabel =
+    typeof props.data?.renderWarningLabel === "string" ? props.data.renderWarningLabel : undefined;
+  const renderWarningTone = props.data?.renderWarningTone === "info" ? "info" : "warning";
+  const effectiveLabel = label ?? renderWarningLabel;
+  const precisionStyle = {
+    vectorEffect: "non-scaling-stroke",
+    shapeRendering: "geometricPrecision",
+  } as const;
+  const effectiveStyle = renderWarningLabel
+    ? {
+        ...precisionStyle,
+        ...(props.style ?? {}),
+        stroke: renderWarningTone === "warning" ? "var(--warning)" : "var(--accent)",
+        strokeDasharray: "6 4",
+      }
+    : {
+        ...precisionStyle,
+        ...(props.style ?? {}),
+      };
+  const effectiveLabelStyle = renderWarningLabel
+    ? {
+        ...(props.labelStyle ?? {}),
+        fill: "var(--foreground)",
+        fontWeight: 700,
+      }
+    : props.labelStyle;
+  const effectiveLabelBgStyle = renderWarningLabel
+    ? {
+        ...(props.labelBgStyle ?? {}),
+        fill:
+          renderWarningTone === "warning"
+            ? "color-mix(in srgb, var(--warning) 12%, var(--surface))"
+            : "color-mix(in srgb, var(--accent) 10%, var(--surface))",
+        stroke:
+          renderWarningTone === "warning"
+            ? "color-mix(in srgb, var(--warning) 34%, var(--border))"
+            : "color-mix(in srgb, var(--accent) 30%, var(--border))",
+      }
+    : props.labelBgStyle;
   const hasValidRoute =
     route &&
     route.points.length >= 2 &&
@@ -98,17 +171,17 @@ function SmartSmoothStepEdge(props: EdgeProps<ArchEdge>) {
     const labelPoint = midpointAlongPath(route.points);
     return (
       <BaseEdge
-        path={buildRoundedPath(route.points)}
-        label={label}
+        path={route.style === "curved" ? buildSmoothSplinePath(route.points) : buildRoundedPath(route.points)}
+        label={effectiveLabel}
         labelX={labelPoint?.x}
         labelY={labelPoint?.y}
-        labelStyle={props.labelStyle}
+        labelStyle={effectiveLabelStyle}
         labelShowBg={props.labelShowBg ?? true}
-        labelBgStyle={props.labelBgStyle}
+        labelBgStyle={effectiveLabelBgStyle}
         labelBgPadding={props.labelBgPadding}
         labelBgBorderRadius={props.labelBgBorderRadius}
         interactionWidth={props.interactionWidth}
-        style={props.style}
+        style={effectiveStyle}
         markerStart={props.markerStart}
         markerEnd={props.markerEnd}
       />
@@ -129,16 +202,16 @@ function SmartSmoothStepEdge(props: EdgeProps<ArchEdge>) {
   return (
     <BaseEdge
       path={path}
-      label={label}
+      label={effectiveLabel}
       labelX={labelX}
       labelY={labelY}
-      labelStyle={props.labelStyle}
-      labelShowBg={props.labelShowBg}
-      labelBgStyle={props.labelBgStyle}
+      labelStyle={effectiveLabelStyle}
+      labelShowBg={props.labelShowBg ?? Boolean(renderWarningLabel)}
+      labelBgStyle={effectiveLabelBgStyle}
       labelBgPadding={props.labelBgPadding}
       labelBgBorderRadius={props.labelBgBorderRadius}
       interactionWidth={props.interactionWidth}
-      style={props.style}
+      style={effectiveStyle}
       markerStart={props.markerStart}
       markerEnd={props.markerEnd}
     />

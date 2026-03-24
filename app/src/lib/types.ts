@@ -5,6 +5,8 @@ import type {
   DiagramEdgeMetadata,
   DiagramLinkReference,
   DiagramNodeMetadata,
+  DiagramPerspective,
+  DiagramPerspectiveKind,
   DiagramSummary as SharedDiagramSummary,
   KnowledgePattern,
   SessionCommand,
@@ -190,6 +192,9 @@ export interface ArchNodeData {
   color?: string;        // background color override
   borderColor?: string;  // border color override
   animated?: boolean;    // pulse animation
+  renderBadgeLabel?: string;
+  renderBadgeTone?: "warning" | "info";
+  renderBadgeTooltip?: string;
   [key: string]: unknown;
 }
 
@@ -237,6 +242,8 @@ export type ArchEdge = Edge & {
     // Custom style overrides
     strokeColor?: string;
     strokeWidth?: number;
+    renderWarningLabel?: string;
+    renderWarningTone?: "warning" | "info";
     [key: string]: unknown;
   };
 };
@@ -254,6 +261,8 @@ export type {
   DiagramEdgeMetadata,
   DiagramLinkReference,
   DiagramNodeMetadata,
+  DiagramPerspective,
+  DiagramPerspectiveKind,
   KnowledgePattern,
   SessionCommand,
   SessionComment,

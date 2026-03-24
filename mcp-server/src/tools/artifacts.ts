@@ -18,7 +18,8 @@ export function registerArtifactTools(server: McpServer): void {
     "list_artifacts",
     {
       title: "List Artifacts",
-      description: "List stored evidence artifacts by owner, diagram, or label",
+      description:
+        "List stored evidence artifacts by owner, diagram, or label so you can discover artifact IDs and existing attachments.",
       inputSchema: {
         ownerType: z.enum(["node", "edge", "session"]).optional(),
         ownerId: z.string().optional(),
@@ -42,7 +43,7 @@ export function registerArtifactTools(server: McpServer): void {
     "get_artifact_metadata",
     {
       title: "Get Artifact Metadata",
-      description: "Get metadata for a single evidence artifact",
+      description: "Get metadata for a single evidence artifact, including ownership and storage details.",
       inputSchema: {
         artifactId: z.string().describe("Artifact ID"),
       },
@@ -57,7 +58,8 @@ export function registerArtifactTools(server: McpServer): void {
     "attach_artifact",
     {
       title: "Attach Artifact",
-      description: "Attach a text or binary artifact to a troubleshooting session, node, or edge",
+      description:
+        "Store a text or binary artifact against a troubleshooting session, node, or edge. Pass raw bytes as base64 in `contentBase64`. If you also want the artifact listed inside node metadata attachments, copy the returned artifact reference into a later metadata update.",
       inputSchema: {
         ownerType: z.enum(["node", "edge", "session"]),
         ownerId: z.string(),

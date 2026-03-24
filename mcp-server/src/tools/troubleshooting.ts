@@ -38,7 +38,8 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "create_troubleshooting_session",
     {
       title: "Create Troubleshooting Session",
-      description: "Create a new investigation linked to a diagram and affected graph entities",
+      description:
+        "Create a new investigation linked to a diagram and affected graph entities. Use node IDs and edge IDs discovered from `get_diagram_metadata`.",
       inputSchema: troubleshootingSessionCreateSchema.shape,
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
@@ -72,7 +73,8 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "list_troubleshooting_sessions",
     {
       title: "List Troubleshooting Sessions",
-      description: "List troubleshooting sessions filtered by diagram, node, edge, or search term",
+      description:
+        "List troubleshooting sessions filtered by diagram, node, edge, or search term so you can find related historical investigations before creating a new one.",
       inputSchema: {
         diagramId: z.string().optional(),
         nodeId: z.string().optional(),
@@ -90,7 +92,7 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "get_troubleshooting_session",
     {
       title: "Get Troubleshooting Session",
-      description: "Get a single troubleshooting session by ID",
+      description: "Get a full troubleshooting session, including timeline, comments, commands, artifacts, and linked entities.",
       inputSchema: { id: z.string().describe("The troubleshooting session ID") },
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -102,7 +104,8 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "update_troubleshooting_session",
     {
       title: "Update Troubleshooting Session",
-      description: "Update summary fields, linked entities, notes, hypotheses, or resolution for a troubleshooting session",
+      description:
+        "Update the durable summary state of a troubleshooting session, including status, notes, hypotheses, linked entities, or final resolution.",
       inputSchema: {
         id: z.string(),
         ...troubleshootingSessionPatchSchema.shape,
@@ -119,7 +122,8 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "append_session_timeline_entry",
     {
       title: "Append Session Timeline Entry",
-      description: "Append a timeline entry to a troubleshooting session",
+      description:
+        "Append a chronological timeline entry to a troubleshooting session. Use this for observations, hypotheses, commands, status changes, and resolutions.",
       inputSchema: {
         sessionId: z.string(),
         entry: timelineEntrySchema,
@@ -136,7 +140,7 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "append_session_comment",
     {
       title: "Append Session Comment",
-      description: "Append a comment to a troubleshooting session",
+      description: "Append a short comment or note to a troubleshooting session.",
       inputSchema: {
         sessionId: z.string(),
         comment: sessionCommentSchema,
@@ -153,7 +157,8 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "append_session_command",
     {
       title: "Append Session Command",
-      description: "Append a command record to a troubleshooting session",
+      description:
+        "Append a command record to a troubleshooting session, including the command text, a short summary, and the important output excerpt.",
       inputSchema: {
         sessionId: z.string(),
         command: sessionCommandSchema,
@@ -170,7 +175,8 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "link_session_to_entities",
     {
       title: "Link Session To Entities",
-      description: "Update the set of linked nodes and edges for a troubleshooting session",
+      description:
+        "Replace the set of linked nodes and edges for a troubleshooting session. Use exact node IDs and edge IDs from `get_diagram_metadata`.",
       inputSchema: {
         sessionId: z.string(),
         linkedNodeIds: z.array(z.string()).default([]),
@@ -191,7 +197,8 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "extract_knowledge_pattern",
     {
       title: "Extract Knowledge Pattern",
-      description: "Extract a reusable troubleshooting pattern from a resolved troubleshooting session",
+      description:
+        "Extract a reusable troubleshooting pattern from a resolved troubleshooting session. Use this when the symptom and fix are now durable enough to reuse later.",
       inputSchema: {
         sessionId: z.string(),
         pattern: patternExtractionSchema,
@@ -220,7 +227,8 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "search_troubleshooting_memory",
     {
       title: "Search Troubleshooting Memory",
-      description: "Search troubleshooting sessions and reusable patterns by text and affected graph entities",
+      description:
+        "Search troubleshooting sessions and reusable patterns by text and affected graph entities before opening a new investigation or while looking for similar fixes.",
       inputSchema: {
         q: z.string(),
         diagramId: z.string().optional(),
@@ -244,7 +252,7 @@ export function registerTroubleshootingTools(server: McpServer): void {
     "list_knowledge_patterns",
     {
       title: "List Knowledge Patterns",
-      description: "List extracted troubleshooting patterns",
+      description: "List extracted reusable troubleshooting patterns.",
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
     () => dbListKnowledgePatterns()

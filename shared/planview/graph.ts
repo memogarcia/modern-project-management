@@ -3,6 +3,7 @@ import {
   createEmptyNodeMetadata,
   type DiagramDocument,
   type DiagramEdgeRecord,
+  type DiagramPerspective,
   type DiagramNodeMetadata,
   type DiagramNodeRecord,
   type DiagramSummary,
@@ -297,7 +298,8 @@ export function hydrateDiagramDocument(
     session_count?: number | null;
     open_session_count?: number | null;
   },
-  label: string
+  label: string,
+  perspectives: DiagramPerspective[] = []
 ): DiagramDocument {
   const summary = createDiagramSummary(row);
   const graph = normalizeDiagramGraph(row.nodes, row.edges, summary.updatedAt, label);
@@ -306,7 +308,7 @@ export function hydrateDiagramDocument(
     mermaidCode: row.mermaid_code ?? "",
     nodes: graph.value.nodes,
     edges: graph.value.edges,
+    perspectives,
     warnings: graph.warnings.length > 0 ? graph.warnings : undefined,
   };
 }
-

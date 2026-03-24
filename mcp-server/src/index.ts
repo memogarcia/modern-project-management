@@ -6,6 +6,7 @@ import { getDb } from "./db.js";
 import { registerResources } from "./resources.js";
 import { registerArtifactTools } from "./tools/artifacts.js";
 import { registerDiagramTools } from "./tools/diagrams.js";
+import { registerGuideTools } from "./tools/guide.js";
 import { registerTroubleshootingTools } from "./tools/troubleshooting.js";
 
 getDb();
@@ -18,6 +19,7 @@ const server = new McpServer({
 registerDiagramTools(server);
 registerTroubleshootingTools(server);
 registerArtifactTools(server);
+registerGuideTools(server);
 registerResources(server);
 
 async function main() {

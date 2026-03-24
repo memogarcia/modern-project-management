@@ -20,6 +20,14 @@ import {
 import { useDiagramStore } from "@/store/diagramStore";
 import { useTheme } from "@/components/ThemeProvider";
 import { cn } from "@/lib/utils";
+import type { LayoutPresetId } from "@/lib/layout";
+
+const LAYOUT_PRESET_OPTIONS: Array<{ value: LayoutPresetId; label: string }> = [
+  { value: "diagram-horizontal", label: "Diagram H" },
+  { value: "diagram-vertical", label: "Diagram V" },
+  { value: "mindmap", label: "Mindmap" },
+  { value: "org-tree", label: "Org Tree" },
+];
 
 function ToolbarButton({
   label,
@@ -62,6 +70,8 @@ function ToolbarGroup({ children }: { children: React.ReactNode }) {
 
 export default function Toolbar() {
   const runAutoLayout = useDiagramStore((s) => s.runAutoLayout);
+  const layoutPreset = useDiagramStore((s) => s.layoutPreset);
+  const setLayoutPreset = useDiagramStore((s) => s.setLayoutPreset);
   const canUndo = useDiagramStore((s) => s.canUndo);
   const canRedo = useDiagramStore((s) => s.canRedo);
   const undo = useDiagramStore((s) => s.undo);
@@ -77,8 +87,8 @@ export default function Toolbar() {
   const { fitView } = useReactFlow();
 
   const handleAutoLayout = useCallback(
-    async (direction: "RIGHT" | "DOWN", closest: boolean) => {
-      await runAutoLayout(direction, closest ? "CLOSEST" : "ORIENTED");
+    async (direction?: "RIGHT" | "DOWN") => {
+      await runAutoLayout(direction, "CLOSEST");
       requestAnimationFrame(() => {
         void fitView({ padding: 0.18, duration: 250 });
       });
@@ -185,11 +195,38 @@ export default function Toolbar() {
       <ToolbarGroup>
         <ToolbarButton
           label="Auto arrange"
-          title="Auto-arrange left-to-right (Ctrl/Cmd+L). Shift: top-to-bottom. Alt/Option: closest connectors."
-          onClick={() => void handleAutoLayout("RIGHT", false)}
+          title="Auto-arrange using the selected preset. Ctrl/Cmd+L reruns the current preset. Shift switches diagram presets between horizontal and vertical."
+          onClick={() =>
+            void handleAutoLayout(
+              layoutPreset === "diagram-vertical"
+                ? "DOWN"
+                : layoutPreset === "diagram-horizontal"
+                  ? "RIGHT"
+                  : undefined
+            )
+          }
         >
           <LayoutGrid size={18} strokeWidth={2} />
         </ToolbarButton>
+        <label className="sr-only" htmlFor="layout-preset">
+          Layout preset
+        </label>
+        <select
+          id="layout-preset"
+          value={layoutPreset}
+          onChange={(event) => setLayoutPreset(event.target.value as LayoutPresetId)}
+          className={cn(
+            "h-8 rounded-md border border-[var(--panel-border)] bg-[var(--surface)] px-2 text-[11px] font-semibold text-[var(--foreground)] outline-none transition-colors md:h-9",
+            "hover:border-[var(--border-strong)] focus:border-[var(--accent)]"
+          )}
+          title="Choose the layout preset used by auto-arrange."
+        >
+          {LAYOUT_PRESET_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </ToolbarGroup>
 
       <ToolbarGroup>

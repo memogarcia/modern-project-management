@@ -5,16 +5,20 @@ import path from "node:path";
 import {
   closePlanViewDb,
   createPlanViewTroubleshootingSession,
+  deletePlanViewDiagramPerspective,
   extractPlanViewKnowledgePattern,
+  getPlanViewDiagramById,
   getPlanViewTroubleshootingSessionById,
   listPlanViewDiagrams,
   listPlanViewArtifacts,
+  listPlanViewDiagramPerspectives,
   listPlanViewKnowledgePatterns,
   listPlanViewTroubleshootingSessions,
   getPlanViewArtifactById,
   savePlanViewArtifactFile,
   savePlanViewDiagram,
   searchPlanViewTroubleshootingMemory,
+  upsertPlanViewDiagramPerspective,
   updatePlanViewEdgeMetadata,
   updatePlanViewNodeMetadata,
   updatePlanViewTroubleshootingSession,
@@ -111,6 +115,37 @@ async function run() {
   });
   assert.equal(createdDiagram.revision, 1);
   assert.equal(listPlanViewDiagrams()[0]?.nodeCount, 2);
+
+  const onboardingPerspective = upsertPlanViewDiagramPerspective("checkout_system", {
+    id: "onboarding_view",
+    title: "Onboarding view",
+    description: "The core checkout request path.",
+    kind: "onboarding",
+    nodeIds: ["checkout_api", "orders_db"],
+    edgeIds: ["edge-checkout-db"],
+    createdAt: NOW,
+  });
+  assert.equal(onboardingPerspective.kind, "onboarding");
+
+  const customPerspective = upsertPlanViewDiagramPerspective("checkout_system", {
+    id: "db_focus",
+    title: "DB focus",
+    description: "Only the blocking write dependency.",
+    kind: "custom",
+    nodeIds: ["checkout_api", "orders_db"],
+    edgeIds: ["edge-checkout-db"],
+    createdAt: "2026-03-23T01:00:30.000Z",
+  });
+  assert.equal(customPerspective.id, "db_focus");
+  assert.equal(listPlanViewDiagramPerspectives("checkout_system").length, 2);
+
+  const hydratedDiagram = getPlanViewDiagramById("checkout_system");
+  assert(hydratedDiagram);
+  assert.equal(hydratedDiagram?.perspectives.length, 2);
+  assert(hydratedDiagram?.perspectives.some((perspective) => perspective.id === "onboarding_view"));
+
+  assert.equal(deletePlanViewDiagramPerspective("checkout_system", "db_focus"), true);
+  assert.equal(listPlanViewDiagramPerspectives("checkout_system").length, 1);
 
   const updatedNodeMetadata = {
     ...checkoutNodeMetadata,

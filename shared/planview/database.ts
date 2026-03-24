@@ -8,6 +8,7 @@ import {
   type DiagramDocument,
   type DiagramEdgeMetadata,
   type DiagramNodeMetadata,
+  type DiagramPerspective,
   type DiagramSummary,
   type KnowledgePattern,
   type SessionCommand,
@@ -64,6 +65,18 @@ type ArtifactRow = {
   size_bytes: number;
   checksum_sha256: string;
   created_at: string;
+};
+
+type DiagramPerspectiveRow = {
+  diagram_id: string;
+  perspective_id: string;
+  title: string;
+  description?: string | null;
+  kind: DiagramPerspective["kind"];
+  node_ids_json?: string | null;
+  edge_ids_json?: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type PlanViewArtifactRecord = ArtifactReference & {
@@ -464,6 +477,28 @@ function createTroubleshootingSchema(db: BetterSqliteDatabase): void {
   `);
 }
 
+function createDiagramPerspectivesSchema(db: BetterSqliteDatabase): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS diagram_perspectives (
+      diagram_id TEXT NOT NULL REFERENCES diagrams(id) ON DELETE CASCADE,
+      perspective_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL,
+      node_ids_json TEXT NOT NULL DEFAULT '[]',
+      edge_ids_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (diagram_id, perspective_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_diagram_perspectives_diagram
+      ON diagram_perspectives(diagram_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_diagram_perspectives_kind
+      ON diagram_perspectives(diagram_id, kind);
+  `);
+}
+
 function runMigrations(db: BetterSqliteDatabase): void {
   ensureMigrationTable(db);
 
@@ -485,6 +520,10 @@ function runMigrations(db: BetterSqliteDatabase): void {
     {
       id: "0003_troubleshooting_foundation",
       run: (database) => createTroubleshootingSchema(database),
+    },
+    {
+      id: "0004_diagram_perspectives",
+      run: (database) => createDiagramPerspectivesSchema(database),
     },
   ];
 
@@ -712,7 +751,7 @@ export function getPlanViewDiagramById(id: string, db = getPlanViewDb()): Diagra
     | undefined;
 
   if (!row) return null;
-  return hydrateDiagramDocument(row, `diagram ${id}`);
+  return hydrateDiagramDocument(row, `diagram ${id}`, listDiagramPerspectiveRows(id, db).map((entry) => hydrateDiagramPerspectiveRow(entry)));
 }
 
 export type DiagramSaveInput = Pick<
@@ -930,6 +969,152 @@ function parseJsonValue<T>(raw: string | null | undefined, fallback: T): T {
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
+  }
+}
+
+function uniqueSorted(values: Iterable<string>): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function assertDiagramExists(diagramId: string, db: BetterSqliteDatabase): void {
+  const row = db.prepare("SELECT id FROM diagrams WHERE id = ?").get(diagramId) as { id: string } | undefined;
+  if (row) return;
+  throw new PlanViewError("diagram_not_found", `Diagram not found: ${diagramId}`, {
+    status: 404,
+  });
+}
+
+function hydrateDiagramPerspectiveRow(row: DiagramPerspectiveRow): DiagramPerspective {
+  return {
+    id: row.perspective_id,
+    title: row.title,
+    description: row.description ?? "",
+    kind: row.kind,
+    nodeIds: uniqueSorted(parseJsonArray(row.node_ids_json)),
+    edgeIds: uniqueSorted(parseJsonArray(row.edge_ids_json)),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function listDiagramPerspectiveRows(
+  diagramId: string,
+  db: BetterSqliteDatabase
+): DiagramPerspectiveRow[] {
+  return db
+    .prepare(`
+      SELECT diagram_id, perspective_id, title, description, kind, node_ids_json, edge_ids_json, created_at, updated_at
+      FROM diagram_perspectives
+      WHERE diagram_id = ?
+      ORDER BY created_at ASC, title COLLATE NOCASE ASC
+    `)
+    .all(diagramId) as DiagramPerspectiveRow[];
+}
+
+type DiagramPerspectiveInput = Omit<DiagramPerspective, "createdAt" | "updatedAt"> & {
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+function normalizeDiagramPerspective(
+  input: DiagramPerspectiveInput,
+  existingCreatedAt?: string
+): DiagramPerspective {
+  const now = new Date().toISOString();
+  return {
+    id: input.id,
+    title: input.title.trim(),
+    description: input.description,
+    kind: input.kind,
+    nodeIds: uniqueSorted(input.nodeIds),
+    edgeIds: uniqueSorted(input.edgeIds),
+    createdAt: existingCreatedAt ?? input.createdAt ?? now,
+    updatedAt: input.updatedAt ?? now,
+  };
+}
+
+export function listPlanViewDiagramPerspectives(
+  diagramId: string,
+  db = getPlanViewDb()
+): DiagramPerspective[] {
+  try {
+    assertDiagramExists(diagramId, db);
+    return listDiagramPerspectiveRows(diagramId, db).map((row) => hydrateDiagramPerspectiveRow(row));
+  } catch (error) {
+    throw asPlanViewError(error);
+  }
+}
+
+export function upsertPlanViewDiagramPerspective(
+  diagramId: string,
+  input: DiagramPerspectiveInput,
+  db = getPlanViewDb()
+): DiagramPerspective {
+  try {
+    return db.transaction(() => {
+      assertDiagramExists(diagramId, db);
+      const existing = db
+        .prepare(`
+          SELECT created_at
+          FROM diagram_perspectives
+          WHERE diagram_id = ? AND perspective_id = ?
+        `)
+        .get(diagramId, input.id) as { created_at: string } | undefined;
+
+      const perspective = normalizeDiagramPerspective(input, existing?.created_at);
+
+      db.prepare(`
+        INSERT INTO diagram_perspectives (
+          diagram_id, perspective_id, title, description, kind, node_ids_json, edge_ids_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(diagram_id, perspective_id) DO UPDATE SET
+          title = excluded.title,
+          description = excluded.description,
+          kind = excluded.kind,
+          node_ids_json = excluded.node_ids_json,
+          edge_ids_json = excluded.edge_ids_json,
+          updated_at = excluded.updated_at
+      `).run(
+        diagramId,
+        perspective.id,
+        perspective.title,
+        perspective.description,
+        perspective.kind,
+        JSON.stringify(perspective.nodeIds),
+        JSON.stringify(perspective.edgeIds),
+        perspective.createdAt,
+        perspective.updatedAt
+      );
+
+      return perspective;
+    })();
+  } catch (error) {
+    throw asPlanViewError(error);
+  }
+}
+
+export function deletePlanViewDiagramPerspective(
+  diagramId: string,
+  perspectiveId: string,
+  db = getPlanViewDb()
+): boolean {
+  try {
+    assertDiagramExists(diagramId, db);
+    const result = db
+      .prepare("DELETE FROM diagram_perspectives WHERE diagram_id = ? AND perspective_id = ?")
+      .run(diagramId, perspectiveId);
+    if (result.changes > 0) return true;
+
+    throw new PlanViewError(
+      "diagram_perspective_not_found",
+      `Diagram perspective not found: ${perspectiveId}`,
+      {
+        status: 404,
+        details: { diagramId, perspectiveId },
+      }
+    );
+  } catch (error) {
+    throw asPlanViewError(error);
   }
 }
 

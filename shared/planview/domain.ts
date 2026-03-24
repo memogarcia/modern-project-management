@@ -141,6 +141,26 @@ export interface DiagramEdgeRecord {
   markerEnd?: unknown;
 }
 
+export const DIAGRAM_PERSPECTIVE_KINDS = [
+  "custom",
+  "onboarding",
+  "operations",
+  "security",
+] as const;
+
+export type DiagramPerspectiveKind = (typeof DIAGRAM_PERSPECTIVE_KINDS)[number];
+
+export interface DiagramPerspective {
+  id: string;
+  title: string;
+  description: string;
+  kind: DiagramPerspectiveKind;
+  nodeIds: string[];
+  edgeIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DiagramSummary {
   id: string;
   projectId?: string | null;
@@ -159,6 +179,7 @@ export interface DiagramDocument extends DiagramSummary {
   mermaidCode: string;
   nodes: DiagramNodeRecord[];
   edges: DiagramEdgeRecord[];
+  perspectives: DiagramPerspective[];
   warnings?: string[];
 }
 
@@ -184,6 +205,7 @@ export function createEmptyDiagramDocument(input: {
     mermaidCode: input.mermaidCode,
     nodes: [],
     edges: [],
+    perspectives: [],
   };
 }
 

@@ -17,6 +17,15 @@ const EDGE_TYPES: { value: string; label: string }[] = [
   { value: "step", label: "Step" },
 ];
 
+const RELATIONSHIP_PRESETS: Array<{ label: string; value: string }> = [
+  { label: "Calls", value: "calls" },
+  { label: "Reads from", value: "reads from" },
+  { label: "Writes to", value: "writes to" },
+  { label: "Publishes to", value: "publishes to" },
+  { label: "Consumes from", value: "consumes from" },
+  { label: "Replicates to", value: "replicates to" },
+];
+
 function normalizeLinks(links: DiagramLinkReference[]): DiagramLinkReference[] {
   return links
     .map((entry) => ({
@@ -131,10 +140,16 @@ export default function EdgeEditModal({ edge, onSave, onClose }: EdgeEditModalPr
   }, [onClose]);
 
   const handleSave = useCallback(() => {
+    const normalizedRelationshipType = relationshipType.trim();
+    const normalizedProtocol = protocol.trim();
+    const finalLabel = label.trim() || normalizedRelationshipType || undefined;
+    const { renderWarningLabel: _renderWarningLabel, renderWarningTone: _renderWarningTone, ...baseEdgeData } =
+      edge.data ?? {};
+
     const metadata = {
       ...initialMetadata,
-      relationshipType: relationshipType.trim(),
-      protocol: protocol.trim(),
+      relationshipType: normalizedRelationshipType,
+      protocol: normalizedProtocol,
       authAssumptions,
       dependencyNotes,
       knownFailureModes: splitLines(knownFailureModesText),
@@ -145,13 +160,13 @@ export default function EdgeEditModal({ edge, onSave, onClose }: EdgeEditModalPr
     };
 
     onSave(edge.id, {
-      label: label.trim() || undefined,
+      label: finalLabel,
       type: edgeType,
       animated,
       data: {
-        ...(edge.data ?? {}),
-        label: label.trim() || undefined,
-        protocol: protocol.trim() || undefined,
+        ...baseEdgeData,
+        label: finalLabel,
+        protocol: normalizedProtocol || undefined,
         metadata,
       },
     });
@@ -196,11 +211,35 @@ export default function EdgeEditModal({ edge, onSave, onClose }: EdgeEditModalPr
           <section className="grid gap-4 md:grid-cols-2">
             <div className="edit-modal-field">
               <label className="edit-modal-label">Label</label>
-              <input className="edit-modal-input" value={label} onChange={(event) => setLabel(event.target.value)} autoFocus />
+              <input
+                className="edit-modal-input"
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                placeholder="Visible edge label, usually a short verb"
+                autoFocus
+              />
+              <div className="mt-2 text-[11px] text-[var(--text-muted)]">
+                This is what readers see on the canvas. Prefer short verbs over generic arrows.
+              </div>
             </div>
             <div className="edit-modal-field">
               <label className="edit-modal-label">Relationship type</label>
               <input className="edit-modal-input" value={relationshipType} onChange={(event) => setRelationshipType(event.target.value)} placeholder="sync call, queue subscription, replication" />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {RELATIONSHIP_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    className="edit-modal-btn edit-modal-btn-secondary"
+                    onClick={() => {
+                      setRelationshipType(preset.value);
+                      setLabel((current) => current.trim() || preset.value);
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 

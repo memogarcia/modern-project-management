@@ -1,48 +1,38 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
-import {
-  Background,
-  BackgroundVariant,
-  ConnectionMode,
-  Controls,
-  MarkerType,
-  ReactFlow,
-  type EdgeTypes,
-  type EdgeMouseHandler,
-  type InternalNode,
-  type NodeMouseHandler,
-  type OnNodeDrag,
-  useReactFlow,
-} from "@xyflow/react";
-import { PanelRightOpen } from "lucide-react";
-import MermaidPanel from "@/components/MermaidPanel";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { type EdgeTypes, type EdgeMouseHandler, type InternalNode, type NodeMouseHandler, type OnNodeDrag, useReactFlow } from "@xyflow/react";
+import DiagramEditorCanvas from "@/components/diagram-editor/DiagramEditorCanvas";
+import DiagramEditorHeader from "@/components/diagram-editor/DiagramEditorHeader";
+import DiagramEditorSidebar, { type DiagramEditorRightTab } from "@/components/diagram-editor/DiagramEditorSidebar";
+import { DiagramEditorLoadingState, DiagramEditorMissingState } from "@/components/diagram-editor/DiagramEditorState";
+import { useDiagramEditorKeyboardShortcuts } from "@/components/diagram-editor/useDiagramEditorKeyboardShortcuts";
+import { getClientErrorMessage, LAYOUT_PRESETS, LAYOUT_PRESET_STORAGE_KEY_PREFIX, upsertPerspectiveInList } from "@/components/diagram-editor/utils";
 import NodeEditModal from "@/components/NodeEditModal";
 import EdgeEditModal from "@/components/EdgeEditModal";
-import ShapePalette from "@/components/ShapePalette";
-import Toolbar from "@/components/Toolbar";
-import TroubleshootingPanel from "@/components/TroubleshootingPanel";
 import { useTheme } from "@/components/ThemeProvider";
 import SmartSmoothStepEdge from "@/components/edges/SmartSmoothStepEdge";
+import {
+  buildSuggestedPerspective,
+  computePerspectiveVisibility,
+  createPerspectiveFromSelection,
+  type DiagramPerspective,
+  type DiagramPerspectiveKind,
+} from "@/lib/diagramPerspectives";
+import { analyzeDiagramQuality, type DiagramQualityEntityRef } from "@/lib/diagramQuality";
+import type { LayoutPresetId } from "@/lib/layout";
+import {
+  deleteDiagramPerspective,
+  loadDiagramPerspectives,
+  saveDiagramPerspective,
+} from "@/lib/storage";
 import { nodeTypes } from "@/components/nodes";
-import type { ArchEdge, ArchNode, ShapeType } from "@/lib/types";
+import type { ArchEdge, ArchNode, ShapeType, TroubleshootingSession } from "@/lib/types";
 import { useDiagramStore } from "@/store/diagramStore";
 
-interface DiagramEditorProps {
-  diagramId: string;
-}
+interface DiagramEditorProps { diagramId: string; }
 
-const edgeTypes: EdgeTypes = {
-  smoothstep: SmartSmoothStepEdge,
-};
+const edgeTypes: EdgeTypes = { smoothstep: SmartSmoothStepEdge };
 
 export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const { theme } = useTheme();
@@ -62,6 +52,8 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const mermaidError = useDiagramStore((s) => s.mermaidError);
   const syncMermaidToFlow = useDiagramStore((s) => s.syncMermaidToFlow);
   const persist = useDiagramStore((s) => s.persist);
+  const layoutPreset = useDiagramStore((s) => s.layoutPreset);
+  const setLayoutPreset = useDiagramStore((s) => s.setLayoutPreset);
   const deleteSelected = useDiagramStore((s) => s.deleteSelected);
   const undo = useDiagramStore((s) => s.undo);
   const redo = useDiagramStore((s) => s.redo);
@@ -79,6 +71,7 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const sendToBack = useDiagramStore((s) => s.sendToBack);
   const sendForward = useDiagramStore((s) => s.sendForward);
   const sendBackward = useDiagramStore((s) => s.sendBackward);
+  const selectEntities = useDiagramStore((s) => s.selectEntities);
   const { getInternalNode, getNodes, screenToFlowPosition, fitView } = useReactFlow();
 
   const [editingNode, setEditingNode] = useState<ArchNode | null>(null);
@@ -93,11 +86,18 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
   const lastExpandedWidthRef = useRef(380);
   const [isMermaidCollapsed, setIsMermaidCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeRightTab, setActiveRightTab] = useState<"mermaid" | "investigations">("mermaid");
+  const [activeRightTab, setActiveRightTab] = useState<DiagramEditorRightTab>("mermaid");
+  const [perspectives, setPerspectives] = useState<DiagramPerspective[]>([]);
+  const [isPerspectivesLoading, setIsPerspectivesLoading] = useState(true);
+  const [perspectiveError, setPerspectiveError] = useState<string | null>(null);
+  const [activePerspectiveId, setActivePerspectiveId] = useState<string | null>(null);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(380);
   const lastPointerFlowPosRef = useRef<{ x: number; y: number } | null>(null);
+  const layoutPresetLoadedRef = useRef(false);
+  const activePerspectiveStorageKey = `planview.perspectives.active.${diagramId}`;
+  const layoutPresetStorageKey = `${LAYOUT_PRESET_STORAGE_KEY_PREFIX}${diagramId}`;
 
   useEffect(() => {
     panelWidthRef.current = panelWidth;
@@ -121,6 +121,86 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
       // ignore localStorage failures in restricted environments.
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      setActivePerspectiveId(localStorage.getItem(activePerspectiveStorageKey));
+    } catch {
+      setActivePerspectiveId(null);
+    }
+  }, [activePerspectiveStorageKey]);
+
+  useEffect(() => {
+    layoutPresetLoadedRef.current = false;
+    try {
+      const storedPreset = localStorage.getItem(layoutPresetStorageKey);
+      if (storedPreset && LAYOUT_PRESETS.has(storedPreset as LayoutPresetId)) {
+        setLayoutPreset(storedPreset as LayoutPresetId);
+      } else {
+        setLayoutPreset("diagram-horizontal");
+      }
+    } catch {
+      // ignore localStorage failures in restricted environments.
+    } finally {
+      layoutPresetLoadedRef.current = true;
+    }
+  }, [layoutPresetStorageKey, setLayoutPreset]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsPerspectivesLoading(true);
+    setPerspectiveError(null);
+    setPerspectives([]);
+
+    const loadPerspectives = async () => {
+      try {
+        const saved = await loadDiagramPerspectives(diagramId);
+        if (cancelled) return;
+        setPerspectives(saved);
+      } catch (error) {
+        if (cancelled) return;
+        setPerspectiveError(getClientErrorMessage(error, "Failed to load saved perspectives"));
+        setPerspectives([]);
+      } finally {
+        if (!cancelled) {
+          setIsPerspectivesLoading(false);
+        }
+      }
+    };
+
+    void loadPerspectives();
+    return () => {
+      cancelled = true;
+    };
+  }, [diagramId]);
+
+  useEffect(() => {
+    try {
+      if (!activePerspectiveId) {
+        localStorage.removeItem(activePerspectiveStorageKey);
+        return;
+      }
+      localStorage.setItem(activePerspectiveStorageKey, activePerspectiveId);
+    } catch {
+      // ignore localStorage failures in restricted environments.
+    }
+  }, [activePerspectiveId, activePerspectiveStorageKey]);
+
+  useEffect(() => {
+    if (!layoutPresetLoadedRef.current) return;
+    try {
+      localStorage.setItem(layoutPresetStorageKey, layoutPreset);
+    } catch {
+      // ignore localStorage failures in restricted environments.
+    }
+  }, [layoutPreset, layoutPresetStorageKey]);
+
+  useEffect(() => {
+    if (isPerspectivesLoading) return;
+    if (!activePerspectiveId) return;
+    if (perspectives.some((perspective) => perspective.id === activePerspectiveId)) return;
+    setActivePerspectiveId(null);
+  }, [activePerspectiveId, isPerspectivesLoading, perspectives]);
 
   const setMermaidCollapsed = useCallback((collapsed: boolean) => {
     setIsMermaidCollapsed(collapsed);
@@ -186,158 +266,26 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
     return () => clearTimeout(timer);
   }, [edges, mermaidCode, nodes, persist]);
 
-  useEffect(() => {
-    const isTextInput = (target: EventTarget | null) => {
-      if (!target || !(target instanceof HTMLElement)) return false;
-      const tag = target.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-      if (target.isContentEditable) return true;
-      if (target.closest(".monaco-editor")) return true;
-      return false;
-    };
-
-    const isValidClipboardPayload = (value: unknown): value is { version: 1; nodes: unknown[]; edges: unknown[] } => {
-      if (!value || typeof value !== "object") return false;
-      const payload = value as { version?: unknown; nodes?: unknown; edges?: unknown };
-      return payload.version === 1 && Array.isArray(payload.nodes) && Array.isArray(payload.edges);
-    };
-
-    const handler = (event: KeyboardEvent) => {
-      if (isTextInput(event.target)) return;
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "s") {
-        event.preventDefault();
-        persist();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "z") {
-        event.preventDefault();
-        if (event.shiftKey) redo();
-        else undo();
-        return;
-      }
-
-      if (event.ctrlKey && !event.metaKey && (event.key === "y" || event.key === "Y")) {
-        event.preventDefault();
-        redo();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "l") {
-        event.preventDefault();
-        const direction = event.shiftKey ? "DOWN" : "RIGHT";
-        const closest = event.altKey;
-        void runAutoLayout(direction, closest ? "CLOSEST" : "ORIENTED").then(() => {
-          requestAnimationFrame(() => {
-            void fitView({ padding: 0.18, duration: 250 });
-          });
-        });
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "c") {
-        event.preventDefault();
-        const payload = copySelected();
-        if (!payload) return;
-        try {
-          void navigator.clipboard?.writeText(JSON.stringify(payload));
-        } catch {
-          // ignore clipboard failures.
-        }
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "x") {
-        event.preventDefault();
-        const payload = cutSelected();
-        if (!payload) return;
-        try {
-          void navigator.clipboard?.writeText(JSON.stringify(payload));
-        } catch {
-          // ignore clipboard failures.
-        }
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "v") {
-        event.preventDefault();
-        const fallbackPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-        const pos = lastPointerFlowPosRef.current ?? fallbackPos;
-
-        const pasteFromSystemClipboard = async () => {
-          try {
-            const text = await navigator.clipboard?.readText?.();
-            if (!text) {
-              pasteClipboard(pos);
-              return;
-            }
-            const parsed = JSON.parse(text) as unknown;
-            if (isValidClipboardPayload(parsed)) {
-              pasteClipboard(pos, parsed as any);
-              return;
-            }
-          } catch {
-            // ignore clipboard failures.
-          }
-          pasteClipboard(pos);
-        };
-
-        void pasteFromSystemClipboard();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "g" && !event.shiftKey) {
-        event.preventDefault();
-        groupSelectedNodes();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === "G") {
-        event.preventDefault();
-        ungroupSelectedNodes();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "]") {
-        event.preventDefault();
-        if (event.shiftKey) sendForward();
-        else sendToFront();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "[") {
-        event.preventDefault();
-        if (event.shiftKey) sendBackward();
-        else sendToBack();
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        deleteSelected();
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [
-    copySelected,
-    cutSelected,
-    deleteSelected,
-    fitView,
-    groupSelectedNodes,
-    pasteClipboard,
+  useDiagramEditorKeyboardShortcuts({
+    lastPointerFlowPosRef,
+    layoutPreset,
     persist,
+    undo,
     redo,
     runAutoLayout,
+    fitView,
     screenToFlowPosition,
-    sendBackward,
-    sendForward,
-    sendToBack,
-    sendToFront,
-    undo,
+    copySelected,
+    cutSelected,
+    pasteClipboard,
+    groupSelectedNodes,
     ungroupSelectedNodes,
-  ]);
+    sendToFront,
+    sendToBack,
+    sendForward,
+    sendBackward,
+    deleteSelected,
+  });
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -364,6 +312,13 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
     setEditingEdge(edge as ArchEdge);
   }, []);
 
+  const handlePanePointerUpdate = useCallback(
+    (clientX: number, clientY: number) => {
+      lastPointerFlowPosRef.current = screenToFlowPosition({ x: clientX, y: clientY });
+    },
+    [screenToFlowPosition]
+  );
+
   const handleNodeSave = useCallback(
     (nodeId: string, data: Partial<ArchNode["data"]>) => {
       updateNodeData(nodeId, data);
@@ -380,6 +335,65 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
 
   const selectedNodeIds = useMemo(() => nodes.filter((node) => node.selected).map((node) => node.id), [nodes]);
   const selectedEdgeIds = useMemo(() => edges.filter((edge) => edge.selected).map((edge) => edge.id), [edges]);
+  const qualitySummary = useMemo(() => analyzeDiagramQuality(nodes, edges), [nodes, edges]);
+  const staleNodeIdSet = useMemo(() => new Set(qualitySummary.staleNodeIds), [qualitySummary.staleNodeIds]);
+  const unclearEdgeIdSet = useMemo(() => new Set(qualitySummary.unclearEdgeIds), [qualitySummary.unclearEdgeIds]);
+  const activePerspective = useMemo(
+    () => perspectives.find((perspective) => perspective.id === activePerspectiveId) ?? null,
+    [activePerspectiveId, perspectives]
+  );
+  const perspectiveVisibility = useMemo(
+    () => (activePerspective ? computePerspectiveVisibility(activePerspective, nodes, edges) : null),
+    [activePerspective, edges, nodes]
+  );
+  const renderedNodes = useMemo(
+    () =>
+      nodes.map((node) => {
+        const hidden = perspectiveVisibility ? !perspectiveVisibility.visibleNodeIds.has(node.id) : false;
+
+        if (node.type !== "archNode") {
+          return { ...node, hidden } as typeof node;
+        }
+
+        const isStale = staleNodeIdSet.has(node.id);
+        return {
+          ...node,
+          hidden,
+          data: {
+            ...node.data,
+            renderBadgeLabel: isStale ? "Stale" : undefined,
+            renderBadgeTone: isStale ? "warning" : undefined,
+            renderBadgeTooltip: isStale ? "This component has not been verified in more than 90 days." : undefined,
+          },
+        } as typeof node;
+      }),
+    [nodes, perspectiveVisibility, staleNodeIdSet]
+  );
+  const renderedEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const hidden = perspectiveVisibility ? !perspectiveVisibility.visibleEdgeIds.has(edge.id) : false;
+        const isUnclear = unclearEdgeIdSet.has(edge.id);
+
+        return {
+          ...edge,
+          hidden,
+          style: isUnclear
+            ? {
+                ...(edge.style ?? {}),
+                stroke: "var(--warning)",
+                strokeDasharray: "6 4",
+              }
+            : edge.style,
+          data: {
+            ...(edge.data ?? {}),
+            renderWarningLabel: isUnclear ? "Needs label" : undefined,
+            renderWarningTone: isUnclear ? "warning" : undefined,
+          },
+        } as ArchEdge;
+      }),
+    [edges, perspectiveVisibility, unclearEdgeIdSet]
+  );
 
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_event, draggedNode) => {
@@ -438,54 +452,158 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
     [getInternalNode, getNodes, reparentNode, resolveOverlapsForNode]
   );
 
+  const refitCanvas = useCallback(() => {
+    requestAnimationFrame(() => {
+      void fitView({ padding: 0.18, duration: 250 });
+    });
+  }, [fitView]);
+
+  const handleFocusEntity = useCallback(
+    (entity: DiagramQualityEntityRef) => {
+      if (activePerspectiveId) {
+        setActivePerspectiveId(null);
+      }
+      if (entity.type === "node") {
+        selectEntities([entity.id], []);
+        refitCanvas();
+        return;
+      }
+      selectEntities([], [entity.id]);
+      refitCanvas();
+    },
+    [activePerspectiveId, refitCanvas, selectEntities]
+  );
+
+  const applyPerspective = useCallback(
+    (perspectiveId: string | null) => {
+      setActivePerspectiveId(perspectiveId);
+
+      if (!perspectiveId) {
+        selectEntities([], []);
+        refitCanvas();
+        return;
+      }
+
+      const nextPerspective = perspectives.find((perspective) => perspective.id === perspectiveId);
+      if (!nextPerspective) return;
+      selectEntities(nextPerspective.nodeIds, nextPerspective.edgeIds);
+      refitCanvas();
+    },
+    [perspectives, refitCanvas, selectEntities]
+  );
+
+  const upsertPerspective = useCallback(
+    async (perspective: DiagramPerspective) => {
+      setPerspectiveError(null);
+      const saved = await saveDiagramPerspective(diagramId, perspective);
+      setPerspectives((current) => upsertPerspectiveInList(current, saved));
+      return saved;
+    },
+    [diagramId]
+  );
+
+  const handleCreateCustomPerspective = useCallback(
+    async (title: string, description: string) => {
+      const perspective = createPerspectiveFromSelection({
+        title,
+        description,
+        selectedNodeIds,
+        selectedEdgeIds,
+        edges,
+      });
+      try {
+        const saved = await upsertPerspective(perspective);
+        setActivePerspectiveId(saved.id);
+        selectEntities(saved.nodeIds, saved.edgeIds);
+        refitCanvas();
+      } catch (error) {
+        setPerspectiveError(getClientErrorMessage(error, "Failed to save perspective"));
+      }
+    },
+    [edges, refitCanvas, selectEntities, selectedEdgeIds, selectedNodeIds, upsertPerspective]
+  );
+
+  const handleUpdatePerspectiveFromSelection = useCallback(
+    async (perspectiveId: string) => {
+      const existing = perspectives.find((perspective) => perspective.id === perspectiveId);
+      if (!existing) return;
+
+      const updated = createPerspectiveFromSelection({
+        title: existing.title,
+        description: existing.description,
+        selectedNodeIds,
+        selectedEdgeIds,
+        edges,
+        existingId: existing.id,
+        createdAt: existing.createdAt,
+      });
+
+      updated.kind = existing.kind;
+      try {
+        const saved = await upsertPerspective(updated);
+        if (activePerspectiveId === saved.id) {
+          setActivePerspectiveId(saved.id);
+          selectEntities(saved.nodeIds, saved.edgeIds);
+          refitCanvas();
+        }
+      } catch (error) {
+        setPerspectiveError(getClientErrorMessage(error, "Failed to update perspective"));
+      }
+    },
+    [activePerspectiveId, edges, perspectives, refitCanvas, selectEntities, selectedEdgeIds, selectedNodeIds, upsertPerspective]
+  );
+
+  const handleUpsertSuggestedPerspective = useCallback(
+    async (kind: Exclude<DiagramPerspectiveKind, "custom">, sessions: TroubleshootingSession[]) => {
+      const existing = perspectives.find((perspective) => perspective.kind === kind);
+      const perspective = buildSuggestedPerspective(kind, nodes, edges, sessions, existing);
+      try {
+        const saved = await upsertPerspective(perspective);
+        setActivePerspectiveId(saved.id);
+        selectEntities(saved.nodeIds, saved.edgeIds);
+        refitCanvas();
+      } catch (error) {
+        setPerspectiveError(getClientErrorMessage(error, "Failed to save suggested perspective"));
+      }
+    },
+    [edges, nodes, perspectives, refitCanvas, selectEntities, upsertPerspective]
+  );
+
+  const handleDeletePerspective = useCallback(
+    async (perspectiveId: string) => {
+      try {
+        setPerspectiveError(null);
+        await deleteDiagramPerspective(diagramId, perspectiveId);
+        setPerspectives((current) => current.filter((perspective) => perspective.id !== perspectiveId));
+        if (activePerspectiveId === perspectiveId) {
+          setActivePerspectiveId(null);
+          selectEntities([], []);
+          refitCanvas();
+        }
+      } catch (error) {
+        setPerspectiveError(getClientErrorMessage(error, "Failed to delete perspective"));
+      }
+    },
+    [activePerspectiveId, diagramId, refitCanvas, selectEntities]
+  );
+
   if (!hasRequestedLoad || isDiagramLoading) {
-    return (
-      <div className="workspace-page items-center justify-center text-sm text-[var(--text-muted)]">
-        Loading diagram...
-      </div>
-    );
+    return <DiagramEditorLoadingState />;
   }
 
   if (!currentDiagramId) {
-    return (
-      <div className="workspace-page items-center justify-center gap-4 text-center text-sm text-[var(--text-muted)]">
-        <div>{diagramLoadError ?? "Diagram not found"}</div>
-        <a href="/diagrams" className="rounded-full bg-[var(--accent)] px-4 py-2 font-semibold text-[var(--accent-foreground)] no-underline">
-          Back to diagrams
-        </a>
-      </div>
-    );
+    return <DiagramEditorMissingState errorMessage={diagramLoadError ?? "Diagram not found"} />;
   }
 
   return (
     <div className="workspace-page bg-transparent">
-      <div className="flex min-h-[44px] shrink-0 items-center justify-between border-b border-[var(--panel-border)] px-3 py-2 md:min-h-[52px] md:px-4">
-        <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
-            Canvas workspace
-          </div>
-          <div className="mt-1 flex min-w-0 items-center gap-2.5 md:gap-3">
-            <a
-              href="/diagrams"
-              className="rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] no-underline transition-colors hover:text-[var(--foreground)] md:px-3 md:text-xs"
-            >
-              Diagrams
-            </a>
-            <span className="truncate text-base font-semibold tracking-[-0.03em] text-[var(--foreground)] md:text-lg">
-              {diagramName}
-            </span>
-          </div>
-        </div>
-
-        <div className="hidden items-center gap-2 md:flex">
-          <span className="rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)]">
-            Grid snap enabled
-          </span>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--panel-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)]">
-            {theme === "dark" ? "Dark workspace" : "Light workspace"}
-          </span>
-        </div>
-      </div>
+      <DiagramEditorHeader
+        diagramName={diagramName}
+        theme={theme}
+        qualitySummary={qualitySummary}
+        activePerspectiveTitle={activePerspective?.title ?? null}
+        onClearPerspective={() => applyPerspective(null)}
+      />
 
       {diagramPersistError && (
         <div
@@ -502,140 +620,49 @@ export default function DiagramEditor({ diagramId }: DiagramEditorProps) {
       )}
 
       <div className="flex min-h-0 flex-1 gap-2 px-2 pb-2 pt-2 md:gap-3 md:px-4 md:pb-4 md:pt-4">
-        <div className="relative flex min-w-0 flex-1 overflow-hidden rounded-[24px] border border-[var(--panel-border)] bg-[var(--canvas-bg)] shadow-[var(--card-shadow)] md:rounded-[34px]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(66,98,255,0.12),transparent_22%),radial-gradient(circle_at_bottom_right,rgba(90,180,255,0.12),transparent_26%)]" />
+        <DiagramEditorCanvas
+          renderedNodes={renderedNodes}
+          renderedEdges={renderedEdges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onPanePointerUpdate={handlePanePointerUpdate}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          onNodeDoubleClick={onNodeDoubleClick}
+          onNodeDragStop={onNodeDragStop}
+          onEdgeDoubleClick={onEdgeDoubleClick}
+        />
 
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            onPaneMouseMove={(event) => {
-              lastPointerFlowPosRef.current = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-            }}
-            onPaneClick={(event) => {
-              lastPointerFlowPosRef.current = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-            }}
-            onDragOver={onDragOver}
-            onDrop={onDrop}
-            onNodeDoubleClick={onNodeDoubleClick}
-            onNodeDragStop={onNodeDragStop}
-            onEdgeDoubleClick={onEdgeDoubleClick}
-            connectionMode={ConnectionMode.Loose}
-            defaultEdgeOptions={{
-              type: "smoothstep",
-              animated: false,
-              style: { stroke: "var(--edge-color)", strokeWidth: 1.8 },
-              markerEnd: {
-                type: MarkerType.ArrowClosed,
-                width: 14,
-                height: 14,
-                color: "var(--edge-color)",
-              },
-            }}
-            fitView
-            snapToGrid
-            snapGrid={[20, 20]}
-            deleteKeyCode="Delete"
-            selectionKeyCode="Shift"
-            multiSelectionKeyCode="Shift"
-            style={{ background: "transparent" }}
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={24} size={1.6} color="var(--dot-color)" />
-            <Controls position="bottom-right" />
-          </ReactFlow>
-
-          <div className="pointer-events-none absolute left-2 right-2 top-2 z-[100] md:left-4 md:right-4 md:top-4">
-            <div className="planview-scroll-panel pointer-events-auto flex justify-center overflow-x-auto pb-1">
-              <Toolbar />
-            </div>
-          </div>
-
-          <div className="absolute bottom-3 left-3 top-[54px] z-[100] flex flex-col gap-2 md:bottom-5 md:left-5 md:top-[68px] md:gap-3">
-              <ShapePalette />
-              <div className="floating-panel hidden max-w-[180px] rounded-[18px] px-2.5 py-2 text-[10px] text-[var(--text-muted)] md:block md:max-w-[220px] md:rounded-[24px] md:px-4 md:py-3 md:text-xs">
-                Drag shapes onto the board. Double-click nodes or edges to edit details.
-              </div>
-          </div>
-        </div>
-
-        {isMermaidCollapsed ? (
-          <div className="flex w-[48px] shrink-0 items-center justify-center rounded-[22px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--card-shadow)] md:w-[58px] md:rounded-[28px]">
-            <button
-              type="button"
-              aria-label="Expand Mermaid panel"
-              title="Expand Mermaid panel"
-              className="flex h-9 w-9 items-center justify-center rounded-[18px] border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] md:h-11 md:w-11 md:rounded-2xl"
-              onClick={() => setMermaidCollapsed(false)}
-            >
-              <PanelRightOpen size={16} />
-            </button>
-          </div>
-        ) : (
-          <>
-            <div
-              ref={resizeHandleRef}
-              onMouseDown={onResizeStart}
-              className="relative hidden w-3 shrink-0 cursor-col-resize md:block"
-            >
-              <div
-                className="absolute bottom-8 left-1/2 top-8 -translate-x-1/2 rounded-full transition-colors"
-                style={{
-                  width: 4,
-                  background: isDragging ? "var(--accent)" : "color-mix(in srgb, var(--border) 78%, transparent)",
-                }}
-              />
-            </div>
-
-            <div
-              className="flex shrink-0 flex-col overflow-hidden rounded-[22px] border border-[var(--panel-border)] bg-[var(--panel-bg)] shadow-[var(--card-shadow)] md:rounded-[30px]"
-              style={{ width: panelWidth, minWidth: 260, maxWidth: "56vw" }}
-            >
-              <div className="flex items-center gap-2 border-b border-[var(--border)] px-2.5 py-2.5 md:px-3 md:py-3">
-                <button
-                  type="button"
-                  className={`rounded-[18px] px-3 py-1.5 text-[11px] font-semibold transition-colors md:rounded-2xl md:px-4 md:py-2 md:text-xs ${
-                    activeRightTab === "mermaid"
-                      ? "bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_12px_24px_rgba(66,98,255,0.18)]"
-                      : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
-                  }`}
-                  onClick={() => setActiveRightTab("mermaid")}
-                >
-                  Mermaid{mermaidError ? " !" : ""}
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-[18px] px-3 py-1.5 text-[11px] font-semibold transition-colors md:rounded-2xl md:px-4 md:py-2 md:text-xs ${
-                    activeRightTab === "investigations"
-                      ? "bg-[var(--accent)] text-[var(--accent-foreground)] shadow-[0_12px_24px_rgba(66,98,255,0.18)]"
-                      : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
-                  }`}
-                  onClick={() => setActiveRightTab("investigations")}
-                >
-                  Investigations
-                </button>
-              </div>
-
-              <div className="min-h-0 flex-1">
-                {activeRightTab === "mermaid" ? (
-                  <MermaidPanel onCollapse={() => setMermaidCollapsed(true)} />
-                ) : (
-                  <TroubleshootingPanel
-                    diagramId={currentDiagramId}
-                    nodes={nodes as never[]}
-                    edges={edges as never[]}
-                    selectedNodeIds={selectedNodeIds}
-                    selectedEdgeIds={selectedEdgeIds}
-                  />
-                )}
-              </div>
-            </div>
-          </>
-        )}
+        <DiagramEditorSidebar
+          isMermaidCollapsed={isMermaidCollapsed}
+          setMermaidCollapsed={setMermaidCollapsed}
+          resizeHandleRef={resizeHandleRef}
+          onResizeStart={onResizeStart}
+          isDragging={isDragging}
+          panelWidth={panelWidth}
+          activeRightTab={activeRightTab}
+          onRightTabChange={setActiveRightTab}
+          mermaidError={mermaidError}
+          qualityWarningCount={qualitySummary.warningCount}
+          currentDiagramId={currentDiagramId}
+          nodes={nodes}
+          edges={edges}
+          selectedNodeIds={selectedNodeIds}
+          selectedEdgeIds={selectedEdgeIds}
+          perspectives={perspectives}
+          isPerspectivesLoading={isPerspectivesLoading}
+          perspectiveError={perspectiveError}
+          activePerspectiveId={activePerspectiveId}
+          onApplyPerspective={applyPerspective}
+          onCreateCustomPerspective={handleCreateCustomPerspective}
+          onUpdatePerspectiveFromSelection={handleUpdatePerspectiveFromSelection}
+          onUpsertSuggestedPerspective={handleUpsertSuggestedPerspective}
+          onDeletePerspective={handleDeletePerspective}
+          onFocusEntity={handleFocusEntity}
+        />
       </div>
 
       {editingNode && (

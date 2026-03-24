@@ -3,13 +3,16 @@ import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import {
   deleteDiagram as dbDeleteDiagram,
+  deleteDiagramPerspective as dbDeleteDiagramPerspective,
   getDiagramById as dbGetDiagram,
   listDiagrams as dbListDiagrams,
+  listDiagramPerspectives as dbListDiagramPerspectives,
   updateDiagramEdgeDetails as dbUpdateDiagramEdgeDetails,
   updateDiagramNodeDetails as dbUpdateDiagramNodeDetails,
+  upsertDiagramPerspective as dbUpsertDiagramPerspective,
   upsertDiagram as dbSaveDiagram,
 } from "../db.js";
-import type { Diagram } from "../types.js";
+import type { Diagram, DiagramPerspective } from "../types.js";
 import { createDiagramDraft } from "../../../shared/planview/application.js";
 import { NODE_SHAPE_TYPES } from "../../../shared/planview/domain.js";
 import { buildDatabaseSchemaMermaid, rebuildGraphFromMermaid } from "../../../shared/planview/mermaidMutations.js";
@@ -19,6 +22,7 @@ import {
 import {
   diagramEdgeMetadataPatchSchema,
   diagramNodeMetadataPatchSchema,
+  diagramPerspectiveSchema,
   edgeMetadataSchema,
   nodeMetadataSchema,
 } from "../../../shared/planview/validation.js";
@@ -37,7 +41,7 @@ export function registerDiagramTools(server: McpServer): void {
     "list_diagrams",
     {
       title: "List Diagrams",
-      description: "List all saved diagrams",
+      description: "List all saved diagrams so you can choose a diagram ID before reading or mutating it.",
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
     () => dbListDiagrams().map((diagram) => toDiagramResourceSummary(diagram))
@@ -48,7 +52,8 @@ export function registerDiagramTools(server: McpServer): void {
     "get_diagram",
     {
       title: "Get Diagram",
-      description: "Get a diagram by ID, returns full mermaid code and metadata",
+      description:
+        "Get a full diagram document by ID. Use this when you need the entire Mermaid source and graph document, not just IDs and metadata summaries.",
       inputSchema: { id: z.string().describe("The diagram ID") },
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -60,7 +65,8 @@ export function registerDiagramTools(server: McpServer): void {
     "create_diagram",
     {
       title: "Create Diagram",
-      description: "Create a new architecture diagram from mermaid code",
+      description:
+        "Create a new flowchart-style diagram from Mermaid. Start with a minimal `graph TD` when you plan to add nodes and edges incrementally with later tool calls.",
       inputSchema: {
         name: z.string().describe("Name of the diagram"),
         description: z.string().optional().describe("Description of the diagram"),
@@ -88,7 +94,8 @@ export function registerDiagramTools(server: McpServer): void {
     "update_diagram",
     {
       title: "Update Diagram",
-      description: "Update an existing diagram's mermaid code, name, or description",
+      description:
+        "Update a diagram's top-level fields or replace its Mermaid source. Prefer `add_node_to_diagram` and `add_edge_to_diagram` for small additive edits; use this tool when you intentionally want to rewrite Mermaid.",
       inputSchema: {
         id: z.string().describe("The diagram ID"),
         name: z.string().optional().describe("New name"),
@@ -143,7 +150,8 @@ export function registerDiagramTools(server: McpServer): void {
     "get_diagram_metadata",
     {
       title: "Get Diagram Metadata",
-      description: "Return diagram summary plus node and edge metadata records",
+      description:
+        "Return diagram summary plus node IDs, edge IDs, metadata, and revision. Call this before metadata or investigation updates so you can reference exact entity IDs.",
       inputSchema: { id: z.string().describe("The diagram ID") },
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -170,8 +178,72 @@ export function registerDiagramTools(server: McpServer): void {
           label: edge.data?.label ?? edge.label ?? "",
           metadata: edge.data?.metadata ?? null,
         })),
+        perspectives: diagram.perspectives,
       };
     }
+  );
+
+  registerJsonTool(
+    server,
+    "list_diagram_perspectives",
+    {
+      title: "List Diagram Perspectives",
+      description: "List saved perspectives for a diagram",
+      inputSchema: {
+        diagramId: z.string().describe("The diagram ID"),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    ({ diagramId }: { diagramId: string }) => {
+      requireDiagram(diagramId);
+      return dbListDiagramPerspectives(diagramId);
+    }
+  );
+
+  registerJsonTool(
+    server,
+    "upsert_diagram_perspective",
+    {
+      title: "Create or Update Diagram Perspective",
+      description:
+        "Save an audience-specific perspective for a diagram. Use node IDs and edge IDs discovered from `get_diagram_metadata`.",
+      inputSchema: {
+        diagramId: z.string().describe("The diagram ID"),
+        perspective: diagramPerspectiveSchema.describe("The perspective to create or update"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    ({ diagramId, perspective }: {
+      diagramId: string;
+      perspective: z.infer<typeof diagramPerspectiveSchema>;
+    }) => {
+      const saved = dbUpsertDiagramPerspective(diagramId, perspective as DiagramPerspective);
+      return {
+        diagramId,
+        perspective: saved,
+        message: "Diagram perspective saved",
+      };
+    },
+    { fallbackCode: "diagram_perspective_upsert_failed", fallbackMessage: "Failed to save diagram perspective" }
+  );
+
+  registerJsonTool(
+    server,
+    "delete_diagram_perspective",
+    {
+      title: "Delete Diagram Perspective",
+      description: "Delete a saved perspective from a diagram",
+      inputSchema: {
+        diagramId: z.string().describe("The diagram ID"),
+        perspectiveId: z.string().describe("The perspective ID"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    ({ diagramId, perspectiveId }: { diagramId: string; perspectiveId: string }) => {
+      dbDeleteDiagramPerspective(diagramId, perspectiveId);
+      return { diagramId, perspectiveId, message: "Diagram perspective deleted" };
+    },
+    { fallbackCode: "diagram_perspective_delete_failed", fallbackMessage: "Failed to delete diagram perspective" }
   );
 
   registerJsonTool(
@@ -179,7 +251,8 @@ export function registerDiagramTools(server: McpServer): void {
     "update_diagram_node_metadata",
     {
       title: "Update Diagram Node Metadata",
-      description: "Safely update rich metadata for a single node in a diagram",
+      description:
+        "Replace the full rich metadata object for a single node. Call `get_diagram_metadata` first to discover the node ID and current revision, then send the complete desired metadata object rather than a partial patch.",
       inputSchema: {
         diagramId: z.string().describe("The diagram ID"),
         nodeId: z.string().describe("The node ID"),
@@ -205,7 +278,8 @@ export function registerDiagramTools(server: McpServer): void {
     "update_diagram_edge_metadata",
     {
       title: "Update Diagram Edge Metadata",
-      description: "Safely update dependency metadata for a single edge in a diagram",
+      description:
+        "Replace the full dependency metadata object for a single edge. Call `get_diagram_metadata` first to discover the edge ID and current revision, then send the complete desired metadata object rather than a partial patch.",
       inputSchema: {
         diagramId: z.string().describe("The diagram ID"),
         edgeId: z.string().describe("The edge ID"),
@@ -231,7 +305,8 @@ export function registerDiagramTools(server: McpServer): void {
     "add_node_to_diagram",
     {
       title: "Add Node to Diagram",
-      description: "Add a new node (component) to a diagram's mermaid code",
+      description:
+        "Add one component node to an existing flowchart diagram. Use stable IDs such as `api_gateway` or `orders_db`, and choose the closest built-in shape type for the component role.",
       inputSchema: {
         id: z.string().describe("The diagram ID"),
         nodeId: z
@@ -263,7 +338,8 @@ export function registerDiagramTools(server: McpServer): void {
     "add_edge_to_diagram",
     {
       title: "Add Edge to Diagram",
-      description: "Add a connection (edge) between two nodes in a diagram",
+      description:
+        "Add a connection between two existing nodes in a flowchart diagram. `source` and `target` must already exist as node IDs in the same diagram.",
       inputSchema: {
         id: z.string().describe("The diagram ID"),
         source: z.string().regex(MERMAID_NODE_ID_RE, "Invalid Mermaid node ID").describe("Source node ID"),
@@ -283,7 +359,8 @@ export function registerDiagramTools(server: McpServer): void {
     "create_database_schema",
     {
       title: "Create Database Schema",
-      description: "Create a new diagram with database schema (ER diagram) using erDiagram mermaid syntax. Defines tables with columns and relationships between them.",
+      description:
+        "Create a new ER-style database schema diagram using Mermaid `erDiagram` syntax. Use this instead of flowchart tools when the main goal is to model tables, columns, and relationships.",
       inputSchema: {
         name: z.string().describe("Name of the diagram"),
         description: z.string().optional().describe("Description of the diagram"),
@@ -346,7 +423,8 @@ export function registerDiagramTools(server: McpServer): void {
     "add_table_to_diagram",
     {
       title: "Add Table to Diagram",
-      description: "Add a database table (with columns) to an existing diagram's erDiagram mermaid code",
+      description:
+        "Add a table with columns to an existing ER diagram. Use only on diagrams that already use Mermaid `erDiagram` syntax.",
       inputSchema: {
         id: z.string().describe("The diagram ID"),
         tableName: z.string().describe("Name of the table"),
@@ -375,7 +453,8 @@ export function registerDiagramTools(server: McpServer): void {
     "add_relationship_to_diagram",
     {
       title: "Add Relationship to Diagram",
-      description: "Add a relationship between two tables in an existing diagram's erDiagram",
+      description:
+        "Add a relationship between two existing tables in an ER diagram. Use table names that already exist in the diagram.",
       inputSchema: {
         id: z.string().describe("The diagram ID"),
         from: z.string().describe("Source table name"),

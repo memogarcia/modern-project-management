@@ -4,6 +4,8 @@ export type {
   DiagramEdgeMetadata,
   DiagramLinkReference,
   DiagramNodeMetadata,
+  DiagramPerspective,
+  DiagramPerspectiveKind,
   DiagramSummary as DiagramMeta,
   KnowledgePattern,
   TroubleshootingSession,

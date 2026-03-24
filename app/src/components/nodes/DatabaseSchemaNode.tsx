@@ -1,8 +1,9 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Handle, Position, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import { Handle, Position, type Node, type NodeProps, useReactFlow, useViewport } from "@xyflow/react";
 import ShapeIcon from "@/components/ShapeIcon";
+import { getCanvasRenderMode } from "@/lib/canvasRenderMode";
 import type { DatabaseSchemaNodeData, SchemaColumn } from "@/lib/types";
 
 type DatabaseSchemaNodeType = Node<DatabaseSchemaNodeData, "databaseSchemaNode">;
@@ -16,6 +17,7 @@ const constraintBadge: Record<string, { label: string; color: string }> = {
 
 function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseSchemaNodeType>) {
   const { updateNodeData } = useReactFlow();
+  const { zoom } = useViewport();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +55,11 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
   );
 
   const columns: SchemaColumn[] = data.schema ?? [];
+  const renderMode = getCanvasRenderMode(zoom);
+  const isCompact = renderMode !== "full";
+  const isMicro = renderMode === "micro";
+  const visibleColumns = isMicro ? [] : isCompact ? columns.slice(0, 4) : columns;
+  const hiddenColumnCount = Math.max(columns.length - visibleColumns.length, 0);
 
   const containerStyle: CSSProperties = {
     minWidth: 240,
@@ -60,18 +67,18 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
     borderRadius: 8,
     border: `1.5px solid ${selected ? "var(--accent)" : "color-mix(in srgb, var(--accent) 18%, var(--border))"}`,
     background: "var(--surface-raised)",
-    boxShadow: selected ? "var(--node-shadow-selected)" : "var(--node-shadow)",
+    boxShadow: isCompact ? "none" : selected ? "var(--node-shadow-selected)" : "var(--node-shadow)",
   };
 
   const headerStyle: CSSProperties = {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "14px 16px",
+    padding: isCompact ? "12px 14px" : "14px 16px",
     background: "linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white) 0%, var(--accent) 100%)",
     color: "#ffffff",
     fontWeight: 700,
-    fontSize: 14,
+    fontSize: isCompact ? 13 : 14,
     letterSpacing: "-0.02em",
     cursor: editing ? "text" : "grab",
   };
@@ -80,14 +87,14 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "8px 14px",
+    padding: isCompact ? "7px 12px" : "8px 14px",
     background: index % 2 === 0 ? "color-mix(in srgb, var(--accent) 3%, var(--surface-raised))" : "transparent",
     borderTop: index === 0 ? "1px solid color-mix(in srgb, var(--accent) 12%, var(--border))" : "none",
   });
 
   const targetHandleStyle: CSSProperties = {
-    width: 8,
-    height: 8,
+    width: isCompact ? 7 : 8,
+    height: isCompact ? 7 : 8,
     opacity: 0,
     pointerEvents: "none",
   };
@@ -99,22 +106,32 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
       <Handle type="target" id="t-bottom" position={Position.Bottom} style={targetHandleStyle} />
       <Handle type="target" id="t-right" position={Position.Right} style={targetHandleStyle} />
 
-      <Handle type="source" id="top" position={Position.Top} style={{ width: 8, height: 8 }} />
-      <Handle type="source" id="left" position={Position.Left} style={{ width: 8, height: 8 }} />
+      <Handle
+        type="source"
+        id="top"
+        position={Position.Top}
+        style={{ width: isCompact ? 7 : 8, height: isCompact ? 7 : 8 }}
+      />
+      <Handle
+        type="source"
+        id="left"
+        position={Position.Left}
+        style={{ width: isCompact ? 7 : 8, height: isCompact ? 7 : 8 }}
+      />
 
       <div style={headerStyle} onDoubleClick={handleDoubleClick}>
         <div
           style={{
             display: "flex",
-            width: 28,
-            height: 28,
+            width: isCompact ? 24 : 28,
+            height: isCompact ? 24 : 28,
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 6,
             background: "rgba(255,255,255,0.16)",
           }}
         >
-          <ShapeIcon type="database" size={16} color="#fff" strokeWidth={1.5} />
+          <ShapeIcon type="database" size={isCompact ? 14 : 16} color="#fff" strokeWidth={1.5} />
         </div>
 
         {editing ? (
@@ -129,9 +146,9 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
               borderRadius: 6,
               border: "1px solid rgba(255,255,255,0.28)",
               background: "rgba(255,255,255,0.14)",
-              padding: "6px 8px",
+              padding: isCompact ? "5px 7px" : "6px 8px",
               color: "#fff",
-              fontSize: 14,
+              fontSize: isCompact ? 13 : 14,
               fontWeight: 700,
               outline: "none",
             }}
@@ -143,7 +160,7 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
 
       {columns.length > 0 ? (
         <div style={{ padding: "6px 0" }}>
-          {columns.map((column, index) => (
+          {visibleColumns.map((column, index) => (
             <div key={column.name} style={rowStyle(index)}>
               {column.constraint && constraintBadge[column.constraint] && (
                 <span
@@ -152,8 +169,8 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
                     borderRadius: 999,
                     background: constraintBadge[column.constraint].color,
                     color: "#fff",
-                    padding: "2px 6px",
-                    fontSize: 9,
+                    padding: isCompact ? "2px 5px" : "2px 6px",
+                    fontSize: isCompact ? 8 : 9,
                     fontWeight: 800,
                     letterSpacing: "0.08em",
                   }}
@@ -166,7 +183,7 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
                   flex: 1,
                   color: "var(--foreground)",
                   fontWeight: column.constraint === "primary" ? 700 : 500,
-                  fontSize: 12,
+                  fontSize: isCompact ? 11 : 12,
                 }}
               >
                 {column.name}
@@ -176,13 +193,38 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
                   flexShrink: 0,
                   color: "var(--text-muted)",
                   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                  fontSize: 11,
+                  fontSize: isCompact ? 10 : 11,
                 }}
               >
                 {column.type}
               </span>
             </div>
           ))}
+          {isCompact && hiddenColumnCount > 0 && (
+            <div
+              style={{
+                padding: "8px 12px 2px",
+                color: "var(--text-muted)",
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: "0.01em",
+              }}
+            >
+              +{hiddenColumnCount} more column{hiddenColumnCount === 1 ? "" : "s"}
+            </div>
+          )}
+          {isMicro && (
+            <div
+              style={{
+                padding: "2px 14px 10px",
+                color: "var(--text-muted)",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              {columns.length} column{columns.length === 1 ? "" : "s"}
+            </div>
+          )}
         </div>
       ) : (
         <div
@@ -197,8 +239,18 @@ function DatabaseSchemaNodeComponent({ id, data, selected }: NodeProps<DatabaseS
         </div>
       )}
 
-      <Handle type="source" id="bottom" position={Position.Bottom} style={{ width: 8, height: 8 }} />
-      <Handle type="source" id="right" position={Position.Right} style={{ width: 8, height: 8 }} />
+      <Handle
+        type="source"
+        id="bottom"
+        position={Position.Bottom}
+        style={{ width: isCompact ? 7 : 8, height: isCompact ? 7 : 8 }}
+      />
+      <Handle
+        type="source"
+        id="right"
+        position={Position.Right}
+        style={{ width: isCompact ? 7 : 8, height: isCompact ? 7 : 8 }}
+      />
     </div>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { NodeResizer, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import { NodeResizer, type Node, type NodeProps, useReactFlow, useViewport } from "@xyflow/react";
 import { useTheme } from "@/components/ThemeProvider";
+import { getCanvasRenderMode } from "@/lib/canvasRenderMode";
 import type { GroupNodeData } from "@/lib/types";
 
 type GroupNodeType = Node<GroupNodeData, "groupNode">;
@@ -14,6 +15,7 @@ const DARK_DEFAULT_BORDER = "rgba(144, 163, 255, 0.46)";
 
 function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
   const { updateNodeData } = useReactFlow();
+  const { zoom } = useViewport();
   const { theme } = useTheme();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
@@ -21,6 +23,9 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
 
   const bgColor = data.color ?? (theme === "dark" ? DARK_DEFAULT_COLOR : LIGHT_DEFAULT_COLOR);
   const borderColor = data.borderColor ?? (theme === "dark" ? DARK_DEFAULT_BORDER : LIGHT_DEFAULT_BORDER);
+  const renderMode = getCanvasRenderMode(zoom);
+  const isCompact = renderMode !== "full";
+  const isMicro = renderMode === "micro";
 
   useEffect(() => {
     if (editing) {
@@ -62,8 +67,9 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
     position: "relative",
     borderRadius: 10,
     border: `1.5px dashed ${selected ? "var(--accent)" : borderColor}`,
-    background: `linear-gradient(180deg, ${bgColor} 0%, color-mix(in srgb, ${bgColor} 72%, transparent) 100%)`,
-    backdropFilter: "blur(8px)",
+    background: isCompact
+      ? `color-mix(in srgb, ${bgColor} 82%, transparent)`
+      : `linear-gradient(180deg, ${bgColor} 0%, color-mix(in srgb, ${bgColor} 72%, transparent) 100%)`,
   };
 
   const labelStyle: CSSProperties = {
@@ -77,13 +83,13 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
     border: `1px solid color-mix(in srgb, ${borderColor} 32%, transparent)`,
     background: "var(--surface-raised)",
     color: "var(--foreground)",
-    padding: "8px 14px",
-    fontSize: 12,
+    padding: isMicro ? "6px 10px" : isCompact ? "7px 12px" : "8px 14px",
+    fontSize: isCompact ? 11 : 12,
     fontWeight: 700,
     lineHeight: 1.2,
     letterSpacing: "-0.02em",
     pointerEvents: "auto",
-    boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+    boxShadow: isCompact ? "none" : "0 1px 3px rgba(15, 23, 42, 0.06)",
   };
 
   return (
@@ -93,7 +99,12 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
         minWidth={220}
         minHeight={140}
         lineStyle={{ borderColor }}
-        handleStyle={{ width: 10, height: 10, borderColor, background: "var(--surface-raised)" }}
+        handleStyle={{
+          width: isCompact ? 8 : 10,
+          height: isCompact ? 8 : 10,
+          borderColor,
+          background: "var(--surface-raised)",
+        }}
       />
       <div style={containerStyle}>
         <div style={labelStyle} onDoubleClick={handleDoubleClick} className="drag-handle">

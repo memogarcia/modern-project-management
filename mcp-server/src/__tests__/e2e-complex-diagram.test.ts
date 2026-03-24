@@ -68,6 +68,9 @@ async function runTest() {
       "create_diagram",
       "update_diagram",
       "delete_diagram",
+      "list_diagram_perspectives",
+      "upsert_diagram_perspective",
+      "delete_diagram_perspective",
       "add_node_to_diagram",
       "add_edge_to_diagram",
     ]) {
@@ -213,6 +216,52 @@ async function runTest() {
       `  Lines: ${diagram.mermaidCode.split("\n").length}\n`
     );
 
+    const { parsed: perspectiveUpsert } = await callTool(client, "upsert_diagram_perspective", {
+      diagramId,
+      perspective: {
+        id: "operations_view",
+        title: "Operations view",
+        description: "Operational path from gateway to core dependencies.",
+        kind: "operations",
+        nodeIds: ["api_gateway", "order_service", "order_db", "event_bus"],
+        edgeIds: [],
+      },
+    });
+    assert.equal(
+      ((perspectiveUpsert as { perspective: { id: string } }).perspective).id,
+      "operations_view"
+    );
+
+    const { parsed: listedPerspectives } = await callTool(client, "list_diagram_perspectives", {
+      diagramId,
+    });
+    const perspectives = listedPerspectives as Array<{ id: string; title: string }>;
+    assert.equal(perspectives.length, 1);
+    assert.equal(perspectives[0]?.title, "Operations view");
+
+    const { parsed: diagramWithPerspectives } = await callTool(client, "get_diagram", {
+      id: diagramId,
+    });
+    assert(
+      ((diagramWithPerspectives as { perspectives: Array<{ id: string }> }).perspectives ?? []).some(
+        (perspective) => perspective.id === "operations_view"
+      ),
+      "Saved perspective should be present in get_diagram"
+    );
+
+    const perspectivesResourceResult = await client.readResource({
+      uri: `planview://diagrams/${diagramId}/perspectives`,
+    });
+    const perspectivesResourceText = (
+      perspectivesResourceResult.contents as Array<{ text: string }>
+    )[0].text;
+    const perspectivesResource = JSON.parse(perspectivesResourceText) as Array<{ id: string }>;
+    assert(
+      perspectivesResource.some((perspective) => perspective.id === "operations_view"),
+      "Perspective should appear in diagram perspectives resource"
+    );
+    console.log("✔ Diagram perspectives persisted and exposed via MCP\n");
+
     // ── Step 6: Update diagram metadata ───────────────────────────
     const { parsed: updateResult } = await callTool(client, "update_diagram", {
       id: diagramId,
@@ -253,6 +302,19 @@ async function runTest() {
       "Diagram should appear in resource listing"
     );
     console.log("✔ Resource endpoint returns diagram\n");
+
+    const { parsed: deletedPerspective } = await callTool(client, "delete_diagram_perspective", {
+      diagramId,
+      perspectiveId: "operations_view",
+    });
+    assert.equal(
+      (deletedPerspective as { message: string }).message,
+      "Diagram perspective deleted"
+    );
+    const { parsed: perspectivesAfterDelete } = await callTool(client, "list_diagram_perspectives", {
+      diagramId,
+    });
+    assert.equal((perspectivesAfterDelete as Array<unknown>).length, 0);
 
     // ── Step 9: Delete and verify ─────────────────────────────────
     const { raw: deleteMsg } = await callTool(client, "delete_diagram", {

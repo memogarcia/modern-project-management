@@ -12,8 +12,18 @@ import { v4 as uuidv4 } from "uuid";
 import type { ArchNode, ArchEdge, ShapeType, Diagram, DiagramNode, SchemaColumn, GroupNodeData, DatabaseSchemaNodeData, TextNodeData } from "@/lib/types";
 import { getShapeDef } from "@/lib/types";
 import { MermaidParseError, type MermaidDiagnostic, flowToMermaid, mermaidToFlow, type MermaidSubgraph } from "@/lib/converters";
-import { autoLayout, type LayoutDirection } from "@/lib/layout";
-import { computeOrthogonalEdgeRoutes, writeStoredEdgeRoute, type EdgeRouteSide, type OrthogonalEdgeRoute } from "@/lib/edgeRouting";
+import {
+  defaultDirectionForPreset,
+  layoutGraph,
+  type LayoutDirection,
+  type LayoutPresetId,
+} from "@/lib/layout";
+import {
+  writeStoredEdgeRoute,
+  type EdgeRouteSide,
+  type OrthogonalEdgeRoute,
+} from "@/lib/edgeRouting";
+import { estimateNodeSize as estimateSharedNodeSize } from "@/lib/nodeSizing";
 import { saveDiagram, loadDiagram } from "@/lib/storage";
 
 let persistQueue: Promise<void> = Promise.resolve();
@@ -30,6 +40,7 @@ type DiagramHistorySnapshot = {
   edges: ArchEdge[];
   mermaidCode: string;
   layoutDirection: LayoutDirection;
+  layoutPreset: LayoutPresetId;
 };
 
 type DiagramClipboardPayload = {
@@ -91,13 +102,14 @@ function stripRuntimeFieldsFromEdge(edge: ArchEdge): ArchEdge {
 }
 
 function snapshotFromState(
-  s: Pick<DiagramStore, "nodes" | "edges" | "mermaidCode" | "layoutDirection">
+  s: Pick<DiagramStore, "nodes" | "edges" | "mermaidCode" | "layoutDirection" | "layoutPreset">
 ): DiagramHistorySnapshot {
   return {
     nodes: s.nodes.map(stripRuntimeFieldsFromNode),
     edges: s.edges.map(stripRuntimeFieldsFromEdge),
     mermaidCode: s.mermaidCode,
     layoutDirection: s.layoutDirection,
+    layoutPreset: s.layoutPreset,
   };
 }
 
@@ -118,7 +130,7 @@ function snapshotKey(snapshot: DiagramHistorySnapshot): string {
     })
     .join("|");
 
-  return `${snapshot.layoutDirection}::${snapshot.mermaidCode.length}::n:${nodesKey}::e:${edgesKey}`;
+  return `${snapshot.layoutPreset}:${snapshot.layoutDirection}::${snapshot.mermaidCode.length}::n:${nodesKey}::e:${edgesKey}`;
 }
 
 function pushHistory(
@@ -272,40 +284,14 @@ function buildAbsolutePositionMap(nodes: DiagramNode[]): Map<string, { x: number
 }
 
 function estimateNodeSizeForOverlap(node: DiagramNode): { w: number; h: number } {
-  const measuredW = typeof node.measured?.width === "number" ? node.measured.width : undefined;
-  const measuredH = typeof node.measured?.height === "number" ? node.measured.height : undefined;
-  const explicitW = typeof node.width === "number" ? node.width : undefined;
-  const explicitH = typeof node.height === "number" ? node.height : undefined;
-
-  const width = explicitW ?? measuredW;
-  const height = explicitH ?? measuredH;
-  if (typeof width === "number" && typeof height === "number") {
-    return { w: width, h: height };
-  }
-
-  if (node.type === "databaseSchemaNode") {
-    const schema = (node.data as DatabaseSchemaNodeData).schema ?? [];
-    return { w: 240, h: Math.max(80, 40 + schema.length * 24) };
-  }
-
   if (node.type === "groupNode") {
     const style = (node.style ?? {}) as { width?: unknown; height?: unknown };
     const w = typeof style.width === "number" && Number.isFinite(style.width) ? style.width : 400;
     const h = typeof style.height === "number" && Number.isFinite(style.height) ? style.height : 300;
     return { w, h };
   }
-
-  if (node.type === "textNode") {
-    const text = ((node.data as TextNodeData).text ?? "").trim();
-    const lines = Math.max(1, text.split("\n").length);
-    const longest = Math.max(4, ...text.split("\n").map((l) => l.length));
-    const w = Math.min(420, Math.max(80, 8 * longest + 16));
-    const h = Math.max(32, 22 * lines + 12);
-    return { w, h };
-  }
-
-  const shapeDef = getShapeDef((node as ArchNode).data.shapeType);
-  return { w: shapeDef.defaultWidth, h: shapeDef.defaultHeight };
+  const { width, height } = estimateSharedNodeSize(node);
+  return { w: width, h: height };
 }
 
 function rectsOverlap(a: OverlapRect, b: OverlapRect, padding = 0): boolean {
@@ -635,18 +621,6 @@ function applyMermaidSubgraphGroups(
   }
 
   function estimateNodeSize(node: DiagramNode): { w: number; h: number } {
-    const measuredW = typeof node.measured?.width === "number" ? node.measured.width : undefined;
-    const measuredH = typeof node.measured?.height === "number" ? node.measured.height : undefined;
-    const width = typeof node.width === "number" ? node.width : measuredW;
-    const height = typeof node.height === "number" ? node.height : measuredH;
-    if (typeof width === "number" && typeof height === "number") {
-      return { w: width, h: height };
-    }
-
-    if (node.type === "databaseSchemaNode") {
-      const schema = (node.data as DatabaseSchemaNodeData).schema ?? [];
-      return { w: 240, h: Math.max(80, 40 + schema.length * 24) };
-    }
     if (node.type === "groupNode") {
       const style = (node.style ?? {}) as { width?: unknown; height?: unknown };
       return {
@@ -654,9 +628,8 @@ function applyMermaidSubgraphGroups(
         h: numericSize(style?.height, DEFAULT_GROUP_H),
       };
     }
-
-    const shapeDef = getShapeDef((node as ArchNode).data.shapeType);
-    return { w: shapeDef.defaultWidth, h: shapeDef.defaultHeight };
+    const { width, height } = estimateSharedNodeSize(node);
+    return { w: width, h: height };
   }
 
   function nodeRect(node: DiagramNode): Rect {
@@ -785,6 +758,7 @@ interface DiagramStore {
   edges: ArchEdge[];
   mermaidCode: string;
   layoutDirection: LayoutDirection;
+  layoutPreset: LayoutPresetId;
 
   // Undo/redo
   canUndo: boolean;
@@ -829,11 +803,13 @@ interface DiagramStore {
   sendToBack: () => void;
   sendForward: () => void;
   sendBackward: () => void;
+  selectEntities: (nodeIds: string[], edgeIds: string[]) => void;
   deleteSelected: () => void;
   updateNodeData: (nodeId: string, data: Partial<ArchNode["data"]>) => void;
   updateEdge: (edgeId: string, updates: Partial<ArchEdge>) => void;
 
   updateMermaidCode: (code: string) => void;
+  setLayoutPreset: (preset: LayoutPresetId) => void;
   syncFlowToMermaid: () => void;
   syncMermaidToFlow: () => Promise<void>;
 
@@ -857,6 +833,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   edges: [],
   mermaidCode: "graph TD\n",
   layoutDirection: "RIGHT",
+  layoutPreset: "diagram-horizontal",
   canUndo: false,
   canRedo: false,
   undo: () => {
@@ -870,6 +847,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       edges: prev.edges,
       mermaidCode: prev.mermaidCode,
       layoutDirection: prev.layoutDirection,
+      layoutPreset: prev.layoutPreset,
       _historyPast: s._historyPast.slice(0, -1),
       _historyFuture: [current, ...s._historyFuture],
     });
@@ -890,6 +868,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       edges: next.edges,
       mermaidCode: next.mermaidCode,
       layoutDirection: next.layoutDirection,
+      layoutPreset: next.layoutPreset,
       _historyPast: [...s._historyPast, current],
       _historyFuture: s._historyFuture.slice(1),
     });
@@ -1034,6 +1013,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       edges: [],
       mermaidCode: "graph TD\n",
       layoutDirection: "RIGHT",
+      layoutPreset: "diagram-horizontal",
       _syncingFromMermaid: false,
       _syncingFromFlow: false,
       _applyingHistory: false,
@@ -1070,6 +1050,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         edges: diagram.edges as ArchEdge[],
         mermaidCode: diagram.mermaidCode,
         layoutDirection: "RIGHT",
+        layoutPreset: "diagram-horizontal",
         _historyPast: [],
         _historyFuture: [],
         canUndo: false,
@@ -1106,6 +1087,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         edges: [],
         mermaidCode: "graph TD\n",
         layoutDirection: "RIGHT",
+        layoutPreset: "diagram-horizontal",
         _historyPast: [],
         _historyFuture: [],
         canUndo: false,
@@ -1132,6 +1114,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       openSessionCount: 0,
       nodes: [],
       edges: [],
+      perspectives: [],
       mermaidCode: "graph TD\n",
     };
     try {
@@ -1160,6 +1143,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       edges: [],
       mermaidCode: "graph TD\n",
       layoutDirection: "RIGHT",
+      layoutPreset: "diagram-horizontal",
       _historyPast: [],
       _historyFuture: [],
       canUndo: false,
@@ -1215,6 +1199,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
           edgeCount: snapshot.edges.length,
           sessionCount: existing?.sessionCount ?? 0,
           openSessionCount: existing?.openSessionCount ?? 0,
+          perspectives: existing?.perspectives ?? [],
           expectedRevision: snapshot.diagramRevision || existing?.revision,
           nodes: snapshot.nodes,
           edges: snapshot.edges,
@@ -1765,6 +1750,21 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     });
   },
 
+  selectEntities: (nodeIds, edgeIds) => {
+    const nodeIdSet = new Set(nodeIds);
+    const edgeIdSet = new Set(edgeIds);
+    set((s) => ({
+      nodes: s.nodes.map((node) => ({
+        ...node,
+        selected: nodeIdSet.has(node.id),
+      })),
+      edges: s.edges.map((edge) => ({
+        ...edge,
+        selected: edgeIdSet.has(edge.id),
+      })),
+    }));
+  },
+
   deleteSelected: () => {
     set((s) => {
       const deletedNodeIds = new Set(
@@ -1860,6 +1860,13 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     set({ mermaidCode: code, mermaidError: null, mermaidDiagnostics: [] });
   },
 
+  setLayoutPreset: (preset) => {
+    set({
+      layoutPreset: preset,
+      layoutDirection: defaultDirectionForPreset(preset),
+    });
+  },
+
   syncFlowToMermaid: () => {
     const s = get();
     if (s._syncingFromMermaid) return;
@@ -1896,11 +1903,13 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         return stripped;
       });
 
-      let finalNodes = merged;
-      if (needsLayout.length > 0) {
-        finalNodes = await autoLayout(merged, parsedEdges, { lockedNodeIds });
-      }
-      finalNodes = applyMermaidSubgraphGroups(finalNodes, subgraphs);
+      const layoutResult = await layoutGraph(merged, parsedEdges, {
+        preset: s.layoutPreset,
+        direction: s.layoutDirection,
+        lockedNodeIds,
+      });
+
+      let finalNodes = applyMermaidSubgraphGroups(layoutResult.nodes, subgraphs);
 
       if (preservedNonMermaidNodes.length > 0) {
         const finalNodeIds = new Set(finalNodes.map((n) => n.id));
@@ -1915,9 +1924,14 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       }
 
       // Assign edge handles and routed paths against the actual final node set.
-      const layoutDir: LayoutDirection = s.layoutDirection ?? "DOWN";
-      const routes = computeOrthogonalEdgeRoutes(finalNodes, parsedEdges, layoutDir);
-      const positionedEdges = applyEdgePositions(finalNodes, parsedEdges, layoutDir, "CLOSEST", routes);
+      const layoutDir: LayoutDirection = layoutResult.direction;
+      const positionedEdges = applyEdgePositions(
+        finalNodes,
+        parsedEdges,
+        layoutDir,
+        "CLOSEST",
+        layoutResult.routes
+      );
 
       // Preserve existing edge objects when source/target/label haven't changed
       // so React Flow doesn't re-route them.
@@ -1960,18 +1974,28 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
 
       set((curr) => {
         if (curr._applyingHistory) {
-          return { nodes: finalNodes, edges: mergedEdges, _syncingFromMermaid: false };
+          return {
+            nodes: finalNodes,
+            edges: mergedEdges,
+            layoutDirection: layoutDir,
+            layoutPreset: layoutResult.preset,
+            _syncingFromMermaid: false,
+          };
         }
         const current = snapshotFromState(curr);
         const nextSnapshot: DiagramHistorySnapshot = {
           ...current,
           nodes: finalNodes.map(stripRuntimeFieldsFromNode),
           edges: mergedEdges.map(stripRuntimeFieldsFromEdge),
+          layoutDirection: layoutDir,
+          layoutPreset: layoutResult.preset,
         };
         const past = pushHistory(current, curr._historyPast, nextSnapshot);
         return {
           nodes: finalNodes,
           edges: mergedEdges,
+          layoutDirection: layoutDir,
+          layoutPreset: layoutResult.preset,
           _syncingFromMermaid: false,
           mermaidError: null,
           mermaidDiagnostics: [],
@@ -2007,30 +2031,53 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     const s = get();
     if (s.nodes.length === 0) return;
 
-    const dir: LayoutDirection = direction ?? s.layoutDirection ?? "RIGHT";
+    const effectivePreset: LayoutPresetId =
+      s.layoutPreset === "diagram-horizontal" || s.layoutPreset === "diagram-vertical"
+        ? direction === "DOWN"
+          ? "diagram-vertical"
+          : direction === "RIGHT"
+            ? "diagram-horizontal"
+            : s.layoutPreset
+        : s.layoutPreset;
+    const dir: LayoutDirection = defaultDirectionForPreset(effectivePreset);
     const attachMode: EdgeAttachMode = edgeAttachMode ?? "CLOSEST";
 
     const hasGroups = s.nodes.some((n) => n.type === "groupNode");
     if (!hasGroups) {
-      const laid = await autoLayout(s.nodes, s.edges, { direction: dir });
-      const routes = computeOrthogonalEdgeRoutes(laid, s.edges, dir);
-      const laidEdges = applyEdgePositions(laid, s.edges, dir, attachMode, routes);
+      const result = await layoutGraph(s.nodes, s.edges, {
+        preset: effectivePreset,
+        direction: dir,
+      });
+      const laidEdges = applyEdgePositions(
+        result.nodes,
+        s.edges,
+        result.direction,
+        attachMode,
+        result.routes
+      );
       if (s._applyingHistory || s._syncingFromMermaid) {
-        set({ nodes: laid, edges: laidEdges, layoutDirection: dir });
+        set({
+          nodes: result.nodes,
+          edges: laidEdges,
+          layoutDirection: result.direction,
+          layoutPreset: result.preset,
+        });
         return;
       }
       const current = snapshotFromState(s);
       const nextSnapshot: DiagramHistorySnapshot = {
         ...current,
-        nodes: laid.map(stripRuntimeFieldsFromNode),
+        nodes: result.nodes.map(stripRuntimeFieldsFromNode),
         edges: laidEdges.map(stripRuntimeFieldsFromEdge),
-        layoutDirection: dir,
+        layoutDirection: result.direction,
+        layoutPreset: result.preset,
       };
       const past = pushHistory(current, s._historyPast, nextSnapshot);
       set({
-        nodes: laid,
+        nodes: result.nodes,
         edges: laidEdges,
-        layoutDirection: dir,
+        layoutDirection: result.direction,
+        layoutPreset: result.preset,
         _historyPast: past,
         _historyFuture: [],
         canUndo: past.length > 0,
@@ -2056,16 +2103,44 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       (e) => flatNodeIds.has(e.source) && flatNodeIds.has(e.target)
     );
 
-    const laidFlatNodes = await autoLayout(flatNodes, flatEdges, { direction: dir });
-    const rebuilt = applyMermaidSubgraphGroups(laidFlatNodes, subgraphs, {
+    const result = await layoutGraph(flatNodes, flatEdges, {
+      preset: effectivePreset,
+      direction: dir,
+    });
+    const rebuilt = applyMermaidSubgraphGroups(result.nodes, subgraphs, {
       preserveGroupIds: true,
       groupTemplates: templates,
     });
     const packed = packRootNodesToAvoidOverlaps(rebuilt);
-    const routes = computeOrthogonalEdgeRoutes(packed, s.edges, dir);
-    const laidEdges = applyEdgePositions(packed, s.edges, dir, attachMode, routes);
+    const packedAbsPosMap = buildAbsolutePositionMap(packed);
+    const rerouteFlatNodes = packed
+      .filter((n) => n.type !== "groupNode")
+      .map((n) => {
+        const abs = packedAbsPosMap.get(n.id) ?? n.position;
+        return {
+          ...stripGroupingFromNode(n),
+          position: abs,
+        };
+      });
+    const rerouted = await layoutGraph(rerouteFlatNodes, flatEdges, {
+      preset: effectivePreset,
+      direction: result.direction,
+      lockedNodeIds: rerouteFlatNodes.map((node) => node.id),
+    });
+    const laidEdges = applyEdgePositions(
+      packed,
+      s.edges,
+      result.direction,
+      attachMode,
+      rerouted.routes
+    );
     if (s._applyingHistory || s._syncingFromMermaid) {
-      set({ nodes: packed, edges: laidEdges, layoutDirection: dir });
+      set({
+        nodes: packed,
+        edges: laidEdges,
+        layoutDirection: result.direction,
+        layoutPreset: result.preset,
+      });
       return;
     }
     const current = snapshotFromState(s);
@@ -2073,13 +2148,15 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       ...current,
       nodes: packed.map(stripRuntimeFieldsFromNode),
       edges: laidEdges.map(stripRuntimeFieldsFromEdge),
-      layoutDirection: dir,
+      layoutDirection: result.direction,
+      layoutPreset: result.preset,
     };
     const past = pushHistory(current, s._historyPast, nextSnapshot);
     set({
       nodes: packed,
       edges: laidEdges,
-      layoutDirection: dir,
+      layoutDirection: result.direction,
+      layoutPreset: result.preset,
       _historyPast: past,
       _historyFuture: [],
       canUndo: past.length > 0,

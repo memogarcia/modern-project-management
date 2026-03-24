@@ -7,6 +7,7 @@ import {
   getTroubleshootingSessionById as dbGetTroubleshootingSession,
   listArtifacts as dbListArtifacts,
   listDiagrams as dbListDiagrams,
+  listDiagramPerspectives as dbListDiagramPerspectives,
   listKnowledgePatterns as dbListKnowledgePatterns,
   listTroubleshootingSessions as dbListTroubleshootingSessions,
 } from "./db.js";
@@ -15,6 +16,7 @@ import {
   toDiagramResourceSummary,
   toTroubleshootingSessionResourceSummary,
 } from "../../shared/planview/projections.js";
+import { buildPlanViewGuide } from "./guide.js";
 
 function jsonContents(uri: URL, payload: unknown) {
   return {
@@ -33,6 +35,17 @@ function jsonError(uri: URL, error: string, code?: string) {
 }
 
 export function registerResources(server: McpServer): void {
+  server.registerResource(
+    "guide-workflows",
+    "planview://guide/workflows",
+    {
+      title: "PlanView Workflows",
+      description: "How to use the MCP tools to build diagrams, enrich metadata, record investigations, attach evidence, and extract reusable patterns.",
+      mimeType: "application/json",
+    },
+    async (uri) => jsonContents(uri, buildPlanViewGuide())
+  );
+
   server.registerResource(
     "diagrams",
     "planview://diagrams",
@@ -62,6 +75,30 @@ export function registerResources(server: McpServer): void {
     async (uri, { diagramId }) => {
       const diagram = dbGetDiagram(String(diagramId));
       return jsonContents(uri, diagram ?? { error: "Diagram not found" });
+    }
+  );
+
+  server.registerResource(
+    "diagram-perspectives",
+    new ResourceTemplate("planview://diagrams/{diagramId}/perspectives", {
+      list: async () => ({
+        resources: dbListDiagrams().map((diagram) => ({
+          uri: `planview://diagrams/${diagram.id}/perspectives`,
+          name: `${diagram.name} perspectives`,
+        })),
+      }),
+    }),
+    {
+      title: "Diagram Perspectives",
+      description: "Saved perspectives for a single diagram",
+      mimeType: "application/json",
+    },
+    async (uri, { diagramId }) => {
+      const diagram = dbGetDiagram(String(diagramId));
+      if (!diagram) {
+        return jsonContents(uri, { error: "Diagram not found" });
+      }
+      return jsonContents(uri, dbListDiagramPerspectives(String(diagramId)));
     }
   );
 

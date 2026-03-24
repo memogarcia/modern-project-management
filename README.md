@@ -150,6 +150,7 @@ The MCP server is production-oriented for troubleshooting workflows.
 
 ### Diagram tools
 
+- `get_planview_guide`
 - `list_diagrams`
 - `get_diagram`
 - `create_diagram`
@@ -178,6 +179,7 @@ The MCP server is production-oriented for troubleshooting workflows.
 
 ### Resources
 
+- `planview://guide/workflows`
 - `planview://diagrams`
 - `planview://diagrams/{diagramId}`
 - `planview://investigations`
