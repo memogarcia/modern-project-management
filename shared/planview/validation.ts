@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   DIAGRAM_PERSPECTIVE_KINDS,
   LINK_KINDS,
+  PROJECT_TASK_DEPENDENCY_TYPES,
+  PROJECT_TASK_PRIORITIES,
   SESSION_COMMAND_STATUSES,
   SESSION_STATUSES,
   TIMELINE_ENTRY_KINDS,
@@ -15,11 +17,71 @@ const safeIdSchema = z
   .regex(SAFE_ENTITY_ID_RE, "IDs must use only letters, numbers, underscores, and hyphens.")
   .describe("Stable identifier using only letters, numbers, underscores, and hyphens.");
 
+const isoDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Dates must use YYYY-MM-DD format.")
+  .describe("Calendar date in YYYY-MM-DD format.");
+
 const linkReferenceSchema = z.object({
   id: z.string().trim().min(1).max(256).describe("Stable link reference ID."),
   label: z.string().trim().min(1).max(256).describe("Short human-readable link label."),
   url: z.string().trim().url().describe("Absolute URL for the linked document or system."),
   kind: z.enum(LINK_KINDS).describe("Type of link, for example documentation, dashboard, logs, or trace."),
+});
+
+export const projectTaskLinkSchema = z.object({
+  label: z.string().trim().min(1).max(256).describe("Short human-readable link label."),
+  url: z.string().trim().url().describe("Absolute URL for the linked issue, doc, or spec."),
+  type: z.string().trim().min(1).max(64).default("other").describe("Link type such as issue, PR, or spec."),
+});
+
+export const projectTaskDependencySchema = z.object({
+  dependsOnTaskId: safeIdSchema.describe("The predecessor task ID."),
+  type: z
+    .enum(PROJECT_TASK_DEPENDENCY_TYPES)
+    .default("finish-to-start")
+    .describe("Dependency type connecting the predecessor and successor task."),
+});
+
+export const projectCreateSchema = z.object({
+  id: safeIdSchema.optional().describe("Optional stable project ID."),
+  name: z.string().trim().min(1).max(256).describe("Project name."),
+  description: z.string().max(10000).default("").describe("Optional project description."),
+  createdAt: z.string().trim().datetime().optional().describe("Optional creation time in ISO 8601 format."),
+});
+
+export const projectUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(256).optional().describe("Updated project name."),
+  description: z.string().max(10000).optional().describe("Updated project description."),
+});
+
+export const projectTaskUpsertSchema = z.object({
+  id: safeIdSchema.optional().describe("Optional stable task ID."),
+  epicId: safeIdSchema.nullish().describe("Optional epic ID for grouping."),
+  columnId: safeIdSchema.optional().describe("Optional status column ID; defaults to the project's first column."),
+  name: z.string().trim().min(1).max(256).describe("Task name."),
+  description: z.string().max(20000).default("").describe("Optional task description."),
+  priority: z
+    .enum(PROJECT_TASK_PRIORITIES)
+    .default("medium")
+    .describe("Task priority used for roadmap emphasis."),
+  assignee: z.string().trim().max(256).default("").describe("Optional assignee or owner."),
+  startDate: isoDateSchema.nullish().describe("Optional task start date."),
+  dueDate: isoDateSchema.nullish().describe("Optional task due date."),
+  progress: z.number().int().min(0).max(100).default(0).describe("Percent complete from 0 to 100."),
+  position: z.number().int().nonnegative().optional().describe("Optional ordering value inside the project."),
+  color: z.string().trim().max(32).nullish().describe("Optional accent color for the task bar."),
+  tags: z.array(z.string().trim().min(1).max(64)).max(50).default([]).describe("Search-friendly task tags."),
+  links: z.array(projectTaskLinkSchema).max(50).default([]).describe("Reference links attached to the task."),
+  dependencies: z
+    .array(projectTaskDependencySchema)
+    .max(100)
+    .default([])
+    .describe("Predecessor task relationships for scheduling."),
+  metadata: z.record(z.string(), z.unknown()).default({}).describe("Structured task metadata such as milestone flags."),
+  createdAt: z.string().trim().datetime().optional().describe("Optional creation time in ISO 8601 format."),
+  updatedAt: z.string().trim().datetime().optional().describe("Optional update time in ISO 8601 format."),
 });
 
 const artifactReferenceSchema = z.object({

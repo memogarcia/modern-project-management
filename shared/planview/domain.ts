@@ -327,6 +327,101 @@ export interface TroubleshootingSearchHit {
   updatedAt: string;
 }
 
+export const PROJECT_TASK_PRIORITIES = ["critical", "high", "medium", "low"] as const;
+export type ProjectTaskPriority = (typeof PROJECT_TASK_PRIORITIES)[number];
+
+export const PROJECT_TASK_DEPENDENCY_TYPES = [
+  "finish-to-start",
+  "start-to-start",
+  "finish-to-finish",
+  "start-to-finish",
+] as const;
+export type ProjectTaskDependencyType = (typeof PROJECT_TASK_DEPENDENCY_TYPES)[number];
+
+export interface ProjectColumn {
+  id: string;
+  projectId: string;
+  name: string;
+  color: string;
+  position: number;
+  wipLimit?: number | null;
+}
+
+export interface ProjectEpic {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectTaskLink {
+  id: number;
+  label: string;
+  url: string;
+  type: string;
+}
+
+export interface ProjectTaskDependency {
+  id: number;
+  taskId: string;
+  dependsOnTaskId: string;
+  type: ProjectTaskDependencyType;
+}
+
+export interface ProjectTaskMetadata {
+  isMilestone?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ProjectTask {
+  id: string;
+  projectId: string;
+  epicId?: string | null;
+  columnId: string;
+  name: string;
+  description: string;
+  priority: ProjectTaskPriority;
+  assignee: string;
+  startDate?: string | null;
+  dueDate?: string | null;
+  progress: number;
+  position: number;
+  color?: string | null;
+  tags: string[];
+  links: ProjectTaskLink[];
+  dependencies: ProjectTaskDependency[];
+  metadata: ProjectTaskMetadata;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  taskCount: number;
+  scheduledTaskCount: number;
+  completedTaskCount: number;
+  overdueTaskCount: number;
+  dependencyCount: number;
+  diagramCount: number;
+  linkedSessionCount: number;
+  openSessionCount: number;
+}
+
+export interface ProjectDocument extends ProjectSummary {
+  columns: ProjectColumn[];
+  epics: ProjectEpic[];
+  tasks: ProjectTask[];
+  linkedDiagramIds: string[];
+  linkedTroubleshootingSessionIds: string[];
+}
+
 function cleanString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -388,6 +483,14 @@ function cleanArtifactArray(value: unknown): ArtifactReference[] {
   return value
     .map(cleanArtifactReference)
     .filter((item): item is ArtifactReference => Boolean(item));
+}
+
+export function normalizeProjectTaskMetadata(value: unknown): ProjectTaskMetadata {
+  const source = isRecord(value) ? value : {};
+  return {
+    ...source,
+    isMilestone: Boolean(source.isMilestone),
+  };
 }
 
 export function createEmptyNodeMetadata(

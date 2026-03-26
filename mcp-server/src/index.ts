@@ -7,6 +7,7 @@ import { registerResources } from "./resources.js";
 import { registerArtifactTools } from "./tools/artifacts.js";
 import { registerDiagramTools } from "./tools/diagrams.js";
 import { registerGuideTools } from "./tools/guide.js";
+import { registerProjectTools } from "./tools/projects.js";
 import { registerTroubleshootingTools } from "./tools/troubleshooting.js";
 
 getDb();
@@ -17,6 +18,7 @@ const server = new McpServer({
 });
 
 registerDiagramTools(server);
+registerProjectTools(server);
 registerTroubleshootingTools(server);
 registerArtifactTools(server);
 registerGuideTools(server);

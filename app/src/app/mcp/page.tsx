@@ -19,9 +19,9 @@ export default function McpPage() {
       <div className="flex-1 overflow-y-auto p-8">
         <div className="mx-auto max-w-4xl space-y-6">
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold tracking-tight">MCP access for diagram troubleshooting memory</h1>
+            <h1 className="text-2xl font-bold tracking-tight">MCP access for diagrams, investigations, and project roadmaps</h1>
             <p className="max-w-2xl text-sm text-[var(--text-muted)]">
-              Point your MCP client at the local server so agents can read diagrams, investigations, patterns, and the same SQLite-backed troubleshooting context as the app.
+              Point your MCP client at the local server so agents can read diagrams, investigations, patterns, and project Gantt roadmaps from the same SQLite-backed workspace as the app.
             </p>
           </div>
 
@@ -47,11 +47,13 @@ npm --prefix mcp-server run dev`}
           <section className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--panel-bg)] p-5">
             <div className="text-sm font-semibold">Core tool surface</div>
             <div className="grid gap-2 text-sm text-[var(--text-muted)]">
+              <div>`list_projects`, `get_project`, `create_project`, `update_project`, `delete_project`</div>
+              <div>`list_project_tasks`, `upsert_project_task`, `delete_project_task`</div>
               <div>`get_diagram`, `update_diagram_node_metadata`, `update_diagram_edge_metadata`</div>
               <div>`create_troubleshooting_session`, `list_troubleshooting_sessions`, `get_troubleshooting_session`, `update_troubleshooting_session`</div>
               <div>`append_session_timeline_entry`, `append_session_comment`, `append_session_command`, `extract_knowledge_pattern`, `list_knowledge_patterns`</div>
               <div>`search_troubleshooting_memory`, `list_artifacts`, `get_artifact_metadata`, `attach_artifact`</div>
-              <div>Resources for diagrams, investigations, patterns, and artifact metadata</div>
+              <div>Resources for projects, project Gantt payloads, diagrams, investigations, patterns, and artifact metadata</div>
             </div>
           </section>
         </div>

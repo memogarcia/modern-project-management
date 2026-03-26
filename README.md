@@ -1,8 +1,8 @@
-# PlanView - Diagram-First Troubleshooting Memory
+# PlanView - Diagram-First Troubleshooting Memory with Project Roadmaps
 
 ## TL;DR
 
-- PlanView is a private troubleshooting workspace where diagrams, Mermaid, investigations, and MCP clients all operate on the same durable SQLite-backed system memory.
+- PlanView is a private troubleshooting workspace where diagrams, Mermaid, investigations, project roadmaps, and MCP clients all operate on the same durable SQLite-backed system memory.
 - The core workflow is: model a system, attach rich node and edge metadata, run investigations against affected components, store evidence and commands, and extract reusable patterns.
 - The Next.js app lives in `app/`. The MCP stdio server lives in `mcp-server/`. Both read and write the same database and artifact store.
 
@@ -12,16 +12,13 @@ Time to complete: ~5 minutes
 
 What you need:
 
-- Node.js 20+
-- `npm`
+- `bun` (1.3+)
 - Two terminal tabs
 
 1. Install dependencies.
 
 ```bash
-npm install
-npm install --prefix app
-npm install --prefix mcp-server
+bun install
 ```
 
 2. Start the web app.
@@ -29,7 +26,7 @@ npm install --prefix mcp-server
 ```bash
 PLANVIEW_DB=./mcp-server/data/planview.db \
 PLANVIEW_ARTIFACTS_DIR=./mcp-server/data/artifacts \
-npm --prefix app run dev
+bun --cwd app run dev
 ```
 
 3. Start the MCP server against the same storage.
@@ -37,7 +34,7 @@ npm --prefix app run dev
 ```bash
 PLANVIEW_DB=./mcp-server/data/planview.db \
 PLANVIEW_ARTIFACTS_DIR=./mcp-server/data/artifacts \
-npm --prefix mcp-server run dev
+bun --cwd mcp-server run dev
 ```
 
 4. Open `http://localhost:8000`.
@@ -77,6 +74,8 @@ The durable asset is the combination of:
 The current foundation is built around these objects:
 
 - `Diagram`
+- `Project`
+- `ProjectTask`
 - `DiagramNodeMetadata`
 - `DiagramEdgeMetadata`
 - `TroubleshootingSession`
@@ -105,6 +104,7 @@ The app and MCP server share one SQLite database and one artifact directory.
 Storage is migration-backed and now includes:
 
 - `schema_migrations`
+- `projects`, `columns`, `epics`, `tasks`, `task_dependencies`
 - `diagrams`, `diagram_nodes`, `diagram_edges`
 - `troubleshooting_sessions`
 - `troubleshooting_session_nodes`
@@ -131,6 +131,7 @@ Mermaid is treated as a safe editing surface, not the only source of truth.
 
 The main navigation is now oriented around:
 
+- Projects
 - Diagrams
 - Investigations
 - Patterns
@@ -138,6 +139,7 @@ The main navigation is now oriented around:
 
 Key UI surfaces:
 
+- project list and project-based Gantt roadmap views
 - diagram editor with React Flow + Mermaid
 - structured node metadata editor
 - structured edge metadata editor
@@ -151,6 +153,14 @@ The MCP server is production-oriented for troubleshooting workflows.
 ### Diagram tools
 
 - `get_planview_guide`
+- `list_projects`
+- `get_project`
+- `create_project`
+- `update_project`
+- `delete_project`
+- `list_project_tasks`
+- `upsert_project_task`
+- `delete_project_task`
 - `list_diagrams`
 - `get_diagram`
 - `create_diagram`
@@ -180,6 +190,9 @@ The MCP server is production-oriented for troubleshooting workflows.
 ### Resources
 
 - `planview://guide/workflows`
+- `planview://projects`
+- `planview://projects/{projectId}`
+- `planview://projects/{projectId}/gantt`
 - `planview://diagrams`
 - `planview://diagrams/{diagramId}`
 - `planview://investigations`
@@ -194,7 +207,7 @@ The MCP server is production-oriented for troubleshooting workflows.
 For repo-local work, run:
 
 ```bash
-npm --prefix ./mcp-server run dev
+bun --cwd mcp-server run dev
 ```
 
 If your MCP client requires absolute paths, derive them from `pwd` in this repo and set:
@@ -235,10 +248,10 @@ Important files:
 Use these commands from the repo root:
 
 ```bash
-npm --prefix app run lint
-npm --prefix app run build
-npm --prefix mcp-server run build
-npm --prefix mcp-server run test
+bun --cwd app run lint
+bun --cwd app run build
+bun --cwd mcp-server run build
+bun --cwd mcp-server run test
 ```
 
 Notes:

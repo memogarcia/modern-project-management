@@ -4,16 +4,19 @@ import {
   getArtifactById as dbGetArtifactById,
   getDiagramById as dbGetDiagram,
   getPlanViewKnowledgePatternById as dbGetKnowledgePatternById,
+  getProjectById as dbGetProject,
   getTroubleshootingSessionById as dbGetTroubleshootingSession,
   listArtifacts as dbListArtifacts,
   listDiagrams as dbListDiagrams,
   listDiagramPerspectives as dbListDiagramPerspectives,
   listKnowledgePatterns as dbListKnowledgePatterns,
+  listProjects as dbListProjects,
   listTroubleshootingSessions as dbListTroubleshootingSessions,
 } from "./db.js";
 import {
   toArtifactResourceSummary,
   toDiagramResourceSummary,
+  toProjectResourceSummary,
   toTroubleshootingSessionResourceSummary,
 } from "../../shared/planview/projections.js";
 import { buildPlanViewGuide } from "./guide.js";
@@ -137,6 +140,59 @@ export function registerResources(server: McpServer): void {
     async (uri, { sessionId }) => {
       const session = dbGetTroubleshootingSession(String(sessionId));
       return jsonContents(uri, session ?? { error: "Troubleshooting session not found" });
+    }
+  );
+
+  server.registerResource(
+    "projects",
+    "planview://projects",
+    {
+      title: "All Projects",
+      description: "List of all project roadmaps in the workspace",
+      mimeType: "application/json",
+    },
+    async (uri) => jsonContents(uri, dbListProjects().map((project) => toProjectResourceSummary(project)))
+  );
+
+  server.registerResource(
+    "project",
+    new ResourceTemplate("planview://projects/{projectId}", {
+      list: async () => ({
+        resources: dbListProjects().map((project) => ({
+          uri: `planview://projects/${project.id}`,
+          name: project.name,
+        })),
+      }),
+    }),
+    {
+      title: "Project Details",
+      description: "Full project roadmap with tasks, dependencies, and linked IDs",
+      mimeType: "application/json",
+    },
+    async (uri, { projectId }) => {
+      const project = dbGetProject(String(projectId));
+      return jsonContents(uri, project ?? { error: "Project not found" });
+    }
+  );
+
+  server.registerResource(
+    "project-gantt",
+    new ResourceTemplate("planview://projects/{projectId}/gantt", {
+      list: async () => ({
+        resources: dbListProjects().map((project) => ({
+          uri: `planview://projects/${project.id}/gantt`,
+          name: `${project.name} gantt`,
+        })),
+      }),
+    }),
+    {
+      title: "Project Gantt Payload",
+      description: "Project roadmap payload shaped for Gantt rendering",
+      mimeType: "application/json",
+    },
+    async (uri, { projectId }) => {
+      const project = dbGetProject(String(projectId));
+      return jsonContents(uri, project ?? { error: "Project not found" });
     }
   );
 

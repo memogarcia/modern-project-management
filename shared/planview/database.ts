@@ -11,11 +11,19 @@ import {
   type DiagramPerspective,
   type DiagramSummary,
   type KnowledgePattern,
+  type ProjectColumn,
+  type ProjectDocument,
+  type ProjectEpic,
+  type ProjectSummary,
+  type ProjectTask,
+  type ProjectTaskDependency,
+  type ProjectTaskMetadata,
   type SessionCommand,
   type SessionComment,
   type SessionTimelineEntry,
   type TroubleshootingSearchHit,
   type TroubleshootingSession,
+  normalizeProjectTaskMetadata,
 } from "./domain.js";
 import { asPlanViewError, PlanViewError } from "./errors.js";
 import {
@@ -79,6 +87,75 @@ type DiagramPerspectiveRow = {
   updated_at: string;
 };
 
+type ProjectRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+  task_count?: number | null;
+  scheduled_task_count?: number | null;
+  completed_task_count?: number | null;
+  overdue_task_count?: number | null;
+  dependency_count?: number | null;
+  diagram_count?: number | null;
+  linked_session_count?: number | null;
+  open_session_count?: number | null;
+};
+
+type ProjectColumnRow = {
+  id: string;
+  project_id: string;
+  name: string;
+  color: string;
+  position: number;
+  wip_limit?: number | null;
+};
+
+type ProjectEpicRow = {
+  id: string;
+  project_id: string;
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ProjectTaskRow = {
+  id: string;
+  project_id: string;
+  epic_id?: string | null;
+  column_id: string;
+  name: string;
+  description?: string | null;
+  priority: string;
+  assignee?: string | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  progress: number;
+  position: number;
+  color?: string | null;
+  metadata?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ProjectTaskLinkRow = {
+  id: number;
+  task_id: string;
+  label: string;
+  url: string;
+  type: string;
+};
+
+type ProjectTaskDependencyRow = {
+  id: number;
+  task_id: string;
+  depends_on_task_id: string;
+  type: string;
+};
+
 export type PlanViewArtifactRecord = ArtifactReference & {
   ownerType: ArtifactOwnerType;
   diagramId?: string | null;
@@ -90,6 +167,14 @@ export type PlanViewArtifactFile = PlanViewArtifactRecord & {
 };
 
 let singletonDb: BetterSqliteDatabase | null = null;
+
+const DEFAULT_PROJECT_COLUMNS: Array<Pick<ProjectColumn, "id" | "name" | "color" | "position">> = [
+  { id: "backlog", name: "Backlog", color: "#94a3b8", position: 0 },
+  { id: "todo", name: "To Do", color: "#3b82f6", position: 1 },
+  { id: "in-progress", name: "In Progress", color: "#f59e0b", position: 2 },
+  { id: "review", name: "Review", color: "#8b5cf6", position: 3 },
+  { id: "done", name: "Done", color: "#22c55e", position: 4 },
+];
 
 function ensureDir(target: string): void {
   if (!fs.existsSync(target)) {
@@ -1113,6 +1198,581 @@ export function deletePlanViewDiagramPerspective(
         details: { diagramId, perspectiveId },
       }
     );
+  } catch (error) {
+    throw asPlanViewError(error);
+  }
+}
+
+function projectSummarySelect(): string {
+  return `
+    p.id,
+    p.name,
+    p.description,
+    p.created_at,
+    p.updated_at,
+    COALESCE((SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id), 0) AS task_count,
+    COALESCE((SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.start_date IS NOT NULL AND t.due_date IS NOT NULL), 0) AS scheduled_task_count,
+    COALESCE((SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.progress >= 100), 0) AS completed_task_count,
+    COALESCE((SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.due_date IS NOT NULL AND t.due_date < date('now') AND t.progress < 100), 0) AS overdue_task_count,
+    COALESCE((SELECT COUNT(*) FROM task_dependencies td INNER JOIN tasks t ON t.id = td.task_id WHERE t.project_id = p.id), 0) AS dependency_count,
+    COALESCE((SELECT COUNT(*) FROM diagrams d WHERE d.project_id = p.id), 0) AS diagram_count,
+    COALESCE((SELECT COUNT(*) FROM troubleshooting_sessions ts WHERE ts.project_id = p.id), 0) AS linked_session_count,
+    COALESCE((SELECT COUNT(*) FROM troubleshooting_sessions ts WHERE ts.project_id = p.id AND ts.status = 'open'), 0) AS open_session_count
+  `;
+}
+
+function hydrateProjectSummary(row: ProjectRow): ProjectSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    taskCount: row.task_count ?? 0,
+    scheduledTaskCount: row.scheduled_task_count ?? 0,
+    completedTaskCount: row.completed_task_count ?? 0,
+    overdueTaskCount: row.overdue_task_count ?? 0,
+    dependencyCount: row.dependency_count ?? 0,
+    diagramCount: row.diagram_count ?? 0,
+    linkedSessionCount: row.linked_session_count ?? 0,
+    openSessionCount: row.open_session_count ?? 0,
+  };
+}
+
+function listProjectColumnRows(projectId: string, db: BetterSqliteDatabase): ProjectColumnRow[] {
+  return db
+    .prepare(`
+      SELECT id, project_id, name, color, position, wip_limit
+      FROM columns
+      WHERE project_id = ?
+      ORDER BY position ASC, name COLLATE NOCASE ASC
+    `)
+    .all(projectId) as ProjectColumnRow[];
+}
+
+function hydrateProjectColumnRow(row: ProjectColumnRow): ProjectColumn {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    color: row.color,
+    position: row.position,
+    wipLimit: row.wip_limit ?? null,
+  };
+}
+
+function listProjectEpicRows(projectId: string, db: BetterSqliteDatabase): ProjectEpicRow[] {
+  return db
+    .prepare(`
+      SELECT id, project_id, name, description, color, created_at, updated_at
+      FROM epics
+      WHERE project_id = ?
+      ORDER BY created_at ASC, name COLLATE NOCASE ASC
+    `)
+    .all(projectId) as ProjectEpicRow[];
+}
+
+function hydrateProjectEpicRow(row: ProjectEpicRow): ProjectEpic {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    description: row.description ?? "",
+    color: row.color ?? "#6b7280",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function listProjectTaskLinkRows(taskId: string, db: BetterSqliteDatabase): ProjectTaskLinkRow[] {
+  return db
+    .prepare(`
+      SELECT id, task_id, label, url, type
+      FROM task_links
+      WHERE task_id = ?
+      ORDER BY id ASC
+    `)
+    .all(taskId) as ProjectTaskLinkRow[];
+}
+
+function hydrateProjectTaskLinkRow(row: ProjectTaskLinkRow): ProjectTask["links"][number] {
+  return {
+    id: row.id,
+    label: row.label,
+    url: row.url,
+    type: row.type,
+  };
+}
+
+function listProjectTaskDependencyRows(
+  taskId: string,
+  db: BetterSqliteDatabase
+): ProjectTaskDependencyRow[] {
+  return db
+    .prepare(`
+      SELECT id, task_id, depends_on_task_id, type
+      FROM task_dependencies
+      WHERE task_id = ?
+      ORDER BY id ASC
+    `)
+    .all(taskId) as ProjectTaskDependencyRow[];
+}
+
+function listProjectTaskTags(taskId: string, db: BetterSqliteDatabase): string[] {
+  return (
+    db.prepare("SELECT tag FROM task_tags WHERE task_id = ? ORDER BY tag COLLATE NOCASE ASC").all(taskId) as Array<{
+      tag: string;
+    }>
+  ).map((entry) => entry.tag);
+}
+
+function hydrateProjectTaskDependencyRow(row: ProjectTaskDependencyRow): ProjectTaskDependency {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    dependsOnTaskId: row.depends_on_task_id,
+    type: row.type as ProjectTaskDependency["type"],
+  };
+}
+
+function listProjectTaskRows(projectId: string, db: BetterSqliteDatabase): ProjectTaskRow[] {
+  return db
+    .prepare(`
+      SELECT id, project_id, epic_id, column_id, name, description, priority, assignee,
+             start_date, due_date, progress, position, color, metadata, created_at, updated_at
+      FROM tasks
+      WHERE project_id = ?
+      ORDER BY position ASC, created_at ASC, name COLLATE NOCASE ASC
+    `)
+    .all(projectId) as ProjectTaskRow[];
+}
+
+function hydrateProjectTaskRow(row: ProjectTaskRow, db: BetterSqliteDatabase): ProjectTask {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    epicId: row.epic_id ?? null,
+    columnId: row.column_id,
+    name: row.name,
+    description: row.description ?? "",
+    priority: row.priority as ProjectTask["priority"],
+    assignee: row.assignee ?? "",
+    startDate: row.start_date ?? null,
+    dueDate: row.due_date ?? null,
+    progress: row.progress,
+    position: row.position,
+    color: row.color ?? null,
+    tags: listProjectTaskTags(row.id, db),
+    links: listProjectTaskLinkRows(row.id, db).map((entry) => hydrateProjectTaskLinkRow(entry)),
+    dependencies: listProjectTaskDependencyRows(row.id, db).map((entry) => hydrateProjectTaskDependencyRow(entry)),
+    metadata: normalizeProjectTaskMetadata(parseJsonValue(row.metadata, {})),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function getProjectRow(projectId: string, db: BetterSqliteDatabase): ProjectRow | null {
+  const row = db
+    .prepare(`SELECT ${projectSummarySelect()} FROM projects p WHERE p.id = ?`)
+    .get(projectId) as ProjectRow | undefined;
+  return row ?? null;
+}
+
+function assertProjectExists(projectId: string, db: BetterSqliteDatabase): ProjectRow {
+  const row = getProjectRow(projectId, db);
+  if (row) return row;
+  throw new PlanViewError("project_not_found", `Project not found: ${projectId}`, {
+    status: 404,
+    details: { projectId },
+  });
+}
+
+function listLinkedDiagramIdsForProject(projectId: string, db: BetterSqliteDatabase): string[] {
+  return (
+    db.prepare("SELECT id FROM diagrams WHERE project_id = ? ORDER BY updated_at DESC").all(projectId) as Array<{
+      id: string;
+    }>
+  ).map((entry) => entry.id);
+}
+
+function listLinkedTroubleshootingSessionIdsForProject(
+  projectId: string,
+  db: BetterSqliteDatabase
+): string[] {
+  return (
+    db
+      .prepare("SELECT id FROM troubleshooting_sessions WHERE project_id = ? ORDER BY updated_at DESC")
+      .all(projectId) as Array<{ id: string }>
+  ).map((entry) => entry.id);
+}
+
+function hydrateProjectDocument(row: ProjectRow, db: BetterSqliteDatabase): ProjectDocument {
+  const summary = hydrateProjectSummary(row);
+  return {
+    ...summary,
+    columns: listProjectColumnRows(row.id, db).map((entry) => hydrateProjectColumnRow(entry)),
+    epics: listProjectEpicRows(row.id, db).map((entry) => hydrateProjectEpicRow(entry)),
+    tasks: listProjectTaskRows(row.id, db).map((entry) => hydrateProjectTaskRow(entry, db)),
+    linkedDiagramIds: listLinkedDiagramIdsForProject(row.id, db),
+    linkedTroubleshootingSessionIds: listLinkedTroubleshootingSessionIdsForProject(row.id, db),
+  };
+}
+
+function seedDefaultProjectColumns(projectId: string, db: BetterSqliteDatabase): void {
+  const insertColumn = db.prepare(`
+    INSERT OR IGNORE INTO columns (id, project_id, name, color, position, wip_limit)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const column of DEFAULT_PROJECT_COLUMNS) {
+    insertColumn.run(column.id, projectId, column.name, column.color, column.position, null);
+  }
+}
+
+function touchProject(projectId: string, updatedAt: string, db: BetterSqliteDatabase): void {
+  db.prepare("UPDATE projects SET updated_at = ? WHERE id = ?").run(updatedAt, projectId);
+}
+
+function selectDefaultProjectColumnId(projectId: string, db: BetterSqliteDatabase): string {
+  const row = db
+    .prepare(`
+      SELECT id
+      FROM columns
+      WHERE project_id = ?
+      ORDER BY position ASC, name COLLATE NOCASE ASC
+      LIMIT 1
+    `)
+    .get(projectId) as { id: string } | undefined;
+
+  if (row?.id) return row.id;
+  throw new PlanViewError("project_column_missing", `Project is missing default columns: ${projectId}`, {
+    status: 500,
+    details: { projectId },
+  });
+}
+
+function assertProjectColumnExists(projectId: string, columnId: string, db: BetterSqliteDatabase): void {
+  const row = db
+    .prepare("SELECT id FROM columns WHERE project_id = ? AND id = ?")
+    .get(projectId, columnId) as { id: string } | undefined;
+  if (row) return;
+  throw new PlanViewError("project_column_not_found", `Project column not found: ${columnId}`, {
+    status: 404,
+    details: { projectId, columnId },
+  });
+}
+
+function assertProjectEpicExists(projectId: string, epicId: string, db: BetterSqliteDatabase): void {
+  const row = db
+    .prepare("SELECT id FROM epics WHERE project_id = ? AND id = ?")
+    .get(projectId, epicId) as { id: string } | undefined;
+  if (row) return;
+  throw new PlanViewError("project_epic_not_found", `Project epic not found: ${epicId}`, {
+    status: 404,
+    details: { projectId, epicId },
+  });
+}
+
+function assertTaskBelongsToProject(projectId: string, taskId: string, db: BetterSqliteDatabase): ProjectTaskRow {
+  const row = db
+    .prepare(`
+      SELECT id, project_id, epic_id, column_id, name, description, priority, assignee,
+             start_date, due_date, progress, position, color, metadata, created_at, updated_at
+      FROM tasks
+      WHERE project_id = ? AND id = ?
+    `)
+    .get(projectId, taskId) as ProjectTaskRow | undefined;
+
+  if (row) return row;
+  throw new PlanViewError("project_task_not_found", `Project task not found: ${taskId}`, {
+    status: 404,
+    details: { projectId, taskId },
+  });
+}
+
+function nextProjectTaskPosition(projectId: string, db: BetterSqliteDatabase): number {
+  const row = db
+    .prepare("SELECT COALESCE(MAX(position), -1) AS max_position FROM tasks WHERE project_id = ?")
+    .get(projectId) as { max_position: number };
+  return row.max_position + 1;
+}
+
+function replaceProjectTaskTags(
+  taskId: string,
+  tags: string[],
+  db: BetterSqliteDatabase
+): void {
+  db.prepare("DELETE FROM task_tags WHERE task_id = ?").run(taskId);
+  const insertTag = db.prepare("INSERT OR IGNORE INTO task_tags (task_id, tag) VALUES (?, ?)");
+  for (const tag of uniqueSorted(tags)) {
+    insertTag.run(taskId, tag);
+  }
+}
+
+function replaceProjectTaskLinks(
+  taskId: string,
+  links: Array<Omit<ProjectTask["links"][number], "id">>,
+  db: BetterSqliteDatabase
+): void {
+  db.prepare("DELETE FROM task_links WHERE task_id = ?").run(taskId);
+  const insertLink = db.prepare(`
+    INSERT INTO task_links (task_id, label, url, type)
+    VALUES (?, ?, ?, ?)
+  `);
+  for (const link of links) {
+    insertLink.run(taskId, link.label, link.url, link.type);
+  }
+}
+
+function replaceProjectTaskDependencies(
+  projectId: string,
+  taskId: string,
+  dependencies: Array<Omit<ProjectTaskDependency, "id" | "taskId">>,
+  db: BetterSqliteDatabase
+): void {
+  db.prepare("DELETE FROM task_dependencies WHERE task_id = ?").run(taskId);
+  const insertDependency = db.prepare(`
+    INSERT INTO task_dependencies (task_id, depends_on_task_id, type)
+    VALUES (?, ?, ?)
+  `);
+
+  const seen = new Set<string>();
+  for (const dependency of dependencies) {
+    if (dependency.dependsOnTaskId === taskId) {
+      throw new PlanViewError("project_task_dependency_invalid", "A task cannot depend on itself.", {
+        status: 400,
+        details: { projectId, taskId },
+      });
+    }
+    assertTaskBelongsToProject(projectId, dependency.dependsOnTaskId, db);
+    const key = `${dependency.dependsOnTaskId}:${dependency.type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    insertDependency.run(taskId, dependency.dependsOnTaskId, dependency.type);
+  }
+}
+
+export function listPlanViewProjects(db = getPlanViewDb()): ProjectSummary[] {
+  const rows = db
+    .prepare(`SELECT ${projectSummarySelect()} FROM projects p ORDER BY p.updated_at DESC, p.name COLLATE NOCASE ASC`)
+    .all() as ProjectRow[];
+
+  return rows.map((row) => hydrateProjectSummary(row));
+}
+
+export function getPlanViewProjectById(projectId: string, db = getPlanViewDb()): ProjectDocument | null {
+  const row = getProjectRow(projectId, db);
+  return row ? hydrateProjectDocument(row, db) : null;
+}
+
+type ProjectCreateInput = {
+  id?: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+};
+
+export function createPlanViewProject(
+  input: ProjectCreateInput,
+  db = getPlanViewDb()
+): ProjectDocument {
+  try {
+    return db.transaction(() => {
+      const now = input.createdAt ?? new Date().toISOString();
+      const projectId = input.id ?? crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO projects (id, name, description, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(projectId, input.name.trim(), input.description?.trim() ?? "", now, now);
+
+      seedDefaultProjectColumns(projectId, db);
+      return getPlanViewProjectById(projectId, db)!;
+    })();
+  } catch (error) {
+    throw asPlanViewError(error);
+  }
+}
+
+type ProjectPatchInput = {
+  name?: string;
+  description?: string;
+};
+
+export function updatePlanViewProject(
+  projectId: string,
+  patch: ProjectPatchInput,
+  db = getPlanViewDb()
+): ProjectDocument {
+  try {
+    return db.transaction(() => {
+      const row = assertProjectExists(projectId, db);
+      const updatedAt = new Date().toISOString();
+      db.prepare(`
+        UPDATE projects
+        SET name = ?, description = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        patch.name?.trim() ?? row.name,
+        patch.description ?? row.description ?? "",
+        updatedAt,
+        projectId
+      );
+      return getPlanViewProjectById(projectId, db)!;
+    })();
+  } catch (error) {
+    throw asPlanViewError(error);
+  }
+}
+
+export function deletePlanViewProject(projectId: string, db = getPlanViewDb()): boolean {
+  const result = db.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
+  return result.changes > 0;
+}
+
+export function listPlanViewProjectTasks(
+  projectId: string,
+  db = getPlanViewDb()
+): ProjectTask[] {
+  try {
+    assertProjectExists(projectId, db);
+    return listProjectTaskRows(projectId, db).map((row) => hydrateProjectTaskRow(row, db));
+  } catch (error) {
+    throw asPlanViewError(error);
+  }
+}
+
+type ProjectTaskUpsertInput = {
+  id?: string;
+  epicId?: string | null;
+  columnId?: string;
+  name: string;
+  description?: string;
+  priority: ProjectTask["priority"];
+  assignee?: string;
+  startDate?: string | null;
+  dueDate?: string | null;
+  progress?: number;
+  position?: number;
+  color?: string | null;
+  tags?: string[];
+  links?: Array<Omit<ProjectTask["links"][number], "id">>;
+  dependencies?: Array<Omit<ProjectTaskDependency, "id" | "taskId">>;
+  metadata?: ProjectTaskMetadata;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export function upsertPlanViewProjectTask(
+  projectId: string,
+  input: ProjectTaskUpsertInput,
+  db = getPlanViewDb()
+): ProjectTask {
+  try {
+    return db.transaction(() => {
+      assertProjectExists(projectId, db);
+      const existing = input.id
+        ? (
+            db
+              .prepare(`
+                SELECT id, project_id, epic_id, column_id, name, description, priority, assignee,
+                       start_date, due_date, progress, position, color, metadata, created_at, updated_at
+                FROM tasks
+                WHERE id = ?
+              `)
+              .get(input.id) as ProjectTaskRow | undefined
+          )
+        : undefined;
+
+      if (existing && existing.project_id !== projectId) {
+        throw new PlanViewError("project_task_project_mismatch", "Task belongs to a different project.", {
+          status: 409,
+          details: { projectId, taskId: input.id },
+        });
+      }
+
+      if (input.startDate && input.dueDate && input.dueDate < input.startDate) {
+        throw new PlanViewError("project_task_schedule_invalid", "Task due date must be on or after the start date.", {
+          status: 400,
+          details: { projectId, taskId: input.id },
+        });
+      }
+
+      const taskId = input.id ?? crypto.randomUUID();
+      const now = input.updatedAt ?? new Date().toISOString();
+      const createdAt = existing?.created_at ?? input.createdAt ?? now;
+      const columnId = input.columnId ?? existing?.column_id ?? selectDefaultProjectColumnId(projectId, db);
+      assertProjectColumnExists(projectId, columnId, db);
+      if (input.epicId) {
+        assertProjectEpicExists(projectId, input.epicId, db);
+      }
+
+      const nextMetadata = normalizeProjectTaskMetadata(input.metadata ?? parseJsonValue(existing?.metadata, {}));
+      db.prepare(`
+        INSERT INTO tasks (
+          id, project_id, epic_id, column_id, name, description, priority, assignee,
+          start_date, due_date, progress, position, color, metadata, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          project_id = excluded.project_id,
+          epic_id = excluded.epic_id,
+          column_id = excluded.column_id,
+          name = excluded.name,
+          description = excluded.description,
+          priority = excluded.priority,
+          assignee = excluded.assignee,
+          start_date = excluded.start_date,
+          due_date = excluded.due_date,
+          progress = excluded.progress,
+          position = excluded.position,
+          color = excluded.color,
+          metadata = excluded.metadata,
+          updated_at = excluded.updated_at
+      `).run(
+        taskId,
+        projectId,
+        input.epicId ?? existing?.epic_id ?? null,
+        columnId,
+        input.name.trim(),
+        input.description ?? existing?.description ?? "",
+        input.priority,
+        input.assignee ?? existing?.assignee ?? "",
+        input.startDate ?? existing?.start_date ?? null,
+        input.dueDate ?? existing?.due_date ?? null,
+        input.progress ?? existing?.progress ?? 0,
+        input.position ?? existing?.position ?? nextProjectTaskPosition(projectId, db),
+        input.color ?? existing?.color ?? null,
+        JSON.stringify(nextMetadata),
+        createdAt,
+        now
+      );
+
+      replaceProjectTaskTags(taskId, input.tags ?? [], db);
+      replaceProjectTaskLinks(taskId, input.links ?? [], db);
+      replaceProjectTaskDependencies(projectId, taskId, input.dependencies ?? [], db);
+      touchProject(projectId, now, db);
+
+      return hydrateProjectTaskRow(assertTaskBelongsToProject(projectId, taskId, db), db);
+    })();
+  } catch (error) {
+    throw asPlanViewError(error);
+  }
+}
+
+export function deletePlanViewProjectTask(
+  projectId: string,
+  taskId: string,
+  db = getPlanViewDb()
+): boolean {
+  try {
+    return db.transaction(() => {
+      assertTaskBelongsToProject(projectId, taskId, db);
+      const result = db.prepare("DELETE FROM tasks WHERE id = ?").run(taskId);
+      if (result.changes > 0) {
+        touchProject(projectId, new Date().toISOString(), db);
+        return true;
+      }
+      return false;
+    })();
   } catch (error) {
     throw asPlanViewError(error);
   }

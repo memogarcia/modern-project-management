@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BookMarked,
+  CalendarRange,
   Component,
   Layers,
   Moon,
@@ -19,6 +20,7 @@ import { useTheme } from "./ThemeProvider";
 import { cn } from "@/lib/utils";
 
 const WORKSPACE_ITEMS = [
+  { href: "/projects", label: "Projects", icon: CalendarRange },
   { href: "/diagrams", label: "Diagrams", icon: Share2 },
   { href: "/investigations", label: "Investigations", icon: Search },
   { href: "/patterns", label: "Patterns", icon: BookMarked },

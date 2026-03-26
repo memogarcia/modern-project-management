@@ -1,4 +1,9 @@
-import type { DiagramSummary, KnowledgePattern, TroubleshootingSession } from "./domain.js";
+import type {
+  DiagramSummary,
+  KnowledgePattern,
+  ProjectSummary,
+  TroubleshootingSession,
+} from "./domain.js";
 
 export type DiagramResourceSummary = Pick<DiagramSummary, "id" | "name" | "description" | "updatedAt">;
 
@@ -28,6 +33,31 @@ export function toTroubleshootingSessionResourceSummary(
     updatedAt: session.updatedAt,
     linkedNodeIds: session.linkedNodeIds,
     linkedEdgeIds: session.linkedEdgeIds,
+  };
+}
+
+export type ProjectResourceSummary = Pick<
+  ProjectSummary,
+  | "id"
+  | "name"
+  | "description"
+  | "updatedAt"
+  | "taskCount"
+  | "completedTaskCount"
+  | "overdueTaskCount"
+  | "dependencyCount"
+>;
+
+export function toProjectResourceSummary(project: ProjectResourceSummary): ProjectResourceSummary {
+  return {
+    id: project.id,
+    name: project.name,
+    description: project.description,
+    updatedAt: project.updatedAt,
+    taskCount: project.taskCount,
+    completedTaskCount: project.completedTaskCount,
+    overdueTaskCount: project.overdueTaskCount,
+    dependencyCount: project.dependencyCount,
   };
 }
 

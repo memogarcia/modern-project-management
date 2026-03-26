@@ -11,9 +11,7 @@
 1. Install dependencies.
 
 ```bash
-npm install
-npm install --prefix app
-npm install --prefix mcp-server
+bun install
 ```
 
 2. Start the app and MCP server against the same storage.
@@ -21,13 +19,13 @@ npm install --prefix mcp-server
 ```bash
 PLANVIEW_DB=./mcp-server/data/planview.db \
 PLANVIEW_ARTIFACTS_DIR=./mcp-server/data/artifacts \
-npm --prefix app run dev
+bun --cwd app run dev
 ```
 
 ```bash
 PLANVIEW_DB=./mcp-server/data/planview.db \
 PLANVIEW_ARTIFACTS_DIR=./mcp-server/data/artifacts \
-npm --prefix mcp-server run dev
+bun --cwd mcp-server run dev
 ```
 
 3. Open `http://localhost:8000`.
@@ -41,8 +39,7 @@ npm --prefix mcp-server run dev
 
 ## What You Need
 
-- Node.js 20+
-- `npm`
+- `bun` (1.3+)
 - access to run the app locally on port `8000`
 - access to run the MCP stdio server locally
 
@@ -162,10 +159,10 @@ Fix:
 Run:
 
 ```bash
-npm --prefix app run lint
-npm --prefix app run build
-npm --prefix mcp-server run build
-npm --prefix mcp-server run test
+bun --cwd app run lint
+bun --cwd app run build
+bun --cwd mcp-server run build
+bun --cwd mcp-server run test
 ```
 
 ## Rollback
